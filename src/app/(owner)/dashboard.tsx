@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import {
@@ -88,6 +88,13 @@ export default function OwnerDashboardScreen() {
               icon={OwnerIcons.money}
               label="Run Payroll"
               onPress={() => router.navigate('/payroll')}
+              showDivider
+            />
+            <ActionRow
+              icon={OwnerIcons.receipt}
+              label="Invoices & Quotes"
+              // Typed routes only list '/invoices/index' for a folder index screen.
+              onPress={() => router.navigate('/invoices' as Href)}
               showDivider
             />
             <ActionRow

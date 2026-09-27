@@ -51,25 +51,24 @@ export default function OwnerLayout() {
         }}
       />
       <Tabs.Screen
-        name="analytics"
-        options={{
-          title: 'Analytics & Reports',
-          tabBarLabel: 'Analytics',
-          tabBarIcon: (props) => (
-            <TabIcon
-              name={{ ios: 'chart.bar.fill', android: 'bar_chart', web: 'bar_chart' }}
-              {...props}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="payroll"
         options={{
           title: 'Payroll',
           tabBarIcon: (props) => (
             <TabIcon
               name={{ ios: 'dollarsign.circle.fill', android: 'payments', web: 'payments' }}
+              {...props}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="invoices"
+        options={{
+          title: 'Invoices',
+          tabBarIcon: (props) => (
+            <TabIcon
+              name={{ ios: 'doc.text.fill', android: 'receipt_long', web: 'receipt_long' }}
               {...props}
             />
           ),
@@ -88,17 +87,20 @@ export default function OwnerLayout() {
         }}
       />
       <Tabs.Screen
-        name="integrations"
+        name="menu"
         options={{
-          title: 'Integrations',
+          title: 'More',
           tabBarIcon: (props) => (
             <TabIcon
-              name={{ ios: 'puzzlepiece.extension.fill', android: 'extension', web: 'extension' }}
+              name={{ ios: 'ellipsis.circle.fill', android: 'more_horiz', web: 'more_horiz' }}
               {...props}
             />
           ),
         }}
       />
+      {/* Opened from the More tab (and Dashboard quick actions), not shown in the tab bar. */}
+      <Tabs.Screen name="analytics" options={{ href: null, title: 'Analytics & Reports' }} />
+      <Tabs.Screen name="integrations" options={{ href: null, title: 'Integrations' }} />
     </Tabs>
   );
 }
