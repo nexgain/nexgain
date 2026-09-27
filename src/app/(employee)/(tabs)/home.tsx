@@ -21,12 +21,9 @@ import {
   getNextShift,
   getShiftForDate,
 } from '@/data/employee-roster';
+import { clockIn, clockOut, useClockSessions } from '@/data/clock-records';
 import { currentEmployee, employeeInitials } from '@/data/current-employee';
-
-type Session = {
-  start: Date;
-  end: Date | null;
-};
+import { getPayPeriods, hoursInPeriod } from '@/data/payroll';
 
 function useNow() {
   const [now, setNow] = useState(() => new Date());
@@ -63,8 +60,11 @@ function greetingFor(date: Date) {
 
 export default function HomeScreen() {
   const now = useNow();
-  // Sessions only live in memory for now; they reset when the app restarts.
-  const [sessions, setSessions] = useState<Session[]>([]);
+  // Clock records live in the shared store so Owner Payroll reads the same data.
+  // They're in memory only for now and reset when the app restarts.
+  const employeeId = currentEmployee?.id ?? null;
+  const allSessions = useClockSessions();
+  const sessions = allSessions.filter((s) => s.employeeId === employeeId);
 
   const isClockedIn = sessions.at(-1)?.end === null;
   const workedMs = sessions.reduce(
@@ -75,9 +75,9 @@ export default function HomeScreen() {
   function toggleClock() {
     const time = new Date();
     if (isClockedIn) {
-      setSessions((prev) => prev.map((s, i) => (i === prev.length - 1 ? { ...s, end: time } : s)));
+      clockOut(employeeId, time);
     } else {
-      setSessions((prev) => [...prev, { start: time, end: null }]);
+      clockIn(employeeId, time);
     }
   }
 
@@ -85,8 +85,8 @@ export default function HomeScreen() {
   const lastSession = sessions.at(-1);
   const todaysShift = getShiftForDate(dateKey(now), now)?.shift ?? null;
   const nextShift = getNextShift(now);
-  // Only today is tracked so far; earlier days will come from the database.
-  const weekMs = workedMs;
+  const thisWeek = getPayPeriods(now, 1)[0];
+  const weekMs = hoursInPeriod(allSessions, employeeId, thisWeek, now) * 60 * 60 * 1000;
 
   return (
     <EmployeeScreen>

@@ -11,6 +11,7 @@ export const Colors = {
   textSecondary: '#8A93A6',
   accent: '#4F8CFF',
   success: '#22C55E',
+  warning: '#F59E0B',
   danger: '#EF4444',
 } as const;
 

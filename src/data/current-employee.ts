@@ -1,10 +1,8 @@
-// The signed-in employee. Empty until login and a database are connected.
-export type Employee = {
-  firstName: string;
-  lastName: string;
-  employeeId: string;
-  site: string;
-};
+// The signed-in employee. Empty until login and a database are connected;
+// it will then be the matching record from the shared employees store.
+import type { Employee } from '@/data/employees';
+
+export type { Employee };
 
 export const currentEmployee: Employee | null = null;
 
