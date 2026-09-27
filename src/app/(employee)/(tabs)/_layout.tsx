@@ -3,6 +3,8 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import type { ColorValue } from 'react-native';
 
 import { EmployeeColors as C } from '@/constants/employee-theme';
+import { currentEmployee } from '@/data/current-employee';
+import { employeeNotifications, useNotifications } from '@/data/notifications';
 
 type TabIconProps = {
   name: SymbolViewProps['name'];
@@ -15,6 +17,8 @@ function TabIcon({ name, color, size }: TabIconProps) {
 }
 
 export default function EmployeeTabsLayout() {
+  const unread = employeeNotifications(useNotifications(), currentEmployee?.id ?? null).filter((n) => !n.read).length;
+
   return (
     <Tabs
       screenOptions={{
@@ -56,6 +60,16 @@ export default function EmployeeTabsLayout() {
               name={{ ios: 'doc.text.fill', android: 'receipt_long', web: 'receipt_long' }}
               {...props}
             />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: 'Notifications',
+          tabBarBadge: unread > 0 ? unread : undefined,
+          tabBarIcon: (props) => (
+            <TabIcon name={{ ios: 'bell.fill', android: 'notifications', web: 'notifications' }} {...props} />
           ),
         }}
       />

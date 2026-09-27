@@ -1,19 +1,29 @@
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { View } from 'react-native';
 
 import { ActionRow, Card, OwnerScreen, PageHeader } from '@/components/owner/ui';
+import { ownerNotifications, useNotifications } from '@/data/notifications';
 
 // Owner screens that don't fit in the tab bar.
 export default function OwnerMoreScreen() {
+  const unread = ownerNotifications(useNotifications()).filter((n) => !n.read).length;
+
   return (
     <OwnerScreen>
       <PageHeader title="More" />
       <Card>
         <View>
           <ActionRow
+            icon={{ ios: 'bell.fill', android: 'notifications', web: 'notifications' }}
+            label={unread > 0 ? `Notifications (${unread} new)` : 'Notifications'}
+            // Typed routes only list '/alerts/index' for a folder index screen.
+            onPress={() => router.navigate('/alerts' as Href)}
+          />
+          <ActionRow
             icon={{ ios: 'chart.bar.fill', android: 'bar_chart', web: 'bar_chart' }}
             label="Analytics & Reports"
             onPress={() => router.navigate('/analytics')}
+            showDivider
           />
           <ActionRow
             icon={{ ios: 'puzzlepiece.extension.fill', android: 'extension', web: 'extension' }}

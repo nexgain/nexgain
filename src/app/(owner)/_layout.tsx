@@ -101,6 +101,7 @@ export default function OwnerLayout() {
       {/* Opened from the More tab (and Dashboard quick actions), not shown in the tab bar. */}
       <Tabs.Screen name="analytics" options={{ href: null, title: 'Analytics & Reports' }} />
       <Tabs.Screen name="integrations" options={{ href: null, title: 'Integrations' }} />
+      <Tabs.Screen name="alerts" options={{ href: null, title: 'Notifications' }} />
     </Tabs>
   );
 }

@@ -63,7 +63,7 @@ export function ScreenHeader({
       <Text style={styles.headerTitle} numberOfLines={1}>
         {title}
       </Text>
-      {right ?? <View style={styles.headerButton} />}
+      {right ?? <View style={styles.headerSpacer} />}
     </View>
   );
 }
@@ -218,6 +218,10 @@ const styles = StyleSheet.create({
     backgroundColor: C.surface,
     borderWidth: 1,
     borderColor: C.border,
+  },
+  headerSpacer: {
+    width: 38,
+    height: 38,
   },
   headerButtonPrimary: {
     backgroundColor: C.accent,

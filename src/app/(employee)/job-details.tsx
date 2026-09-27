@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Card, employeeStyles, Icon, IconBadge, Icons } from '@/components/employee/ui';
+import { Card, employeeStyles, Icon, IconBadge, Icons, ListRow } from '@/components/employee/ui';
 import { EmployeeColors as C } from '@/constants/employee-theme';
 import { Spacing } from '@/constants/theme';
 import {
@@ -17,7 +17,8 @@ import { useShifts } from '@/data/shifts';
 export default function JobDetailsScreen() {
   const { date } = useLocalSearchParams<{ date?: string }>();
   const shiftSource = { shifts: useShifts(), employeeId: currentEmployee?.id ?? null };
-  const day = getShiftForDate(date ?? dateKey(new Date()), new Date(), shiftSource);
+  const shiftDate = date ?? dateKey(new Date());
+  const day = getShiftForDate(shiftDate, new Date(), shiftSource);
   const shift = day?.shift ?? null;
   // Task progress lives in memory and isn't sent anywhere yet.
   const [done, setDone] = useState<Set<number>>(new Set());
@@ -98,6 +99,15 @@ export default function JobDetailsScreen() {
             </Pressable>
           );
         })}
+      </Card>
+
+      <Card>
+        <ListRow
+          icon={<IconBadge name={{ ios: 'checklist', android: 'task_alt', web: 'task_alt' }} />}
+          title="Job Report Form"
+          subtitle="Complete after the job is finished"
+          onPress={() => router.push({ pathname: '/job-report', params: { date: shiftDate } })}
+        />
       </Card>
     </ScrollView>
   );
