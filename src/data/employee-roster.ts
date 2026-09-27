@@ -1,6 +1,7 @@
-// Shifts will come from the Owner's Roster section once a database is connected.
-// Until then every day is empty. Dates are generated relative to today so
-// "This Week" always matches the calendar.
+// The signed-in employee's roster, built from shifts created on the Owner
+// Roster screen. Dates are generated relative to today so "This Week" always
+// matches the calendar.
+import type { RosterShift } from '@/data/shifts';
 
 export type Shift = {
   start: string; // 24h "HH:MM"
@@ -14,6 +15,26 @@ export type RosterDay = {
   date: Date;
   shift: Shift | null;
 };
+
+/** Where the employee's shifts come from: all rostered shifts, filtered to one employee. */
+export type ShiftSource = {
+  shifts: RosterShift[];
+  employeeId: string | null;
+};
+
+const NO_SHIFTS: ShiftSource = { shifts: [], employeeId: null };
+
+/** The employee's first shift on a date (one shift per day is shown). */
+function shiftOn(date: Date, { shifts, employeeId }: ShiftSource): Shift | null {
+  if (!employeeId) return null;
+  const key = dateKey(date);
+  const match = shifts
+    .filter((s) => s.date === key && s.employeeIds.includes(employeeId))
+    .sort((a, b) => a.start.localeCompare(b.start))[0];
+  return match
+    ? { start: match.start, end: match.end, role: match.jobType, location: match.location, tasks: match.tasks }
+    : null;
+}
 
 export function startOfDay(date: Date) {
   const d = new Date(date);
@@ -35,27 +56,33 @@ export function dateKey(date: Date) {
 }
 
 /** weekOffset 0 = this week, 1 = next week. */
-export function getRosterWeek(weekOffset: number, today = new Date()): RosterDay[] {
+export function getRosterWeek(
+  weekOffset: number,
+  today = new Date(),
+  source: ShiftSource = NO_SHIFTS,
+): RosterDay[] {
   const monday = startOfWeek(today);
   monday.setDate(monday.getDate() + weekOffset * 7);
   return Array.from({ length: 7 }, (_, i) => {
     const date = new Date(monday);
     date.setDate(monday.getDate() + i);
-    return { date, shift: null };
+    return { date, shift: shiftOn(date, source) };
   });
 }
 
-function allRosterDays(today = new Date()) {
-  return [...getRosterWeek(0, today), ...getRosterWeek(1, today)];
+function allRosterDays(today: Date, source: ShiftSource) {
+  return [...getRosterWeek(0, today, source), ...getRosterWeek(1, today, source)];
 }
 
-export function getShiftForDate(key: string, today = new Date()) {
-  return allRosterDays(today).find((day) => dateKey(day.date) === key) ?? null;
+export function getShiftForDate(key: string, today = new Date(), source: ShiftSource = NO_SHIFTS) {
+  return allRosterDays(today, source).find((day) => dateKey(day.date) === key) ?? null;
 }
 
-export function getNextShift(today = new Date()) {
+export function getNextShift(today = new Date(), source: ShiftSource = NO_SHIFTS) {
   const todayStart = startOfDay(today).getTime();
-  return allRosterDays(today).find((day) => day.shift && day.date.getTime() > todayStart) ?? null;
+  return (
+    allRosterDays(today, source).find((day) => day.shift && day.date.getTime() > todayStart) ?? null
+  );
 }
 
 export function shiftDurationMs(shift: Shift) {
@@ -64,7 +91,7 @@ export function shiftDurationMs(shift: Shift) {
   return (eh * 60 + em - (sh * 60 + sm)) * 60 * 1000;
 }
 
-function format12h(time: string) {
+export function format12h(time: string) {
   const [h, m] = time.split(':').map(Number);
   const suffix = h >= 12 ? 'PM' : 'AM';
   const hour = h % 12 === 0 ? 12 : h % 12;

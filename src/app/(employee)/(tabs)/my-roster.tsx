@@ -22,6 +22,8 @@ import {
   isSameDay,
   type RosterDay,
 } from '@/data/employee-roster';
+import { currentEmployee } from '@/data/current-employee';
+import { useShifts } from '@/data/shifts';
 
 const WEEKS = [
   { label: 'This Week', offset: 0 },
@@ -34,6 +36,7 @@ export default function RosterScreen() {
   const sectionY = useRef<number[]>([0, 0]);
   const toggleHeight = useRef(0);
   const [activeWeek, setActiveWeek] = useState(0);
+  const shiftSource = { shifts: useShifts(), employeeId: currentEmployee?.id ?? null };
 
   // The toggle stays pinned at the top, so scroll each section to just below it.
   function selectWeek(index: number) {
@@ -79,7 +82,7 @@ export default function RosterScreen() {
       </View>
 
       {WEEKS.map((week, i) => {
-        const days = getRosterWeek(week.offset, today);
+        const days = getRosterWeek(week.offset, today, shiftSource);
         return (
           <View
             key={week.label}

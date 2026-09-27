@@ -15,6 +15,8 @@ export type Employee = {
   firstName: string;
   lastName: string;
   employeeId: string;
+  /** Job role shown on the roster, e.g. "Operator", "Cleaner", "Admin". */
+  role: string;
   site: string;
   /** Hourly rate in dollars, from the "Employment" section. null until set. */
   payRate: number | null;

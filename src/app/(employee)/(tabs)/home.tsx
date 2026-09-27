@@ -24,6 +24,7 @@ import {
 import { clockIn, clockOut, useClockSessions } from '@/data/clock-records';
 import { currentEmployee, employeeInitials } from '@/data/current-employee';
 import { getPayPeriods, hoursInPeriod } from '@/data/payroll';
+import { useShifts } from '@/data/shifts';
 
 function useNow() {
   const [now, setNow] = useState(() => new Date());
@@ -83,8 +84,9 @@ export default function HomeScreen() {
 
   const currentSession = isClockedIn ? sessions.at(-1) : undefined;
   const lastSession = sessions.at(-1);
-  const todaysShift = getShiftForDate(dateKey(now), now)?.shift ?? null;
-  const nextShift = getNextShift(now);
+  const shiftSource = { shifts: useShifts(), employeeId };
+  const todaysShift = getShiftForDate(dateKey(now), now, shiftSource)?.shift ?? null;
+  const nextShift = getNextShift(now, shiftSource);
   const thisWeek = getPayPeriods(now, 1)[0];
   const weekMs = hoursInPeriod(allSessions, employeeId, thisWeek, now) * 60 * 60 * 1000;
 

@@ -11,10 +11,13 @@ import {
   getShiftForDate,
   shiftDurationMs,
 } from '@/data/employee-roster';
+import { currentEmployee } from '@/data/current-employee';
+import { useShifts } from '@/data/shifts';
 
 export default function JobDetailsScreen() {
   const { date } = useLocalSearchParams<{ date?: string }>();
-  const day = getShiftForDate(date ?? dateKey(new Date()));
+  const shiftSource = { shifts: useShifts(), employeeId: currentEmployee?.id ?? null };
+  const day = getShiftForDate(date ?? dateKey(new Date()), new Date(), shiftSource);
   const shift = day?.shift ?? null;
   // Task progress lives in memory and isn't sent anywhere yet.
   const [done, setDone] = useState<Set<number>>(new Set());

@@ -20,6 +20,13 @@ export const ACCOUNT_SECTIONS: AccountSection[] = [
     icon: { ios: 'person.fill', android: 'person', web: 'person' },
   },
   {
+    id: 'availability',
+    title: 'Availability',
+    subtitle: 'Set the days and times you are available to work',
+    icon: { ios: 'calendar.badge.clock', android: 'event_available', web: 'event_available' },
+    href: '/availability',
+  },
+  {
     id: 'payment',
     title: 'Payment',
     subtitle: 'Bank account details',
