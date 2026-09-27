@@ -1,70 +1,42 @@
-import { Tabs } from 'expo-router';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import type { ColorValue } from 'react-native';
+import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 
-import { Colors } from '@/constants/theme';
+import { EmployeeColors as C } from '@/constants/employee-theme';
 
-type TabIconProps = {
-  name: SymbolViewProps['name'];
-  color: ColorValue;
-  size: number;
+// The Employee section uses a light theme; the rest of the app stays dark.
+const employeeNavigationTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    primary: C.primary,
+    background: C.background,
+    card: C.card,
+    text: C.text,
+    border: C.border,
+  },
 };
 
-function TabIcon({ name, color, size }: TabIconProps) {
-  return <SymbolView name={name} tintColor={color} size={size} />;
-}
+export const unstable_settings = {
+  initialRouteName: '(tabs)',
+};
 
 export default function EmployeeLayout() {
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: Colors.accent,
-        tabBarInactiveTintColor: Colors.textSecondary,
-        tabBarStyle: {
-          backgroundColor: Colors.surface,
-          borderTopColor: Colors.border,
-        },
-      }}>
-      <Tabs.Screen
-        name="home"
-        options={{
-          title: 'Home',
-          tabBarIcon: (props) => (
-            <TabIcon name={{ ios: 'house.fill', android: 'home', web: 'home' }} {...props} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="jobs"
-        options={{
-          title: 'Jobs',
-          tabBarIcon: (props) => (
-            <TabIcon name={{ ios: 'briefcase.fill', android: 'work', web: 'work' }} {...props} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="payslips"
-        options={{
-          title: 'Payslips',
-          tabBarIcon: (props) => (
-            <TabIcon
-              name={{ ios: 'doc.text.fill', android: 'receipt_long', web: 'receipt_long' }}
-              {...props}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: (props) => (
-            <TabIcon name={{ ios: 'person.fill', android: 'person', web: 'person' }} {...props} />
-          ),
-        }}
-      />
-    </Tabs>
+    <ThemeProvider value={employeeNavigationTheme}>
+      <StatusBar style="dark" />
+      <Stack
+        screenOptions={{
+          headerTintColor: C.primary,
+          headerTitleStyle: { color: C.text },
+          headerShadowVisible: false,
+          headerBackButtonDisplayMode: 'minimal',
+        }}>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="job-details" options={{ title: 'Shift details' }} />
+        <Stack.Screen name="account/[section]" options={{ title: '' }} />
+        <Stack.Screen name="qualifications" options={{ title: 'Qualifications' }} />
+        <Stack.Screen name="add-qualification" options={{ title: 'Add Qualification' }} />
+      </Stack>
+    </ThemeProvider>
   );
 }

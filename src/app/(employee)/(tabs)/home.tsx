@@ -1,0 +1,366 @@
+import { useEffect, useState } from 'react';
+import { router } from 'expo-router';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import {
+  Avatar,
+  Card,
+  EmployeeScreen,
+  employeeStyles,
+  Icon,
+  IconBadge,
+  Icons,
+} from '@/components/employee/ui';
+import { EmployeeColors as C } from '@/constants/employee-theme';
+import { Radius, Spacing } from '@/constants/theme';
+import {
+  dateKey,
+  formatShiftTime,
+  formatShortDate,
+  formatWeekday,
+  getNextShift,
+  getShiftForDate,
+} from '@/data/employee-roster';
+import { currentEmployee, employeeInitials } from '@/data/current-employee';
+
+type Session = {
+  start: Date;
+  end: Date | null;
+};
+
+function useNow() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+function formatDuration(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map((n) => String(n).padStart(2, '0')).join(':');
+}
+
+function formatClockTime(date: Date) {
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatHours(ms: number) {
+  const totalMinutes = Math.max(0, Math.floor(ms / 60000));
+  return `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
+}
+
+function greetingFor(date: Date) {
+  const hour = date.getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+export default function HomeScreen() {
+  const now = useNow();
+  // Sessions only live in memory for now; they reset when the app restarts.
+  const [sessions, setSessions] = useState<Session[]>([]);
+
+  const isClockedIn = sessions.at(-1)?.end === null;
+  const workedMs = sessions.reduce(
+    (total, s) => total + ((s.end ?? now).getTime() - s.start.getTime()),
+    0,
+  );
+
+  function toggleClock() {
+    const time = new Date();
+    if (isClockedIn) {
+      setSessions((prev) => prev.map((s, i) => (i === prev.length - 1 ? { ...s, end: time } : s)));
+    } else {
+      setSessions((prev) => [...prev, { start: time, end: null }]);
+    }
+  }
+
+  const currentSession = isClockedIn ? sessions.at(-1) : undefined;
+  const lastSession = sessions.at(-1);
+  const todaysShift = getShiftForDate(dateKey(now), now)?.shift ?? null;
+  const nextShift = getNextShift(now);
+  // Only today is tracked so far; earlier days will come from the database.
+  const weekMs = workedMs;
+
+  return (
+    <EmployeeScreen>
+      <View style={styles.header}>
+        <View style={styles.headerText}>
+          <Text style={styles.greeting}>
+            {greetingFor(now)}
+            {currentEmployee ? `, ${currentEmployee.firstName}` : ''}
+          </Text>
+          <Text style={styles.date}>
+            {now.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })} ·{' '}
+            {formatClockTime(now)}
+          </Text>
+        </View>
+        <Pressable onPress={() => router.navigate('/more')} accessibilityLabel="Open profile">
+          <Avatar initials={employeeInitials(currentEmployee)} size={44} />
+        </Pressable>
+      </View>
+
+      {/* Today's shift */}
+      <Pressable
+        onPress={() =>
+          router.push({ pathname: '/job-details', params: { date: dateKey(now) } })
+        }
+        accessibilityRole="button"
+        style={({ pressed }) => pressed && styles.pressed}>
+        <Card style={styles.shiftCard}>
+          <IconBadge name={Icons.work} />
+          <View style={styles.flex}>
+            <Text style={styles.cardLabel}>Today&apos;s shift</Text>
+            <Text style={styles.shiftTime}>
+              {todaysShift ? formatShiftTime(todaysShift) : 'No shift scheduled'}
+            </Text>
+            {todaysShift && (
+              <Text style={styles.shiftMeta}>
+                {todaysShift.role} · {todaysShift.location}
+              </Text>
+            )}
+          </View>
+          <Icon name={Icons.chevron} color={C.textMuted} size={14} />
+        </Card>
+      </Pressable>
+
+      {/* Clock in / clock out */}
+      <Card style={styles.clockCard}>
+        <View style={[styles.statusPill, isClockedIn && styles.statusPillActive]}>
+          <View style={[styles.statusDot, isClockedIn && styles.statusDotActive]} />
+          <Text style={[styles.statusText, isClockedIn && styles.statusTextActive]}>
+            {isClockedIn ? 'Currently working' : 'Not clocked in'}
+          </Text>
+        </View>
+
+        <Text style={[styles.timer, !isClockedIn && styles.timerIdle]}>
+          {formatDuration(currentSession ? now.getTime() - currentSession.start.getTime() : 0)}
+        </Text>
+
+        <Text style={styles.clockMeta}>
+          {currentSession
+            ? `Started at ${formatClockTime(currentSession.start)}${currentEmployee ? ` · ${currentEmployee.site}` : ''}`
+            : lastSession?.end
+              ? `Last clocked out at ${formatClockTime(lastSession.end)}`
+              : 'Tap Clock In when your shift starts'}
+        </Text>
+
+        <Pressable
+          onPress={toggleClock}
+          accessibilityRole="button"
+          style={({ pressed }) => [
+            styles.clockButton,
+            isClockedIn ? styles.clockOutButton : styles.clockInButton,
+            pressed && styles.pressed,
+          ]}>
+          <Text style={styles.clockButtonText}>{isClockedIn ? 'Clock Out' : 'Clock In'}</Text>
+        </Pressable>
+      </Card>
+
+      {/* Hours */}
+      <View style={styles.statsRow}>
+        <Card style={styles.statCard}>
+          <Text style={styles.cardLabel}>Today&apos;s hours</Text>
+          <Text style={styles.statValue}>{formatHours(workedMs)}</Text>
+        </Card>
+        <Card style={styles.statCard}>
+          <Text style={styles.cardLabel}>This week&apos;s hours</Text>
+          <Text style={styles.statValue}>{formatHours(weekMs)}</Text>
+        </Card>
+      </View>
+
+      {/* Next shift */}
+      <Card style={styles.shiftCard}>
+        <IconBadge name={Icons.calendar} />
+        <View style={styles.flex}>
+          <Text style={styles.cardLabel}>Next shift</Text>
+          {nextShift?.shift ? (
+            <>
+              <Text style={styles.shiftTime}>
+                {formatWeekday(nextShift.date)} {formatShortDate(nextShift.date, false)}
+              </Text>
+              <Text style={styles.shiftMeta}>
+                {formatShiftTime(nextShift.shift)} · {nextShift.shift.role}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.shiftTime}>No shift scheduled</Text>
+          )}
+        </View>
+      </Card>
+
+      {/* Today's clock-in history (existing feature) */}
+      {sessions.length > 0 && (
+        <Card style={styles.activityCard}>
+          <Text style={employeeStyles.sectionLabel}>Today&apos;s activity</Text>
+          {sessions.map((s, i) => (
+            <View key={i} style={styles.sessionRow}>
+              <Text style={styles.sessionText}>
+                {formatClockTime(s.start)} – {s.end ? formatClockTime(s.end) : 'now'}
+              </Text>
+              <Text style={styles.sessionDuration}>
+                {formatDuration((s.end ?? now).getTime() - s.start.getTime())}
+              </Text>
+            </View>
+          ))}
+        </Card>
+      )}
+    </EmployeeScreen>
+  );
+}
+
+const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    marginTop: Spacing.two,
+    marginBottom: Spacing.one,
+  },
+  headerText: {
+    flex: 1,
+  },
+  greeting: {
+    color: C.text,
+    fontSize: 26,
+    fontWeight: '700',
+  },
+  date: {
+    color: C.textSecondary,
+    fontSize: 15,
+    marginTop: 2,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  cardLabel: {
+    color: C.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  shiftCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three - 4,
+    padding: Spacing.three,
+  },
+  shiftTime: {
+    color: C.text,
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  shiftMeta: {
+    color: C.textSecondary,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  clockCard: {
+    alignItems: 'center',
+    padding: Spacing.four - 4,
+    gap: Spacing.two,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: Spacing.one + 2,
+    paddingHorizontal: Spacing.three - 4,
+    borderRadius: 999,
+    backgroundColor: C.background,
+  },
+  statusPillActive: {
+    backgroundColor: C.successSoft,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: C.textMuted,
+  },
+  statusDotActive: {
+    backgroundColor: C.success,
+  },
+  statusText: {
+    color: C.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  statusTextActive: {
+    color: C.success,
+  },
+  timer: {
+    color: C.text,
+    fontSize: 44,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    marginTop: Spacing.one,
+  },
+  timerIdle: {
+    color: C.textMuted,
+  },
+  clockMeta: {
+    color: C.textSecondary,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  clockButton: {
+    alignSelf: 'stretch',
+    marginTop: Spacing.two,
+    paddingVertical: Spacing.three,
+    borderRadius: Radius.medium,
+    alignItems: 'center',
+  },
+  clockInButton: {
+    backgroundColor: C.primary,
+  },
+  clockOutButton: {
+    backgroundColor: C.danger,
+  },
+  clockButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: Spacing.three - 4,
+  },
+  statCard: {
+    flex: 1,
+    padding: Spacing.three,
+    gap: Spacing.one,
+  },
+  statValue: {
+    color: C.text,
+    fontSize: 22,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  activityCard: {
+    padding: Spacing.three,
+    gap: Spacing.two,
+  },
+  sessionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  sessionText: {
+    color: C.text,
+    fontSize: 15,
+  },
+  sessionDuration: {
+    color: C.textSecondary,
+    fontSize: 15,
+    fontVariant: ['tabular-nums'],
+  },
+});
