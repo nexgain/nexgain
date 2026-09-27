@@ -1,7 +1,6 @@
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { BarChart, SeriesColors } from '@/components/owner/charts';
 import {
   ActionRow,
   Card,
@@ -14,18 +13,11 @@ import {
   StatCard,
   StatGrid,
 } from '@/components/owner/ui';
+import { UpcomingSection } from '@/components/owner/upcoming';
 import { Colors as C } from '@/constants/theme';
 import { useClockSessions } from '@/data/clock-records';
-import { formatShortDate } from '@/data/employee-roster';
 import { useEmployees } from '@/data/employees';
-import {
-  calculatePayLines,
-  formatHours,
-  formatMoney,
-  getPayPeriods,
-  labourCost,
-  payTotals,
-} from '@/data/payroll';
+import { calculatePayLines, formatHours, formatMoney, getPayPeriods, payTotals } from '@/data/payroll';
 
 const NO_INSIGHTS = 'No insights yet — check back once you have more activity data.';
 
@@ -41,9 +33,8 @@ export default function OwnerDashboardScreen() {
   const employees = useEmployees();
   const sessions = useClockSessions();
 
-  const [thisWeek, ...earlierWeeks] = getPayPeriods(now, 4);
+  const [thisWeek] = getPayPeriods(now, 1);
   const totals = payTotals(calculatePayLines(employees, sessions, thisWeek, {}, now));
-  const weeks = [thisWeek, ...earlierWeeks].reverse();
 
   return (
     <OwnerScreen>
@@ -79,19 +70,11 @@ export default function OwnerDashboardScreen() {
         <StatCard icon={OwnerIcons.people} label="Active Employees" value={`${employees.length}`} />
       </StatGrid>
 
+      <UpcomingSection />
+
       <ResponsiveRow weights={[1.6, 1]}>
-        <Card title="Labour Costs (Last 4 Weeks)" icon={OwnerIcons.chart}>
-          <BarChart
-            categories={weeks.map((w) => formatShortDate(w.start, false))}
-            series={[
-              {
-                name: 'Labour cost',
-                color: SeriesColors[0],
-                values: weeks.map((w) => labourCost(employees, sessions, w, now)),
-              },
-            ]}
-            formatValue={(v) => formatMoney(v, { cents: false })}
-          />
+        <Card title="AI Insights & Recommendations" icon={OwnerIcons.sparkles}>
+          <EmptyState icon={OwnerIcons.sparkles} message={NO_INSIGHTS} />
         </Card>
 
         <Card title="Quick Actions">
@@ -123,14 +106,9 @@ export default function OwnerDashboardScreen() {
         </Card>
       </ResponsiveRow>
 
-      <ResponsiveRow weights={[1.6, 1]}>
-        <Card title="AI Insights & Recommendations" icon={OwnerIcons.sparkles}>
-          <EmptyState icon={OwnerIcons.sparkles} message={NO_INSIGHTS} />
-        </Card>
-        <Card title="Other Insights" icon={OwnerIcons.lightbulb}>
-          <EmptyState icon={OwnerIcons.lightbulb} message={NO_INSIGHTS} />
-        </Card>
-      </ResponsiveRow>
+      <Card title="Other Insights" icon={OwnerIcons.lightbulb}>
+        <EmptyState icon={OwnerIcons.lightbulb} message={NO_INSIGHTS} />
+      </Card>
     </OwnerScreen>
   );
 }
