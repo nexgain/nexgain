@@ -7,6 +7,7 @@ export default function OwnerAccessScreen() {
       subtitle="Manage your business, team, finances and more."
       loginHref="/owner-login"
       signUpSubtitle="Create a new business account"
+      signUpHref="/owner-signup"
     />
   );
 }

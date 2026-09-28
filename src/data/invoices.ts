@@ -38,6 +38,8 @@ export type SalesDoc = {
   /** Invoice due date or quote "valid until" date. */
   dueDate: string | null;
   paymentReference: string;
+  /** GST rate charged on this document (0.1, or 0 if the business isn't GST registered). */
+  gstRate: number;
   createdAt: string;
 };
 
@@ -98,10 +100,14 @@ export function lineAmount(item: Pick<LineItem, 'qty' | 'rate'>) {
   return roundCents((item.qty || 0) * (item.rate || 0));
 }
 
-export function docTotals(items: Pick<LineItem, 'qty' | 'rate'>[]) {
+export function docTotals(items: Pick<LineItem, 'qty' | 'rate'>[], gstRate = GST_RATE) {
   const subtotal = roundCents(items.reduce((sum, item) => sum + lineAmount(item), 0));
-  const gst = roundCents(subtotal * GST_RATE);
-  return { subtotal, gst, total: roundCents(subtotal + gst) };
+  const gst = roundCents(subtotal * gstRate);
+  return { subtotal, gst, total: roundCents(subtotal + gst), gstRate };
+}
+
+export function gstLabel(gstRate: number) {
+  return gstRate > 0 ? `GST (${Math.round(gstRate * 100)}%)` : 'GST (not registered)';
 }
 
 /** Status to show, accounting for due / expiry dates that have passed. */

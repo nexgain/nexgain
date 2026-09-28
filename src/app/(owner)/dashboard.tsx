@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { router, type Href } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -15,6 +16,7 @@ import {
 } from '@/components/owner/ui';
 import { UpcomingSection } from '@/components/owner/upcoming';
 import { Colors as C } from '@/constants/theme';
+import { ownerFirstName, useBusiness } from '@/data/business';
 import { useClockSessions } from '@/data/clock-records';
 import { useEmployees } from '@/data/employees';
 import { calculatePayLines, formatHours, formatMoney, getPayPeriods, payTotals } from '@/data/payroll';
@@ -32,6 +34,9 @@ export default function OwnerDashboardScreen() {
   const now = new Date();
   const employees = useEmployees();
   const sessions = useClockSessions();
+  // Filled in by owner sign-up; before that the greeting stays as it was.
+  const business = useBusiness();
+  const firstName = ownerFirstName(business);
 
   const [thisWeek] = getPayPeriods(now, 1);
   const totals = payTotals(calculatePayLines(employees, sessions, thisWeek, {}, now));
@@ -39,19 +44,23 @@ export default function OwnerDashboardScreen() {
   return (
     <OwnerScreen>
       <PageHeader
-        title={greetingFor(now)}
+        title={firstName ? `${greetingFor(now)}, ${firstName}` : greetingFor(now)}
         subtitle={`${now.toLocaleDateString([], {
           weekday: 'long',
           day: 'numeric',
           month: 'long',
           year: 'numeric',
-        })}\nHere's what's happening with your business today.`}
+        })}\n${business?.businessName || "Here's what's happening with your business today."}`}
         right={
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Notifications"
+            accessibilityLabel={business?.logo ? `${business.businessName} logo` : 'Notifications'}
             style={({ pressed }) => [styles.bell, pressed && styles.pressed]}>
-            <Icon name={OwnerIcons.bell} color={C.text} size={18} />
+            {business?.logo ? (
+              <Image source={{ uri: business.logo }} style={styles.logo} contentFit="cover" />
+            ) : (
+              <Icon name={OwnerIcons.bell} color={C.text} size={18} />
+            )}
           </Pressable>
         }
       />
@@ -133,5 +142,10 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.7,
+  },
+  logo: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 21,
   },
 });

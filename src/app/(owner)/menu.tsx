@@ -20,6 +20,12 @@ export default function OwnerMoreScreen() {
             onPress={() => router.navigate('/alerts' as Href)}
           />
           <ActionRow
+            icon={{ ios: 'list.bullet.rectangle.fill', android: 'list_alt', web: 'list_alt' }}
+            label="Services"
+            onPress={() => router.navigate('/services')}
+            showDivider
+          />
+          <ActionRow
             icon={{ ios: 'chart.bar.fill', android: 'bar_chart', web: 'bar_chart' }}
             label="Analytics & Reports"
             onPress={() => router.navigate('/analytics')}

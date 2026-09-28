@@ -14,11 +14,14 @@ export function AccessScreen({
   subtitle,
   loginHref,
   signUpSubtitle,
+  signUpHref,
 }: {
   title: string;
   subtitle: string;
   loginHref: Href;
   signUpSubtitle: string;
+  /** Sign-up flow to open; without one, Sign Up shows "coming soon". */
+  signUpHref?: Href;
 }) {
   return (
     <AuthScreen showBack>
@@ -34,7 +37,7 @@ export function AccessScreen({
           icon={{ ios: 'pencil', android: 'edit', web: 'edit' }}
           title="Sign Up"
           subtitle={signUpSubtitle}
-          onPress={() => comingSoon('Sign up')}
+          onPress={() => (signUpHref ? router.push(signUpHref) : comingSoon('Sign up'))}
         />
       </View>
     </AuthScreen>
@@ -49,10 +52,13 @@ export function LoginScreen({
   title,
   emailPlaceholder,
   destination,
+  signUpHref,
 }: {
   title: string;
   emailPlaceholder: string;
   destination: Href;
+  /** Sign-up flow to open; without one, Sign Up shows "coming soon". */
+  signUpHref?: Href;
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -109,7 +115,10 @@ export function LoginScreen({
 
         <View style={styles.signUpRow}>
           <Text style={styles.muted}>Don&apos;t have an account? </Text>
-          <Pressable onPress={() => comingSoon('Sign up')} accessibilityRole="link" hitSlop={8}>
+          <Pressable
+            onPress={() => (signUpHref ? router.push(signUpHref) : comingSoon('Sign up'))}
+            accessibilityRole="link"
+            hitSlop={8}>
             <Text style={styles.link}>Sign Up</Text>
           </Pressable>
         </View>

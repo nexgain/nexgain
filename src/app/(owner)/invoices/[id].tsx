@@ -52,7 +52,7 @@ export default function DocDetailScreen() {
 
   const label = KIND_LABEL[doc.kind].one;
   const status = displayStatus(doc);
-  const totals = docTotals(doc.items);
+  const totals = docTotals(doc.items, doc.gstRate);
   const due = dateText(doc.dueDate);
   const statusOptions: DocStatus[] =
     doc.kind === 'invoice' ? ['Draft', 'Pending', 'Paid'] : ['Draft', 'Sent', 'Accepted'];
