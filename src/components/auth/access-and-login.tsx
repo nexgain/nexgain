@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { router, type Href } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
 import { AuthInput } from '@/components/auth/auth-input';
 import { AuthScreen, comingSoon } from '@/components/auth/auth-screen';
 import { OptionCard } from '@/components/auth/option-card';
 import { AuthColors as C } from '@/components/auth/theme';
+import { logIn } from '@/lib/auth';
 
 /** "Owner Access" / "Employee Access": choose Log In or Sign Up. */
 export function AccessScreen({
@@ -45,23 +46,52 @@ export function AccessScreen({
 }
 
 /**
- * "Owner Login" / "Employee Login". There are no accounts yet, so Log In goes
- * straight into the app, the same as the previous start screen did.
+ * "Owner Login" / "Employee Login". With `accountType`, Log In checks the email
+ * and password against real accounts; without it, Log In goes straight into the
+ * app as the original start screen did.
  */
 export function LoginScreen({
   title,
   emailPlaceholder,
   destination,
   signUpHref,
+  accountType,
 }: {
   title: string;
   emailPlaceholder: string;
   destination: Href;
   /** Sign-up flow to open; without one, Sign Up shows "coming soon". */
   signUpHref?: Href;
+  /** Which kind of real account to log in to. */
+  accountType?: 'owner' | 'employee';
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    if (busy) return;
+    if (!accountType) {
+      router.push(destination);
+      return;
+    }
+    if (!email.trim() || !password) {
+      setError('Enter your email address and password.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const problem = await logIn(email, password, accountType);
+      if (problem) setError(problem);
+      else router.replace(destination);
+    } catch {
+      setError("Can't reach NexGain. Check your internet connection and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <AuthScreen showBack>
@@ -90,7 +120,7 @@ export function LoginScreen({
             textContentType="password"
             autoComplete="password"
             returnKeyType="go"
-            onSubmitEditing={() => router.push(destination)}
+            onSubmitEditing={submit}
           />
           <Pressable
             onPress={() => comingSoon('Password reset')}
@@ -101,11 +131,20 @@ export function LoginScreen({
           </Pressable>
         </View>
 
+        {error && (
+          <Text style={styles.error} accessibilityRole="alert">
+            {error}
+          </Text>
+        )}
+
         <Pressable
-          onPress={() => router.push(destination)}
+          onPress={submit}
+          disabled={busy}
           accessibilityRole="button"
-          style={({ pressed }) => [styles.loginButton, pressed && styles.pressed]}>
-          <Text style={styles.loginText}>Log In</Text>
+          accessibilityState={{ disabled: busy }}
+          style={({ pressed }) => [styles.loginButton, (pressed || busy) && styles.pressed]}>
+          {busy && <ActivityIndicator color={C.onBrand} />}
+          <Text style={styles.loginText}>{busy ? 'Logging in…' : 'Log In'}</Text>
           <SymbolView
             name={{ ios: 'arrow.right', android: 'arrow_forward', web: 'arrow_forward' }}
             tintColor={C.onBrand}
@@ -189,6 +228,12 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.85,
+  },
+  error: {
+    color: '#FF6B6B',
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
   },
   signUpRow: {
     flexDirection: 'row',

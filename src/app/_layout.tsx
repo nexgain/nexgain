@@ -2,6 +2,8 @@ import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { Colors } from '@/constants/theme';
+// Starts listening for logins so the signed-in person's business loads automatically.
+import '@/lib/auth';
 
 const navigationTheme = {
   ...DarkTheme,

@@ -3,6 +3,7 @@ import { View } from 'react-native';
 
 import { ActionRow, Card, OwnerScreen, PageHeader } from '@/components/owner/ui';
 import { ownerNotifications, useNotifications } from '@/data/notifications';
+import { logOut } from '@/lib/auth';
 
 // Owner screens that don't fit in the tab bar.
 export default function OwnerMoreScreen() {
@@ -44,6 +45,16 @@ export default function OwnerMoreScreen() {
             showDivider
           />
         </View>
+      </Card>
+      <Card>
+        <ActionRow
+          icon={{ ios: 'rectangle.portrait.and.arrow.right', android: 'logout', web: 'logout' }}
+          label="Log Out"
+          onPress={async () => {
+            await logOut();
+            router.replace('/');
+          }}
+        />
       </Card>
     </OwnerScreen>
   );

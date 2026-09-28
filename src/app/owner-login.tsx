@@ -1,6 +1,6 @@
 import { LoginScreen } from '@/components/auth/access-and-login';
 
-// Log In opens the Owner Dashboard, as the old start screen's "Owner Login" button did.
+// Checks the email and password, then opens the Owner Dashboard.
 export default function OwnerLoginScreen() {
   return (
     <LoginScreen
@@ -8,6 +8,7 @@ export default function OwnerLoginScreen() {
       emailPlaceholder="you@business.com"
       destination="/dashboard"
       signUpHref="/owner-signup"
+      accountType="owner"
     />
   );
 }
