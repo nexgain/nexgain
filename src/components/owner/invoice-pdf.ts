@@ -3,7 +3,13 @@ import * as Sharing from 'expo-sharing';
 import { Linking, Platform } from 'react-native';
 
 import { formatShortDate } from '@/data/employee-roster';
-import { docTotals, lineAmount, type BusinessPayment, type SalesDoc } from '@/data/invoices';
+import {
+  businessProfileStore,
+  docTotals,
+  lineAmount,
+  type BusinessPayment,
+  type SalesDoc,
+} from '@/data/invoices';
 import { formatMoney } from '@/data/payroll';
 import { fromDateKey } from '@/data/shifts';
 
@@ -18,9 +24,21 @@ function escape(text: string) {
 
 const dateText = (key: string | null) => (key ? formatShortDate(fromDateKey(key)) : '—');
 
+/** Quotes: business logo and name top right, with the quote number small underneath. */
+function quoteHeader(doc: SalesDoc) {
+  const { name, logo } = businessProfileStore.get();
+  const number = doc.number.replace(/^[A-Z]+-/, '#'); // "Q-0001" -> "#0001"
+  return `<div class="biz">
+      ${logo ? `<img class="logo" src="${escape(logo)}" alt="">` : ''}
+      ${name.trim() ? `<div class="biz-name">${escape(name.trim())}</div>` : ''}
+      <div class="doc-number">Quote ${escape(number)}</div>
+    </div>`;
+}
+
 export function buildDocHtml(doc: SalesDoc, payment: BusinessPayment) {
   const { subtotal, gst, total } = docTotals(doc.items);
   const title = doc.kind === 'invoice' ? 'Invoice' : 'Quote';
+  const header = doc.kind === 'quote' ? quoteHeader(doc) : `<h1>${title} ${escape(doc.number)}</h1>`;
   const rows = doc.items
     .map(
       (item) => `<tr>
@@ -35,6 +53,10 @@ export function buildDocHtml(doc: SalesDoc, payment: BusinessPayment) {
   return `<!doctype html><html><head><meta charset="utf-8"><style>
     body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #111; padding: 32px; font-size: 13px; }
     h1 { font-size: 26px; margin: 0; color: #2563eb; }
+    .biz { text-align: right; margin-bottom: 16px; }
+    .logo { max-width: 160px; max-height: 72px; object-fit: contain; display: block; margin: 0 0 8px auto; }
+    .biz-name { font-size: 18px; font-weight: bold; }
+    .doc-number { font-size: 12px; color: #555; margin-top: 4px; }
     .muted { color: #555; }
     .row { display: flex; justify-content: space-between; margin: 24px 0; gap: 24px; }
     table { width: 100%; border-collapse: collapse; margin-top: 16px; }
@@ -46,7 +68,7 @@ export function buildDocHtml(doc: SalesDoc, payment: BusinessPayment) {
     .grand { font-weight: bold; font-size: 16px; border-top: 2px solid #111; margin-top: 4px; padding-top: 8px !important; }
     h3 { margin: 24px 0 8px; font-size: 14px; }
   </style></head><body>
-    <h1>${title} ${escape(doc.number)}</h1>
+    ${header}
     <div class="muted">${doc.kind === 'invoice' ? 'Due' : 'Valid until'}: ${dateText(doc.dueDate)}</div>
     <div class="row">
       <div>

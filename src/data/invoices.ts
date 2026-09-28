@@ -129,3 +129,20 @@ export function useBusinessPayment() {
 export function updateBusinessPayment(changes: Partial<BusinessPayment>) {
   businessPaymentStore.set((prev) => ({ ...prev, ...changes }));
 }
+
+/** The business's name and logo, shown at the top of quote PDFs. */
+export type BusinessProfile = {
+  name: string;
+  /** Logo as a data URI ("data:image/png;base64,...") so it can be embedded in PDFs. */
+  logo: string | null;
+};
+
+export const businessProfileStore = createStore<BusinessProfile>({ name: '', logo: null });
+
+export function useBusinessProfile() {
+  return businessProfileStore.use();
+}
+
+export function updateBusinessProfile(changes: Partial<BusinessProfile>) {
+  businessProfileStore.set((prev) => ({ ...prev, ...changes }));
+}

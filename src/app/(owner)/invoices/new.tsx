@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { router, useLocalSearchParams } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { router, useLocalSearchParams, type Href } from 'expo-router';
+import { BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { ConfirmDialog } from '@/components/owner/confirm-dialog';
 import { FieldButton, FormField, OptionSheet, OWNER_PICKER_THEME, TextField } from '@/components/owner/form';
 import { sendDoc } from '@/components/owner/invoice-pdf';
 import { KIND_LABEL, ScreenHeader, TotalsBlock } from '@/components/owner/invoices-ui';
@@ -24,6 +25,9 @@ import { formatMoney } from '@/data/payroll';
 import { fromDateKey, JOB_TYPES, toDateKey } from '@/data/shifts';
 
 const STEPS = ['Client & Job Details', 'Add Items', 'Review & Send'] as const;
+
+// Typed routes only list '/invoices/index' for a folder index screen.
+const INVOICES_HOME = '/invoices' as Href;
 
 type Draft = {
   client: Client;
@@ -69,6 +73,10 @@ export default function NewDocScreen() {
         },
   );
 
+  const [initialDraft] = useState(draft);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const hasChanges = JSON.stringify(draft) !== JSON.stringify(initialDraft);
+
   const update = (changes: Partial<Draft>) => setDraft((d) => ({ ...d, ...changes }));
   const updateClient = (changes: Partial<Client>) =>
     setDraft((d) => ({ ...d, client: { ...d.client, ...changes } }));
@@ -100,7 +108,7 @@ export default function NewDocScreen() {
 
   function saveDraft() {
     persist(existing?.status ?? 'Draft');
-    router.back();
+    leave();
   }
 
   async function saveAndSend() {
@@ -125,13 +133,43 @@ export default function NewDocScreen() {
     }
   }
 
+  // Closes this screen but stays in the Invoices stack (back to the list, or to the
+  // quote's details when editing). router.back() alone could jump to another tab.
+  function leave() {
+    if (router.canDismiss()) router.dismiss();
+    else router.replace(INVOICES_HOME);
+  }
+
+  // Back goes one step at a time; the draft lives in this screen, so every step keeps
+  // what was typed. On the first step, ask before leaving if anything would be lost.
+  function goBack() {
+    if (step > 0) setStep(step - 1);
+    else if (hasChanges) setConfirmDiscard(true);
+    else leave();
+  }
+
+  // Closing the screen throws away everything typed; always land on the Invoices list.
+  function discard() {
+    setConfirmDiscard(false);
+    router.dismissTo(INVOICES_HOME);
+  }
+
+  // Android's system back button behaves like the back arrow.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      goBack();
+      return true;
+    });
+    return () => sub.remove();
+  });
+
   const title = existing ? `Edit ${existing.number}` : `New ${label.one}`;
 
   return (
     <OwnerScreen>
       <ScreenHeader
         title={title}
-        onBack={() => router.back()}
+        onBack={goBack}
         right={
           <Pressable onPress={saveDraft} accessibilityRole="button" hitSlop={8}>
             <Text style={styles.saveDraftLink}>Save Draft</Text>
@@ -252,6 +290,26 @@ export default function NewDocScreen() {
           )}
         </View>
       </View>
+
+      <Pressable
+        onPress={() => setConfirmDiscard(true)}
+        accessibilityRole="button"
+        hitSlop={8}
+        style={({ pressed }) => [styles.discard, pressed && styles.pressed]}>
+        <Text style={styles.discardText}>{existing ? 'Discard Changes' : `Discard ${label.one}`}</Text>
+      </Pressable>
+
+      <ConfirmDialog
+        visible={confirmDiscard}
+        message={
+          existing
+            ? "Are you sure you want to discard your changes? Everything you've changed will be lost."
+            : `Are you sure you want to discard this ${label.one.toLowerCase()}? Everything you've entered will be lost.`
+        }
+        confirmLabel="Discard"
+        onConfirm={discard}
+        onCancel={() => setConfirmDiscard(false)}
+      />
 
       <OptionSheet
         visible={jobSheetOpen}
@@ -401,6 +459,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.three - 4,
     marginTop: Spacing.two,
+  },
+  discard: {
+    alignSelf: 'center',
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.three,
+  },
+  discardText: {
+    color: C.danger,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  pressed: {
+    opacity: 0.6,
   },
   reviewRow: {
     gap: 2,
