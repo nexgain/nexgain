@@ -1,6 +1,6 @@
 // Real accounts (Supabase Auth): sign up, log in, log out, and working out
 // whether the signed-in person is an owner or an employee.
-import { clearBusiness, loadMyBusiness } from '@/data/business';
+import { endSession, startSession } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
 
 export type Role = 'owner' | 'employee' | 'none';
@@ -40,7 +40,7 @@ export async function getMyRole(): Promise<Role> {
 
 /** Logs in and checks the account is the expected kind. Returns an error message, or null. */
 export async function logIn(email: string, password: string, expected: 'owner' | 'employee') {
-  const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
   if (error) return friendlyAuthError(error.message);
 
   const role = await getMyRole();
@@ -51,26 +51,27 @@ export async function logIn(email: string, password: string, expected: 'owner' |
       ? 'This is an employee account. Please use Employee Login.'
       : 'This is an owner account. Please use Owner Login.';
   }
-  await loadMyBusiness();
+  // Load their data before opening the dashboard.
+  await startSession(data.user.id);
   return null;
 }
 
 export async function logOut() {
   await supabase.auth.signOut();
-  clearBusiness();
+  endSession();
 }
 
-// Load the business whenever someone is signed in (including when the app
+// Load everyone's data whenever they're signed in (including when the app
 // reopens with a saved session), and clear it when they sign out.
 supabase.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_OUT' || !session) {
-    clearBusiness();
+    endSession();
     return;
   }
   if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
     // Run outside the auth callback, as Supabase recommends.
     setTimeout(() => {
-      loadMyBusiness().catch((e) => console.warn('Could not load business:', e.message));
+      startSession(session.user.id).catch((e) => console.warn('Could not load your data:', e.message));
     }, 0);
   }
 });

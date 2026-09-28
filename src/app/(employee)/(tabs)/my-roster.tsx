@@ -22,7 +22,7 @@ import {
   isSameDay,
   type RosterDay,
 } from '@/data/employee-roster';
-import { currentEmployee } from '@/data/current-employee';
+import { useCurrentEmployee } from '@/data/current-employee';
 import { useShifts } from '@/data/shifts';
 
 const WEEKS = [
@@ -31,6 +31,7 @@ const WEEKS = [
 ] as const;
 
 export default function RosterScreen() {
+  const currentEmployee = useCurrentEmployee();
   const today = new Date();
   const scrollRef = useRef<ScrollView>(null);
   const sectionY = useRef<number[]>([0, 0]);

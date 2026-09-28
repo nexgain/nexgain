@@ -15,7 +15,7 @@ import {
   WEEKDAY_NAMES,
   type WeeklyAvailability,
 } from '@/data/availability';
-import { currentEmployee } from '@/data/current-employee';
+import { useCurrentEmployee } from '@/data/current-employee';
 import { format12h } from '@/data/employee-roster';
 import { dateToTime, timeToDate, toMinutes } from '@/data/time';
 
@@ -29,6 +29,7 @@ const PICKER_THEME = {
 };
 
 export default function AvailabilityScreen() {
+  const currentEmployee = useCurrentEmployee();
   const insets = useSafeAreaInsets();
   const employeeId = currentEmployee?.id ?? null;
   const saved = availabilityFor(useAvailability(), employeeId);

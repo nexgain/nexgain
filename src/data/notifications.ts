@@ -1,9 +1,9 @@
-// Notifications for the owner and for individual employees. Records are
-// addressed to an audience (the owner, or one employee) so the same store can
-// move to a database table unchanged. In memory only until one is connected.
+// Notifications for the owner and for individual employees, addressed to one
+// person. Loaded from the online database and delivered live between phones.
 import type { SymbolViewProps } from 'expo-symbols';
 
 import { createStore } from '@/data/store';
+import { supabase } from '@/lib/supabase';
 
 type IconName = SymbolViewProps['name'];
 
@@ -124,11 +124,101 @@ export function addNotification(n: NewNotification) {
 }
 
 export function markRead(id: string) {
-  notificationsStore.set((all) => all.map((n) => (n.id === id && !n.read ? { ...n, read: true } : n)));
+  const target = notificationsStore.get().find((n) => n.id === id);
+  if (!target || target.read) return;
+  notificationsStore.set((all) => all.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  // Records that came from the database (ids are UUIDs) are marked read there too.
+  if (/^[0-9a-f]{8}-/.test(id)) {
+    supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('id', id)
+      .then(({ error }) => {
+        if (error) console.warn('Could not mark notification read:', error.message);
+      });
+  }
 }
 
+const FALLBACK_TYPE: TypeInfo = { category: 'System', icon: ICONS.document, tone: 'grey', actions: [] };
+
 export function typeInfo(n: AppNotification): TypeInfo {
-  return n.audience === 'owner' ? OWNER_TYPES[n.type] : EMPLOYEE_TYPES[n.type];
+  const info = n.audience === 'owner' ? OWNER_TYPES[n.type] : EMPLOYEE_TYPES[n.type];
+  return info ?? FALLBACK_TYPE;
+}
+
+// ---------------------------------------------------------------------------
+// Database: notifications are created by the database itself (e.g. when an
+// employee joins, a shift is assigned or a payslip is paid) and delivered live.
+
+type NotificationRow = {
+  id: string;
+  audience: 'owner' | 'employee';
+  type: string;
+  title: string;
+  summary: string;
+  body: string;
+  status: string | null;
+  details: { label: string; value: string }[] | null;
+  photos: string[] | null;
+  attachments: Attachment[] | null;
+  related_shift: { date: string; title: string; subtitle?: string } | null;
+  read: boolean;
+  created_at: string;
+};
+
+function fromRow(row: NotificationRow, employeeId: string | null): AppNotification {
+  const base = {
+    id: row.id,
+    title: row.title,
+    summary: row.summary,
+    body: row.body,
+    createdAt: row.created_at,
+    read: row.read,
+    status: row.status ?? undefined,
+    details: row.details ?? undefined,
+    photos: row.photos ?? undefined,
+    attachments: row.attachments ?? undefined,
+    relatedShift: row.related_shift
+      ? { date: row.related_shift.date, title: row.related_shift.title, subtitle: row.related_shift.subtitle ?? undefined }
+      : undefined,
+  };
+  return row.audience === 'owner'
+    ? { ...base, audience: 'owner', type: row.type as OwnerNotificationType }
+    : { ...base, audience: 'employee', employeeId, type: row.type as EmployeeNotificationType };
+}
+
+/** Loads the signed-in person's notifications (newest first). */
+export async function loadNotifications(employeeId: string | null) {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error) throw error;
+  notificationsStore.set((data as NotificationRow[]).map((row) => fromRow(row, employeeId)));
+}
+
+/** Delivers new and updated notifications live. Returns a function that stops listening. */
+export function subscribeToNotifications(userId: string, employeeId: string | null) {
+  const channel = supabase
+    .channel(`notifications-${userId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${userId}` },
+      (payload) => {
+        if (payload.eventType === 'DELETE') return;
+        const n = fromRow(payload.new as NotificationRow, employeeId);
+        notificationsStore.set((all) => [n, ...all.filter((x) => x.id !== n.id)].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+      },
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export function clearNotifications() {
+  notificationsStore.set([]);
 }
 
 export function ownerNotifications(all: AppNotification[]) {

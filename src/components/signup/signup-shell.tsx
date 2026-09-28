@@ -14,7 +14,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { SignupColors as C } from '@/components/signup/fields';
-import { STEP_NAMES } from '@/components/signup/types';
 
 const LOGO = require('@/assets/nexgain-logo.png');
 const LOGO_RATIO = 978 / 634;
@@ -22,9 +21,12 @@ const WIDE = 768;
 
 /**
  * Frame for every sign-up step: dark sidebar with numbered steps on wide screens
- * (a compact progress strip on phones) and a white content area.
+ * (a compact progress strip on phones) and a white content area. Shared by owner
+ * and employee sign-up; `complete` shows every step ticked (the success screen).
  */
 export function SignupShell({
+  steps,
+  complete = false,
   step,
   title,
   subtitle,
@@ -32,6 +34,8 @@ export function SignupShell({
   onSelectStep,
   children,
 }: {
+  steps: readonly string[];
+  complete?: boolean;
   step: number;
   title: string;
   subtitle?: string;
@@ -51,19 +55,21 @@ export function SignupShell({
         contentContainerStyle={[styles.contentScroll, wide && styles.contentScrollWide]}
         keyboardShouldPersistTaps="handled">
         <View style={styles.contentInner}>
-          <View style={styles.contentHeader}>
-            <Pressable
-              onPress={onBack}
-              accessibilityRole="button"
-              accessibilityLabel="Back"
-              hitSlop={10}
-              style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
-              <SymbolView name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }} tintColor={C.text} size={16} />
-            </Pressable>
-            <Text style={styles.stepCount}>
-              Step {step + 1} of {STEP_NAMES.length}
-            </Text>
-          </View>
+          {!complete && (
+            <View style={styles.contentHeader}>
+              <Pressable
+                onPress={onBack}
+                accessibilityRole="button"
+                accessibilityLabel="Back"
+                hitSlop={10}
+                style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
+                <SymbolView name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }} tintColor={C.text} size={16} />
+              </Pressable>
+              <Text style={styles.stepCount}>
+                Step {step + 1} of {steps.length}
+              </Text>
+            </View>
+          )}
           <Text style={styles.title}>{title}</Text>
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
           <View style={styles.body}>{children}</View>
@@ -80,8 +86,8 @@ export function SignupShell({
             <Image source={LOGO} style={styles.sidebarLogo} contentFit="contain" accessibilityLabel="NexGain" />
             <Text style={styles.sidebarHeading}>Set up your business</Text>
             <View style={styles.stepList}>
-              {STEP_NAMES.map((name, i) => (
-                <StepRow key={name} index={i} name={name} current={step} onSelect={onSelectStep} />
+              {steps.map((name, i) => (
+                <StepRow key={name} index={i} name={name} current={complete ? steps.length : step} onSelect={onSelectStep} />
               ))}
             </View>
           </SafeAreaView>
@@ -94,11 +100,11 @@ export function SignupShell({
           <SafeAreaView edges={['top']} style={styles.topBar}>
             <View style={styles.topBarHeader}>
               <Image source={LOGO} style={styles.topLogo} contentFit="contain" accessibilityLabel="NexGain" />
-              <Text style={styles.topStepName}>{STEP_NAMES[step]}</Text>
+              <Text style={styles.topStepName}>{complete ? 'All done' : steps[step]}</Text>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.progress}>
-              {STEP_NAMES.map((name, i) => (
-                <StepDot key={name} index={i} name={name} current={step} onSelect={onSelectStep} />
+              {steps.map((name, i) => (
+                <StepDot key={name} index={i} name={name} count={steps.length} current={complete ? steps.length : step} onSelect={onSelectStep} />
               ))}
             </ScrollView>
           </SafeAreaView>
@@ -161,11 +167,13 @@ function StepRow({
 function StepDot({
   index,
   name,
+  count,
   current,
   onSelect,
 }: {
   index: number;
   name: string;
+  count: number;
   current: number;
   onSelect: (step: number) => void;
 }) {
@@ -178,7 +186,7 @@ function StepDot({
       accessibilityLabel={`Step ${index + 1}: ${name}${done ? ', completed' : ''}`}
       style={styles.dotItem}>
       <StepCircle index={index} current={current} size={24} />
-      {index < STEP_NAMES.length - 1 && <View style={[styles.connector, done && styles.connectorDone]} />}
+      {index < count - 1 && <View style={[styles.connector, done && styles.connectorDone]} />}
     </Pressable>
   );
 }

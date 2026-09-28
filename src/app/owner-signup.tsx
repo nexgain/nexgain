@@ -12,10 +12,11 @@ import { StepServices } from '@/components/signup/step-services';
 import { StepSubscription } from '@/components/signup/step-subscription';
 import { StepTeam } from '@/components/signup/step-team';
 import { StepType } from '@/components/signup/step-type';
-import { EMPTY_SIGNUP, type SignupData } from '@/components/signup/types';
+import { EMPTY_SIGNUP, STEP_NAMES, type SignupData } from '@/components/signup/types';
 import { createBusinessOnline, updateBusiness, type BusinessProfile } from '@/data/business';
 import { DEFAULT_SELECTED_COUNT, findIndustry, industryDefaults } from '@/data/industries';
 import { signUp } from '@/lib/auth';
+import { reloadSession } from '@/lib/session';
 
 const STEPS = [
   { title: 'Create your account', subtitle: "Let's get started. Create your NexGain owner account." },
@@ -103,6 +104,8 @@ export default function OwnerSignupScreen() {
         return false;
       }
       const business = await createBusinessOnline(toProfile(data));
+      // Start loading the new owner's data and live notifications.
+      await reloadSession();
       setInviteCode(business.inviteCode);
       return true;
     } catch (e) {
@@ -146,6 +149,7 @@ export default function OwnerSignupScreen() {
 
   return (
     <SignupShell
+      steps={STEP_NAMES}
       step={step}
       title={STEPS[step].title}
       subtitle={STEPS[step].subtitle}

@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button, Field, Icon, Input, SignupColors as C } from '@/components/signup/fields';
 import type { StepProps } from '@/components/signup/types';
 
-const PASSWORD_RULES = [
+export const PASSWORD_RULES = [
   { label: 'At least 8 characters', test: (p: string) => p.length >= 8 },
   { label: '1 uppercase letter', test: (p: string) => /[A-Z]/.test(p) },
   { label: '1 lowercase letter', test: (p: string) => /[a-z]/.test(p) },
@@ -13,6 +13,25 @@ const PASSWORD_RULES = [
 ];
 
 export const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
+
+/** Live password checklist with green ticks (shared by owner and employee sign-up). */
+export function PasswordChecklist({ password }: { password: string }) {
+  return (
+    <View style={styles.checklist}>
+      {PASSWORD_RULES.map((rule) => {
+        const met = rule.test(password);
+        return (
+          <View key={rule.label} style={styles.rule} accessibilityLabel={`${rule.label}: ${met ? 'done' : 'not yet'}`}>
+            <View style={[styles.tick, met && styles.tickMet]}>
+              {met && <Icon name={{ ios: 'checkmark', android: 'check', web: 'check' }} color="#FFFFFF" size={9} />}
+            </View>
+            <Text style={[styles.ruleText, met && styles.ruleTextMet]}>{rule.label}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
 export function StepAccount({ data, update, onNext }: StepProps) {
   const [tried, setTried] = useState(false);
@@ -71,19 +90,7 @@ export function StepAccount({ data, update, onNext }: StepProps) {
           icon={{ ios: 'lock', android: 'lock', web: 'lock' }}
           hasError={tried && !!errors.password}
         />
-        <View style={styles.checklist}>
-          {PASSWORD_RULES.map((rule) => {
-            const met = rule.test(data.password);
-            return (
-              <View key={rule.label} style={styles.rule} accessibilityLabel={`${rule.label}: ${met ? 'done' : 'not yet'}`}>
-                <View style={[styles.tick, met && styles.tickMet]}>
-                  {met && <Icon name={{ ios: 'checkmark', android: 'check', web: 'check' }} color="#FFFFFF" size={9} />}
-                </View>
-                <Text style={[styles.ruleText, met && styles.ruleTextMet]}>{rule.label}</Text>
-              </View>
-            );
-          })}
-        </View>
+        <PasswordChecklist password={data.password} />
       </Field>
       <Field label="Confirm password" error={tried && errors.confirmPassword}>
         <Input

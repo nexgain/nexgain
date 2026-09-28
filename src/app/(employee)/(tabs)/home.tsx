@@ -22,7 +22,7 @@ import {
   getShiftForDate,
 } from '@/data/employee-roster';
 import { clockIn, clockOut, useClockSessions } from '@/data/clock-records';
-import { currentEmployee, employeeInitials } from '@/data/current-employee';
+import { employeeInitials, useCurrentEmployee } from '@/data/current-employee';
 import { getPayPeriods, hoursInPeriod } from '@/data/payroll';
 import { useShifts } from '@/data/shifts';
 
@@ -60,6 +60,7 @@ function greetingFor(date: Date) {
 }
 
 export default function HomeScreen() {
+  const currentEmployee = useCurrentEmployee();
   const now = useNow();
   // Clock records live in the shared store so Owner Payroll reads the same data.
   // They're in memory only for now and reset when the app restarts.

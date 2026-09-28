@@ -10,7 +10,7 @@ import {
   NotificationsEmpty,
 } from '@/components/notifications/notification-views';
 import { EmployeeColors as C } from '@/constants/employee-theme';
-import { currentEmployee } from '@/data/current-employee';
+import { useCurrentEmployee } from '@/data/current-employee';
 import {
   EMPLOYEE_FILTERS,
   employeeNotifications,
@@ -20,6 +20,7 @@ import {
 } from '@/data/notifications';
 
 export default function EmployeeNotificationsScreen() {
+  const currentEmployee = useCurrentEmployee();
   const mine = employeeNotifications(useNotifications(), currentEmployee?.id ?? null);
   const [filter, setFilter] = useState<string>('All');
 

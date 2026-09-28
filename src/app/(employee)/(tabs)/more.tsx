@@ -5,9 +5,11 @@ import { Avatar, Card, EmployeeScreen, IconBadge, ListRow } from '@/components/e
 import { EmployeeColors as C } from '@/constants/employee-theme';
 import { Spacing } from '@/constants/theme';
 import { ACCOUNT_SECTIONS } from '@/data/employee-account';
-import { currentEmployee, employeeInitials } from '@/data/current-employee';
+import { employeeInitials, useCurrentEmployee } from '@/data/current-employee';
+import { logOut } from '@/lib/auth';
 
 export default function MoreScreen() {
+  const currentEmployee = useCurrentEmployee();
   return (
     <EmployeeScreen title="More">
       <Card style={styles.profileCard}>
@@ -37,7 +39,7 @@ export default function MoreScreen() {
         ))}
       </Card>
 
-      {/* No real session yet: logging out just returns to the landing screen. */}
+      {/* Logs out of the account and returns to the welcome screen. */}
       <Card style={styles.logoutCard}>
         <ListRow
           icon={
@@ -54,7 +56,10 @@ export default function MoreScreen() {
           title="Log Out"
           showChevron={false}
           destructive
-          onPress={() => router.replace('/')}
+          onPress={async () => {
+            await logOut();
+            router.replace('/');
+          }}
         />
       </Card>
     </EmployeeScreen>

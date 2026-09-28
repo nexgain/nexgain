@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Card, Icon, IconBadge, Icons } from '@/components/employee/ui';
 import { EmployeeColors as C } from '@/constants/employee-theme';
 import { Radius, Spacing } from '@/constants/theme';
-import { currentEmployee } from '@/data/current-employee';
+import { useCurrentEmployee } from '@/data/current-employee';
 import { dateKey, formatShiftTime, getShiftForDate } from '@/data/employee-roster';
 import { employeeFullName } from '@/data/employees';
 import { JOB_OUTCOMES, REPORT_TEXT_LIMIT, submitJobReport, type JobOutcome } from '@/data/job-reports';
@@ -23,6 +23,7 @@ const OUTCOME_COLORS: Record<JobOutcome, { text: string; soft: string }> = {
 };
 
 export default function JobReportScreen() {
+  const currentEmployee = useCurrentEmployee();
   const insets = useSafeAreaInsets();
   const { date } = useLocalSearchParams<{ date?: string }>();
   const shiftDate = date ?? dateKey(new Date());

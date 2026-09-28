@@ -11,10 +11,11 @@ import {
   getShiftForDate,
   shiftDurationMs,
 } from '@/data/employee-roster';
-import { currentEmployee } from '@/data/current-employee';
+import { useCurrentEmployee } from '@/data/current-employee';
 import { useShifts } from '@/data/shifts';
 
 export default function JobDetailsScreen() {
+  const currentEmployee = useCurrentEmployee();
   const { date } = useLocalSearchParams<{ date?: string }>();
   const shiftSource = { shifts: useShifts(), employeeId: currentEmployee?.id ?? null };
   const shiftDate = date ?? dateKey(new Date());

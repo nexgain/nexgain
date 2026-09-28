@@ -7,6 +7,7 @@ export default function EmployeeAccessScreen() {
       subtitle="View your schedule, tasks, payslips and more."
       loginHref="/employee-login"
       signUpSubtitle="Join your employer's business"
+      signUpHref="/employee-signup"
     />
   );
 }
