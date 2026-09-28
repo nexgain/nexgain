@@ -23,6 +23,7 @@ import {
 } from '@/data/invoices';
 import { formatMoney } from '@/data/payroll';
 import { fromDateKey, JOB_TYPES, toDateKey } from '@/data/shifts';
+import { currentGstRate, useBusiness } from '@/data/business';
 
 const STEPS = ['Client & Job Details', 'Add Items', 'Review & Send'] as const;
 
@@ -77,6 +78,10 @@ export default function NewDocScreen() {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const hasChanges = JSON.stringify(draft) !== JSON.stringify(initialDraft);
 
+  // Job types come from the services chosen at sign-up (editable under More > Services).
+  const business = useBusiness();
+  const jobOptions: readonly string[] = business?.services.length ? business.services : JOB_TYPES;
+
   const update = (changes: Partial<Draft>) => setDraft((d) => ({ ...d, ...changes }));
   const updateClient = (changes: Partial<Client>) =>
     setDraft((d) => ({ ...d, client: { ...d.client, ...changes } }));
@@ -84,7 +89,9 @@ export default function NewDocScreen() {
   const items = draft.items
     .map((i) => ({ id: i.id, description: i.description.trim(), qty: toNumber(i.qty), rate: toNumber(i.rate) }))
     .filter((i) => i.description || i.qty || i.rate);
-  const totals = docTotals(items);
+  // Keep an existing document's GST rate; new ones follow the business's GST registration.
+  const gstRate = existing?.gstRate ?? currentGstRate();
+  const totals = docTotals(items, gstRate);
 
   function persist(status: DocStatus) {
     return saveDoc({
@@ -103,6 +110,7 @@ export default function NewDocScreen() {
       items,
       dueDate: draft.dueDate ? toDateKey(draft.dueDate) : null,
       paymentReference: existing?.paymentReference ?? '',
+      gstRate,
     });
   }
 
@@ -314,8 +322,8 @@ export default function NewDocScreen() {
       <OptionSheet
         visible={jobSheetOpen}
         title="Job Type"
-        options={JOB_TYPES}
-        value={(draft.jobType as (typeof JOB_TYPES)[number]) ?? null}
+        options={jobOptions}
+        value={draft.jobType}
         onSelect={(jobType) => update({ jobType })}
         onClose={() => setJobSheetOpen(false)}
       />

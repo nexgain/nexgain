@@ -38,6 +38,8 @@ export type SalesDoc = {
   /** Invoice due date or quote "valid until" date. */
   dueDate: string | null;
   paymentReference: string;
+  /** GST rate charged on this document (0.1, or 0 if the business isn't GST registered). */
+  gstRate: number;
   createdAt: string;
 };
 
@@ -98,10 +100,14 @@ export function lineAmount(item: Pick<LineItem, 'qty' | 'rate'>) {
   return roundCents((item.qty || 0) * (item.rate || 0));
 }
 
-export function docTotals(items: Pick<LineItem, 'qty' | 'rate'>[]) {
+export function docTotals(items: Pick<LineItem, 'qty' | 'rate'>[], gstRate = GST_RATE) {
   const subtotal = roundCents(items.reduce((sum, item) => sum + lineAmount(item), 0));
-  const gst = roundCents(subtotal * GST_RATE);
-  return { subtotal, gst, total: roundCents(subtotal + gst) };
+  const gst = roundCents(subtotal * gstRate);
+  return { subtotal, gst, total: roundCents(subtotal + gst), gstRate };
+}
+
+export function gstLabel(gstRate: number) {
+  return gstRate > 0 ? `GST (${Math.round(gstRate * 100)}%)` : 'GST (not registered)';
 }
 
 /** Status to show, accounting for due / expiry dates that have passed. */
@@ -128,21 +134,4 @@ export function useBusinessPayment() {
 
 export function updateBusinessPayment(changes: Partial<BusinessPayment>) {
   businessPaymentStore.set((prev) => ({ ...prev, ...changes }));
-}
-
-/** The business's name and logo, shown at the top of quote PDFs. */
-export type BusinessProfile = {
-  name: string;
-  /** Logo as a data URI ("data:image/png;base64,...") so it can be embedded in PDFs. */
-  logo: string | null;
-};
-
-export const businessProfileStore = createStore<BusinessProfile>({ name: '', logo: null });
-
-export function useBusinessProfile() {
-  return businessProfileStore.use();
-}
-
-export function updateBusinessProfile(changes: Partial<BusinessProfile>) {
-  businessProfileStore.set((prev) => ({ ...prev, ...changes }));
 }

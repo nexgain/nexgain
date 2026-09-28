@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon, OwnerIcons } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { formatShortDate } from '@/data/employee-roster';
-import { displayStatus, docTotals, type DocKind, type DocStatus, type SalesDoc } from '@/data/invoices';
+import { displayStatus, docTotals, gstLabel, type DocKind, type DocStatus, type SalesDoc } from '@/data/invoices';
 import { formatMoney } from '@/data/payroll';
 import { fromDateKey } from '@/data/shifts';
 
@@ -142,7 +142,7 @@ export function SummaryTile({ label, value, tone }: { label: string; value: numb
 }
 
 export function DocCard({ doc, onPress }: { doc: SalesDoc; onPress: () => void }) {
-  const { total } = docTotals(doc.items);
+  const { total } = docTotals(doc.items, doc.gstRate);
   const date = doc.jobDate ?? doc.createdAt.slice(0, 10);
   return (
     <Pressable
@@ -169,11 +169,21 @@ export function DocCard({ doc, onPress }: { doc: SalesDoc; onPress: () => void }
   );
 }
 
-export function TotalsBlock({ subtotal, gst, total }: { subtotal: number; gst: number; total: number }) {
+export function TotalsBlock({
+  subtotal,
+  gst,
+  total,
+  gstRate,
+}: {
+  subtotal: number;
+  gst: number;
+  total: number;
+  gstRate: number;
+}) {
   return (
     <View style={styles.totals}>
       <TotalRow label="Subtotal" value={formatMoney(subtotal)} />
-      <TotalRow label="GST (10%)" value={formatMoney(gst)} />
+      <TotalRow label={gstLabel(gstRate)} value={formatMoney(gst)} />
       <View style={styles.totalDivider} />
       <TotalRow label="Total" value={formatMoney(total)} strong />
     </View>

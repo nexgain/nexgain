@@ -3,13 +3,8 @@ import * as Sharing from 'expo-sharing';
 import { Linking, Platform } from 'react-native';
 
 import { formatShortDate } from '@/data/employee-roster';
-import {
-  businessProfileStore,
-  docTotals,
-  lineAmount,
-  type BusinessPayment,
-  type SalesDoc,
-} from '@/data/invoices';
+import { businessStore, type BusinessProfile } from '@/data/business';
+import { docTotals, gstLabel, lineAmount, type BusinessPayment, type SalesDoc } from '@/data/invoices';
 import { formatMoney } from '@/data/payroll';
 import { fromDateKey } from '@/data/shifts';
 
@@ -24,21 +19,31 @@ function escape(text: string) {
 
 const dateText = (key: string | null) => (key ? formatShortDate(fromDateKey(key)) : '—');
 
-/** Quotes: business logo and name top right, with the quote number small underneath. */
-function quoteHeader(doc: SalesDoc) {
-  const { name, logo } = businessProfileStore.get();
+/** Quotes: business logo and details top right, with the quote number small underneath. */
+function quoteHeader(doc: SalesDoc, business: BusinessProfile | null) {
+  const name = business?.businessName.trim() ?? '';
   const number = doc.number.replace(/^[A-Z]+-/, '#'); // "Q-0001" -> "#0001"
-  return `<div class="biz">
-      ${logo ? `<img class="logo" src="${escape(logo)}" alt="">` : ''}
-      ${name.trim() ? `<div class="biz-name">${escape(name.trim())}</div>` : ''}
+  return `<div class="quote-biz">
+      ${business?.logo ? `<img class="logo" src="${escape(business.logo)}" alt="">` : ''}
+      ${name ? `<div class="biz-name">${escape(name)}</div>` : ''}
+      ${business?.abn ? `<div class="muted">ABN ${escape(business.abn)}</div>` : ''}
+      ${business?.email ? `<div class="muted">${escape(business.email)}</div>` : ''}
       <div class="doc-number">Quote ${escape(number)}</div>
     </div>`;
 }
 
+/** Invoices: business logo and details top left, then the invoice title. */
+function invoiceHeader(doc: SalesDoc, business: BusinessProfile | null) {
+  const biz = business
+    ? `<div class="biz">${business.logo ? `<img src="${business.logo}" alt="">` : ''}<div><strong>${escape(business.businessName)}</strong>${business.abn ? `<br>ABN ${escape(business.abn)}` : ''}${business.email ? `<br>${escape(business.email)}` : ''}</div></div>`
+    : '';
+  return `${biz}<h1>Invoice ${escape(doc.number)}</h1>`;
+}
+
 export function buildDocHtml(doc: SalesDoc, payment: BusinessPayment) {
-  const { subtotal, gst, total } = docTotals(doc.items);
-  const title = doc.kind === 'invoice' ? 'Invoice' : 'Quote';
-  const header = doc.kind === 'quote' ? quoteHeader(doc) : `<h1>${title} ${escape(doc.number)}</h1>`;
+  const { subtotal, gst, total } = docTotals(doc.items, doc.gstRate);
+  const business = businessStore.get();
+  const header = doc.kind === 'quote' ? quoteHeader(doc, business) : invoiceHeader(doc, business);
   const rows = doc.items
     .map(
       (item) => `<tr>
@@ -53,7 +58,9 @@ export function buildDocHtml(doc: SalesDoc, payment: BusinessPayment) {
   return `<!doctype html><html><head><meta charset="utf-8"><style>
     body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #111; padding: 32px; font-size: 13px; }
     h1 { font-size: 26px; margin: 0; color: #2563eb; }
-    .biz { text-align: right; margin-bottom: 16px; }
+    .biz { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .biz img { width: 56px; height: 56px; object-fit: contain; border-radius: 8px; }
+    .quote-biz { text-align: right; margin-bottom: 16px; }
     .logo { max-width: 160px; max-height: 72px; object-fit: contain; display: block; margin: 0 0 8px auto; }
     .biz-name { font-size: 18px; font-weight: bold; }
     .doc-number { font-size: 12px; color: #555; margin-top: 4px; }
@@ -91,7 +98,7 @@ export function buildDocHtml(doc: SalesDoc, payment: BusinessPayment) {
     </table>
     <div class="totals">
       <div><span>Subtotal</span><span>${formatMoney(subtotal)}</span></div>
-      <div><span>GST (10%)</span><span>${formatMoney(gst)}</span></div>
+      <div><span>${gstLabel(doc.gstRate)}</span><span>${formatMoney(gst)}</span></div>
       <div class="grand"><span>Total</span><span>${formatMoney(total)}</span></div>
     </div>
     ${
@@ -129,7 +136,7 @@ export async function downloadPdf(doc: SalesDoc, payment: BusinessPayment) {
  */
 export async function sendDoc(doc: SalesDoc, payment: BusinessPayment) {
   if (Platform.OS === 'web') {
-    const { total } = docTotals(doc.items);
+    const { total } = docTotals(doc.items, doc.gstRate);
     const kind = doc.kind === 'invoice' ? 'Invoice' : 'Quote';
     const subject = encodeURIComponent(`${kind} ${doc.number}`);
     const body = encodeURIComponent(`Hi${doc.client.name ? ` ${doc.client.name}` : ''},\n\nPlease find ${kind.toLowerCase()} ${doc.number} for ${formatMoney(total)} (inc. GST).\n`);
