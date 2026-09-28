@@ -1,10 +1,18 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Icon, OwnerIcons } from '@/components/owner/ui';
+import { Button, Icon, OwnerIcons } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { formatShortDate } from '@/data/employee-roster';
-import { displayStatus, docTotals, gstLabel, type DocKind, type DocStatus, type SalesDoc } from '@/data/invoices';
+import {
+  displayStatus,
+  docTotals,
+  gstLabel,
+  type DocKind,
+  type DocStatus,
+  type ReceiptStatus,
+  type SalesDoc,
+} from '@/data/invoices';
 import { formatMoney } from '@/data/payroll';
 import { fromDateKey } from '@/data/shifts';
 
@@ -38,6 +46,53 @@ export function StatusPill({ status }: { status: DocStatus }) {
     <View style={[styles.pill, { backgroundColor: colors.background }]}>
       <Text style={[styles.pillText, { color: colors.text }]}>{status}</Text>
     </View>
+  );
+}
+
+/** Small label on paid invoices: grey "Receipt not sent" or green "Receipt sent". */
+export function ReceiptLabel({ status }: { status: ReceiptStatus | null | undefined }) {
+  if (!status) return null;
+  const sent = status === 'sent';
+  const colors = ToneColors[sent ? 'green' : 'grey'];
+  return (
+    <View style={[styles.pill, { backgroundColor: colors.background }]}>
+      <Text style={[styles.receiptText, { color: colors.text }]}>{sent ? 'Receipt sent' : 'Receipt not sent'}</Text>
+    </View>
+  );
+}
+
+/** Centred pop-up with a question and two buttons. */
+export function ConfirmDialog({
+  visible,
+  title,
+  confirmLabel,
+  cancelLabel,
+  onConfirm,
+  onCancel,
+}: {
+  visible: boolean;
+  title: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <View style={styles.dialogBackdrop}>
+        <View style={styles.dialog} accessibilityRole="alert">
+          <Text style={styles.dialogTitle}>{title}</Text>
+          <View style={styles.dialogButtons}>
+            <View style={styles.flex}>
+              <Button label={cancelLabel} variant="secondary" onPress={onCancel} />
+            </View>
+            <View style={styles.flex}>
+              <Button label={confirmLabel} onPress={onConfirm} />
+            </View>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -163,6 +218,7 @@ export function DocCard({ doc, onPress }: { doc: SalesDoc; onPress: () => void }
       <View style={styles.docRight}>
         <Text style={styles.docTotal}>{formatMoney(total)}</Text>
         <StatusPill status={displayStatus(doc)} />
+        {doc.status === 'Paid' && <ReceiptLabel status={doc.receiptStatus} />}
       </View>
       <Icon name={OwnerIcons.chevron} color={C.textSecondary} size={14} />
     </Pressable>
@@ -212,6 +268,40 @@ const styles = StyleSheet.create({
   pillText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  receiptText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  flex: {
+    flex: 1,
+  },
+  dialogBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.four,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+  },
+  dialog: {
+    width: '100%',
+    maxWidth: 380,
+    gap: Spacing.three,
+    padding: Spacing.four - 4,
+    borderRadius: Radius.large,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  dialogTitle: {
+    color: C.text,
+    fontSize: 17,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  dialogButtons: {
+    flexDirection: 'row',
+    gap: Spacing.two,
   },
   header: {
     flexDirection: 'row',

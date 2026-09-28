@@ -3,10 +3,12 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { FormField, OptionSheet, TextField } from '@/components/owner/form';
-import { downloadPdf, sendDoc } from '@/components/owner/invoice-pdf';
+import { downloadPdf, sendDoc, sendReceipt } from '@/components/owner/invoice-pdf';
 import {
+  ConfirmDialog,
   HeaderIconButton,
   KIND_LABEL,
+  ReceiptLabel,
   ScreenHeader,
   StatusPill,
   TotalsBlock,
@@ -19,6 +21,7 @@ import {
   displayStatus,
   docTotals,
   lineAmount,
+  setDocStatus,
   updateBusinessPayment,
   updateDoc,
   useBusinessPayment,
@@ -38,6 +41,8 @@ export default function DocDetailScreen() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
+  // "offer": ask to send a receipt after marking paid. "confirm": ask whether it was sent.
+  const [receiptPrompt, setReceiptPrompt] = useState<'offer' | 'confirm' | null>(null);
 
   if (!doc) {
     return (
@@ -54,6 +59,7 @@ export default function DocDetailScreen() {
   const status = displayStatus(doc);
   const totals = docTotals(doc.items, doc.gstRate);
   const due = dateText(doc.dueDate);
+  const isPaidInvoice = doc.kind === 'invoice' && doc.status === 'Paid';
   const statusOptions: DocStatus[] =
     doc.kind === 'invoice' ? ['Draft', 'Pending', 'Paid'] : ['Draft', 'Sent', 'Accepted'];
   const menuOptions = [...statusOptions.map((s) => `Mark as ${s}`), `Delete ${label}`];
@@ -72,6 +78,31 @@ export default function DocDetailScreen() {
   async function send() {
     await run((d) => sendDoc(d, payment));
     if (doc!.status === 'Draft') updateDoc(doc!.id, { status: doc!.kind === 'invoice' ? 'Pending' : 'Sent' });
+  }
+
+  async function sendReceiptNow() {
+    if (receiptPrompt) {
+      setReceiptPrompt(null);
+      // Let the pop-up finish closing; iOS can't open the mail app over it.
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+    setBusy(true);
+    try {
+      const result = await sendReceipt(doc!, payment);
+      if (result === 'sent') updateDoc(doc!.id, { receiptStatus: 'sent' });
+      else if (result === 'ask') setReceiptPrompt('confirm');
+    } catch {
+      // Mail app or share sheet dismissed or unavailable.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function changeStatus(status: DocStatus) {
+    if (setDocStatus(doc!.id, status)) {
+      // Wait for the options sheet to finish closing; iOS can't show two pop-ups at once.
+      setTimeout(() => setReceiptPrompt('offer'), 400);
+    }
   }
 
   return (
@@ -103,8 +134,13 @@ export default function DocDetailScreen() {
       <View style={styles.statusRow}>
         <StatusPill status={status} />
         <Text style={styles.muted}>
-          {due ? `${doc.kind === 'invoice' ? 'Due' : 'Valid until'} ${due}` : 'No due date set'}
+          {isPaidInvoice && doc.paidAt
+            ? `Paid ${formatShortDate(new Date(doc.paidAt))}`
+            : due
+              ? `${doc.kind === 'invoice' ? 'Due' : 'Valid until'} ${due}`
+              : 'No due date set'}
         </Text>
+        {isPaidInvoice && <ReceiptLabel status={doc.receiptStatus} />}
       </View>
 
       <Card>
@@ -219,7 +255,12 @@ export default function DocDetailScreen() {
           />
         </View>
       </View>
-      <Button label={`Send ${label}`} icon={{ ios: 'paperplane.fill', android: 'send', web: 'send' }} disabled={busy} onPress={send} />
+      <Button
+        label={isPaidInvoice ? 'Send Receipt' : `Send ${label}`}
+        icon={{ ios: 'paperplane.fill', android: 'send', web: 'send' }}
+        disabled={busy}
+        onPress={isPaidInvoice ? sendReceiptNow : send}
+      />
 
       <OptionSheet
         visible={menuOpen}
@@ -228,9 +269,35 @@ export default function DocDetailScreen() {
         value={`Mark as ${doc.status}`}
         onSelect={(option) => {
           if (option.startsWith('Delete')) setConfirmDelete(true);
-          else updateDoc(doc.id, { status: option.replace('Mark as ', '') as DocStatus });
+          else changeStatus(option.replace('Mark as ', '') as DocStatus);
         }}
         onClose={() => setMenuOpen(false)}
+      />
+
+      <ConfirmDialog
+        visible={receiptPrompt === 'offer'}
+        title={`Send a receipt to ${doc.client.name || 'the client'}?`}
+        confirmLabel="Send receipt"
+        cancelLabel="Not now"
+        onConfirm={sendReceiptNow}
+        onCancel={() => {
+          updateDoc(doc.id, { receiptStatus: 'not_sent' });
+          setReceiptPrompt(null);
+        }}
+      />
+      <ConfirmDialog
+        visible={receiptPrompt === 'confirm'}
+        title="Did you send the receipt?"
+        confirmLabel="Yes"
+        cancelLabel="No"
+        onConfirm={() => {
+          updateDoc(doc.id, { receiptStatus: 'sent' });
+          setReceiptPrompt(null);
+        }}
+        onCancel={() => {
+          updateDoc(doc.id, { receiptStatus: 'not_sent' });
+          setReceiptPrompt(null);
+        }}
       />
     </OwnerScreen>
   );
