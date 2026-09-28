@@ -32,6 +32,12 @@ export default function OwnerMoreScreen() {
             showDivider
           />
           <ActionRow
+            icon={{ ios: 'building.2.fill', android: 'store', web: 'store' }}
+            label="Business Profile"
+            onPress={() => router.navigate('/business-profile')}
+            showDivider
+          />
+          <ActionRow
             icon={{ ios: 'puzzlepiece.extension.fill', android: 'extension', web: 'extension' }}
             label="Integrations"
             onPress={() => router.navigate('/integrations')}

@@ -66,6 +66,9 @@ export default function OwnerLayout() {
         name="invoices"
         options={{
           title: 'Invoices',
+          // Leaving the tab closes any open quote/invoice screens, so the tab
+          // always reopens on the Invoices list.
+          popToTopOnBlur: true,
           tabBarIcon: (props) => (
             <TabIcon
               name={{ ios: 'doc.text.fill', android: 'receipt_long', web: 'receipt_long' }}
@@ -103,6 +106,7 @@ export default function OwnerLayout() {
       <Tabs.Screen name="integrations" options={{ href: null, title: 'Integrations' }} />
       <Tabs.Screen name="alerts" options={{ href: null, title: 'Notifications' }} />
       <Tabs.Screen name="services" options={{ href: null, title: 'Services' }} />
+      <Tabs.Screen name="business-profile" options={{ href: null, title: 'Business Profile' }} />
     </Tabs>
   );
 }

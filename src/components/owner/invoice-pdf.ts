@@ -3,7 +3,7 @@ import * as Sharing from 'expo-sharing';
 import { Linking, Platform } from 'react-native';
 
 import { formatShortDate } from '@/data/employee-roster';
-import { businessStore } from '@/data/business';
+import { businessStore, type BusinessProfile } from '@/data/business';
 import { docTotals, gstLabel, lineAmount, type BusinessPayment, type SalesDoc } from '@/data/invoices';
 import { formatMoney } from '@/data/payroll';
 import { fromDateKey } from '@/data/shifts';
@@ -19,10 +19,31 @@ function escape(text: string) {
 
 const dateText = (key: string | null) => (key ? formatShortDate(fromDateKey(key)) : '—');
 
+/** Quotes: business logo and details top right, with the quote number small underneath. */
+function quoteHeader(doc: SalesDoc, business: BusinessProfile | null) {
+  const name = business?.businessName.trim() ?? '';
+  const number = doc.number.replace(/^[A-Z]+-/, '#'); // "Q-0001" -> "#0001"
+  return `<div class="quote-biz">
+      ${business?.logo ? `<img class="logo" src="${escape(business.logo)}" alt="">` : ''}
+      ${name ? `<div class="biz-name">${escape(name)}</div>` : ''}
+      ${business?.abn ? `<div class="muted">ABN ${escape(business.abn)}</div>` : ''}
+      ${business?.email ? `<div class="muted">${escape(business.email)}</div>` : ''}
+      <div class="doc-number">Quote ${escape(number)}</div>
+    </div>`;
+}
+
+/** Invoices: business logo and details top left, then the invoice title. */
+function invoiceHeader(doc: SalesDoc, business: BusinessProfile | null) {
+  const biz = business
+    ? `<div class="biz">${business.logo ? `<img src="${business.logo}" alt="">` : ''}<div><strong>${escape(business.businessName)}</strong>${business.abn ? `<br>ABN ${escape(business.abn)}` : ''}${business.email ? `<br>${escape(business.email)}` : ''}</div></div>`
+    : '';
+  return `${biz}<h1>Invoice ${escape(doc.number)}</h1>`;
+}
+
 export function buildDocHtml(doc: SalesDoc, payment: BusinessPayment) {
   const { subtotal, gst, total } = docTotals(doc.items, doc.gstRate);
   const business = businessStore.get();
-  const title = doc.kind === 'invoice' ? 'Invoice' : 'Quote';
+  const header = doc.kind === 'quote' ? quoteHeader(doc, business) : invoiceHeader(doc, business);
   const rows = doc.items
     .map(
       (item) => `<tr>
@@ -39,6 +60,10 @@ export function buildDocHtml(doc: SalesDoc, payment: BusinessPayment) {
     h1 { font-size: 26px; margin: 0; color: #2563eb; }
     .biz { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
     .biz img { width: 56px; height: 56px; object-fit: contain; border-radius: 8px; }
+    .quote-biz { text-align: right; margin-bottom: 16px; }
+    .logo { max-width: 160px; max-height: 72px; object-fit: contain; display: block; margin: 0 0 8px auto; }
+    .biz-name { font-size: 18px; font-weight: bold; }
+    .doc-number { font-size: 12px; color: #555; margin-top: 4px; }
     .muted { color: #555; }
     .row { display: flex; justify-content: space-between; margin: 24px 0; gap: 24px; }
     table { width: 100%; border-collapse: collapse; margin-top: 16px; }
@@ -50,12 +75,7 @@ export function buildDocHtml(doc: SalesDoc, payment: BusinessPayment) {
     .grand { font-weight: bold; font-size: 16px; border-top: 2px solid #111; margin-top: 4px; padding-top: 8px !important; }
     h3 { margin: 24px 0 8px; font-size: 14px; }
   </style></head><body>
-    ${
-      business
-        ? `<div class="biz">${business.logo ? `<img src="${business.logo}" alt="">` : ''}<div><strong>${escape(business.businessName)}</strong>${business.abn ? `<br>ABN ${escape(business.abn)}` : ''}${business.email ? `<br>${escape(business.email)}` : ''}</div></div>`
-        : ''
-    }
-    <h1>${title} ${escape(doc.number)}</h1>
+    ${header}
     <div class="muted">${doc.kind === 'invoice' ? 'Due' : 'Valid until'}: ${dateText(doc.dueDate)}</div>
     <div class="row">
       <div>
