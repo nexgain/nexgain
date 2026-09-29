@@ -41,7 +41,13 @@ export type SalesDoc = {
   /** GST rate charged on this document (0.1, or 0 if the business isn't GST registered). */
   gstRate: number;
   createdAt: string;
+  /** When the invoice was marked Paid (ISO timestamp). Cleared if it's moved out of Paid. */
+  paidAt?: string | null;
+  /** Paid invoices only: whether a receipt has been sent to the client. */
+  receiptStatus?: ReceiptStatus | null;
 };
+
+export type ReceiptStatus = 'not_sent' | 'sent';
 
 export const GST_RATE = 0.1;
 
@@ -86,6 +92,25 @@ export function saveDoc(doc: Omit<SalesDoc, 'id' | 'number' | 'createdAt'> & { i
 
 export function updateDoc(id: string, changes: Partial<Omit<SalesDoc, 'id' | 'kind' | 'number'>>) {
   docsStore.set((all) => all.map((d) => (d.id === id ? { ...d, ...changes } : d)));
+}
+
+/**
+ * Changes a document's status. Marking an invoice Paid records when it was paid and
+ * starts its receipt as "not_sent"; moving it out of Paid clears both.
+ * Returns true when an invoice has just become Paid.
+ */
+export function setDocStatus(id: string, status: DocStatus) {
+  const doc = docsStore.get().find((d) => d.id === id);
+  if (!doc) return false;
+  const becamePaid = doc.kind === 'invoice' && status === 'Paid' && doc.status !== 'Paid';
+  if (becamePaid) {
+    updateDoc(id, { status, paidAt: new Date().toISOString(), receiptStatus: 'not_sent' });
+  } else if (doc.status === 'Paid' && status !== 'Paid') {
+    updateDoc(id, { status, paidAt: null, receiptStatus: null });
+  } else {
+    updateDoc(id, { status });
+  }
+  return becamePaid;
 }
 
 export function deleteDoc(id: string) {
