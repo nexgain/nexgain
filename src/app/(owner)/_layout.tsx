@@ -107,6 +107,7 @@ export default function OwnerLayout() {
       <Tabs.Screen name="alerts" options={{ href: null, title: 'Notifications' }} />
       <Tabs.Screen name="services" options={{ href: null, title: 'Services' }} />
       <Tabs.Screen name="business-profile" options={{ href: null, title: 'Business Profile' }} />
+      <Tabs.Screen name="employee/[id]" options={{ href: null, title: 'Employee Profile' }} />
     </Tabs>
   );
 }

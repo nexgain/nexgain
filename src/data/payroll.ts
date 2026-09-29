@@ -1,8 +1,11 @@
 // Payroll calculations. Everything is derived from the shared employees store
 // (pay rate, bank details) and clock records (hours) - nothing is stored twice.
-import type { ClockSession } from '@/data/clock-records';
-import type { Employee } from '@/data/employees';
+import { businessStore } from '@/data/business';
+import { clockStore, type ClockSession } from '@/data/clock-records';
+import { employeesStore, type Employee } from '@/data/employees';
 import { createStore } from '@/data/store';
+import { newId, warnSaveFailed } from '@/lib/ids';
+import { supabase } from '@/lib/supabase';
 
 /** Flat placeholder until proper PAYG withholding tables are set up. */
 export const TAX_RATE_PLACEHOLDER = 0.2;
@@ -160,25 +163,131 @@ export function labourCost(
   ).gross;
 }
 
-// Paid status per pay period (keyed by period id, then employee id).
-export const payStatusStore = createStore<Record<string, Record<string, PayStatus>>>({});
+// Payslips: one per employee per pay period, created when the owner approves
+// payments. Stored online ("payslips" table). An employee is "Paid" for a
+// period once they have a payslip for it. The owner sees every payslip in
+// their business; an employee sees only their own.
+export type PayslipRecord = {
+  id: string;
+  employeeId: string;
+  /** Pay period id ("YYYY-MM-DD" of its Monday). */
+  periodStart: string;
+  /** Last day of the period, "YYYY-MM-DD". */
+  periodEnd: string;
+  hours: number;
+  rate: number;
+  gross: number;
+  tax: number;
+  net: number;
+  super: number;
+  paidAt: string;
+};
 
-export function usePayStatuses(periodId: string) {
-  return payStatusStore.use()[periodId] ?? {};
+export const payslipsStore = createStore<PayslipRecord[]>([]);
+
+export function usePayslipRecords() {
+  return payslipsStore.use();
+}
+
+type PayslipRow = {
+  id: string;
+  employee_id: string;
+  period_start: string;
+  period_end: string;
+  hours: number | string;
+  rate: number | string;
+  gross: number | string;
+  tax: number | string;
+  net: number | string;
+  super: number | string;
+  paid_at: string;
+};
+
+export async function loadPayslips() {
+  const { data, error } = await supabase.from('payslips').select('*').order('period_start', { ascending: false });
+  if (error) throw error;
+  payslipsStore.set(
+    (data as PayslipRow[]).map((row) => ({
+      id: row.id,
+      employeeId: row.employee_id,
+      periodStart: row.period_start,
+      periodEnd: row.period_end,
+      hours: Number(row.hours),
+      rate: Number(row.rate),
+      gross: Number(row.gross),
+      tax: Number(row.tax),
+      net: Number(row.net),
+      super: Number(row.super),
+      paidAt: row.paid_at,
+    })),
+  );
+}
+
+export function usePayStatuses(periodId: string): Record<string, PayStatus> {
+  const payslips = payslipsStore.use();
+  return Object.fromEntries(
+    payslips.filter((p) => p.periodStart === periodId).map((p) => [p.employeeId, 'Paid' as const]),
+  );
 }
 
 /**
- * Marks employees as Paid for a period. This only updates app data - no money
- * moves until a payment processor or banking API is connected.
+ * Marks employees as Paid for a period by creating their payslips (the
+ * database then tells each employee "You've been paid!"). No money moves until
+ * a payment processor or banking API is connected.
  */
 export function approvePayments(periodId: string, employeeIds: string[]) {
-  payStatusStore.set((all) => ({
-    ...all,
-    [periodId]: {
-      ...all[periodId],
-      ...Object.fromEntries(employeeIds.map((id) => [id, 'Paid' as const])),
-    },
-  }));
+  const businessId = businessStore.get()?.id;
+  const [y, m, d] = periodId.split('-').map(Number);
+  const period = { start: new Date(y, m - 1, d), end: new Date(y, m - 1, d + 7) };
+  const lastDay = toDateId(new Date(y, m - 1, d + 6));
+  const alreadyPaid = new Set(payslipsStore.get().filter((p) => p.periodStart === periodId).map((p) => p.employeeId));
+  const sessions = clockStore.get();
+
+  const created: PayslipRecord[] = employeesStore
+    .get()
+    .filter((e) => employeeIds.includes(e.id) && !alreadyPaid.has(e.id))
+    .map((e) => calculatePayLine(e, hoursInPeriod(sessions, e.id, period), 'Pending'))
+    .filter((l) => l.rate !== null && l.gross !== null)
+    .map((l) => ({
+      id: newId(),
+      employeeId: l.employee.id,
+      periodStart: periodId,
+      periodEnd: lastDay,
+      hours: Math.round(l.hours * 100) / 100,
+      rate: l.rate!,
+      gross: l.gross!,
+      tax: l.tax!,
+      net: l.net!,
+      super: l.super!,
+      paidAt: new Date().toISOString(),
+    }));
+  if (created.length === 0 || !businessId) return;
+
+  payslipsStore.set((all) => [...created, ...all]);
+  supabase
+    .from('payslips')
+    .insert(
+      created.map((p) => ({
+        id: p.id,
+        business_id: businessId,
+        employee_id: p.employeeId,
+        period_start: p.periodStart,
+        period_end: p.periodEnd,
+        hours: p.hours,
+        rate: p.rate,
+        gross: p.gross,
+        tax: p.tax,
+        net: p.net,
+        super: p.super,
+      })),
+    )
+    .then(({ error }) => {
+      if (!error) return;
+      warnSaveFailed('payslips', error);
+      // Show them as Pending again so the owner can retry.
+      const ids = new Set(created.map((p) => p.id));
+      payslipsStore.set((all) => all.filter((p) => !ids.has(p.id)));
+    });
 }
 
 export function formatMoney(amount: number, { cents = true } = {}) {

@@ -159,6 +159,8 @@ create index if not exists shifts_business_date_idx on public.shifts (business_i
 create index if not exists notifications_recipient_idx on public.notifications (recipient_id, created_at desc);
 create index if not exists clock_sessions_employee_idx on public.clock_sessions (employee_id, started_at);
 create index if not exists payslips_employee_idx on public.payslips (employee_id, period_start);
+-- An employee can only be paid once per pay period (stops double payments).
+create unique index if not exists payslips_one_per_period on public.payslips (employee_id, period_start);
 
 -- ---------------------------------------------------------------------
 -- Helper functions for security rules

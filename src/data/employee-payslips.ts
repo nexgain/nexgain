@@ -1,4 +1,7 @@
-// Payslips will come from the Owner's Payroll section once a database is connected.
+// The signed-in employee's payslips, created when their owner approves payroll.
+import { fromDateKey } from '@/data/shifts';
+import { formatShortDate } from '@/data/employee-roster';
+import { usePayslipRecords } from '@/data/payroll';
 
 export type Payslip = {
   id: string;
@@ -7,8 +10,16 @@ export type Payslip = {
   amount: number;
 };
 
-export function getPayslips(): Payslip[] {
-  return [];
+/** Newest first. `amount` is the net (take-home) pay. */
+export function usePayslips(): Payslip[] {
+  return [...usePayslipRecords()]
+    .sort((a, b) => b.paidAt.localeCompare(a.paidAt))
+    .map((p) => ({
+      id: p.id,
+      payDate: new Date(p.paidAt),
+      label: `Pay period ${formatShortDate(fromDateKey(p.periodStart), false)} – ${formatShortDate(fromDateKey(p.periodEnd))}`,
+      amount: p.net,
+    }));
 }
 
 export function formatCurrency(amount: number) {

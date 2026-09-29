@@ -18,6 +18,7 @@ export const ACCOUNT_SECTIONS: AccountSection[] = [
     title: 'My Profile',
     subtitle: 'Personal details, contact info',
     icon: { ios: 'person.fill', android: 'person', web: 'person' },
+    href: '/profile',
   },
   {
     id: 'availability',

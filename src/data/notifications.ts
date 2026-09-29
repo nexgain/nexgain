@@ -187,6 +187,22 @@ function fromRow(row: NotificationRow, employeeId: string | null): AppNotificati
     : { ...base, audience: 'employee', employeeId, type: row.type as EmployeeNotificationType };
 }
 
+const isStoragePath = (photo: string) => !/^(https?|data|file|blob|content):/.test(photo);
+
+/**
+ * Job report photos are saved privately; swap their storage paths for
+ * temporary links (valid for a week) so they can be shown.
+ */
+async function withPhotoLinks(items: AppNotification[]) {
+  const paths = [...new Set(items.flatMap((n) => n.photos ?? []).filter(isStoragePath))];
+  if (paths.length === 0) return items;
+  const { data } = await supabase.storage.from('employee-documents').createSignedUrls(paths, 7 * 24 * 60 * 60);
+  const links = new Map((data ?? []).filter((d) => d.signedUrl).map((d) => [d.path, d.signedUrl]));
+  return items.map((n) =>
+    n.photos?.some(isStoragePath) ? { ...n, photos: n.photos.map((p) => links.get(p) ?? p).filter((p) => !isStoragePath(p)) } : n,
+  );
+}
+
 /** Loads the signed-in person's notifications (newest first). */
 export async function loadNotifications(employeeId: string | null) {
   const { data, error } = await supabase
@@ -195,20 +211,24 @@ export async function loadNotifications(employeeId: string | null) {
     .order('created_at', { ascending: false })
     .limit(200);
   if (error) throw error;
-  notificationsStore.set((data as NotificationRow[]).map((row) => fromRow(row, employeeId)));
+  notificationsStore.set(await withPhotoLinks((data as NotificationRow[]).map((row) => fromRow(row, employeeId))));
 }
 
-/** Delivers new and updated notifications live. Returns a function that stops listening. */
-export function subscribeToNotifications(userId: string, employeeId: string | null) {
+/**
+ * Delivers new and updated notifications live. `onNew` runs for each new one
+ * (e.g. to refresh the roster). Returns a function that stops listening.
+ */
+export function subscribeToNotifications(userId: string, employeeId: string | null, onNew?: (n: AppNotification) => void) {
   const channel = supabase
     .channel(`notifications-${userId}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${userId}` },
-      (payload) => {
+      async (payload) => {
         if (payload.eventType === 'DELETE') return;
-        const n = fromRow(payload.new as NotificationRow, employeeId);
+        const [n] = await withPhotoLinks([fromRow(payload.new as NotificationRow, employeeId)]);
         notificationsStore.set((all) => [n, ...all.filter((x) => x.id !== n.id)].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+        if (payload.eventType === 'INSERT') onNew?.(n);
       },
     )
     .subscribe();

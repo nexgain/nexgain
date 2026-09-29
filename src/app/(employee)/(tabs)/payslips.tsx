@@ -4,10 +4,10 @@ import { Card, EmployeeScreen, Icon, IconBadge, Icons, ListRow } from '@/compone
 import { EmployeeColors as C } from '@/constants/employee-theme';
 import { Spacing } from '@/constants/theme';
 import { formatShortDate } from '@/data/employee-roster';
-import { formatCurrency, getPayslips } from '@/data/employee-payslips';
+import { formatCurrency, usePayslips } from '@/data/employee-payslips';
 
 export default function PayslipsScreen() {
-  const payslips = getPayslips();
+  const payslips = usePayslips();
 
   return (
     <EmployeeScreen title="Payslips">

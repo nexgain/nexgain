@@ -1,7 +1,12 @@
 // Rostered shifts. Created on the Owner Roster screen and read by each
-// employee's own Roster tab, Home screen and Shift details.
+// employee's own Roster tab, Home screen and Shift details. Stored online
+// ("shifts" table); changes show straight away and save in the background.
+// The database tells employees when they're added to, moved or removed from a shift.
 import { availabilityFor, availabilityOn, type WeeklyAvailability } from '@/data/availability';
+import { businessStore } from '@/data/business';
 import { createStore } from '@/data/store';
+import { newId, warnSaveFailed } from '@/lib/ids';
+import { supabase } from '@/lib/supabase';
 
 export const JOB_TYPES = [
   'House Wash',
@@ -32,20 +37,77 @@ export function useShifts() {
   return shiftsStore.use();
 }
 
-function newId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+type ShiftRow = {
+  id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  employee_ids: string[];
+  job_type: string;
+  location: string;
+  tasks: string[];
+  notes: string;
+};
+
+function fromRow(row: ShiftRow): RosterShift {
+  return {
+    id: row.id,
+    date: row.date,
+    start: row.start_time,
+    end: row.end_time,
+    employeeIds: row.employee_ids,
+    jobType: row.job_type,
+    location: row.location,
+    tasks: row.tasks,
+    notes: row.notes,
+  };
+}
+
+function toRow(shift: RosterShift) {
+  return {
+    id: shift.id,
+    business_id: businessStore.get()?.id,
+    date: shift.date,
+    start_time: shift.start,
+    end_time: shift.end,
+    employee_ids: shift.employeeIds,
+    job_type: shift.jobType,
+    location: shift.location,
+    tasks: shift.tasks,
+    notes: shift.notes,
+  };
+}
+
+/** Loads the shifts this person can see: all of them for the owner, only their own for an employee. */
+export async function loadShifts() {
+  const { data, error } = await supabase.from('shifts').select('*').order('date');
+  if (error) throw error;
+  shiftsStore.set((data as ShiftRow[]).map(fromRow));
+}
+
+function saveOnline(shifts: RosterShift[]) {
+  if (shifts.length === 0) return;
+  supabase
+    .from('shifts')
+    .upsert(shifts.map(toRow))
+    .then(({ error }) => warnSaveFailed('shift', error));
 }
 
 export function saveShift(shift: Omit<RosterShift, 'id'> & { id?: string }) {
+  const saved: RosterShift = { ...shift, id: shift.id ?? newId() };
   shiftsStore.set((all) =>
-    shift.id
-      ? all.map((s) => (s.id === shift.id ? { ...s, ...shift, id: s.id } : s))
-      : [...all, { ...shift, id: newId() }],
+    shift.id ? all.map((s) => (s.id === shift.id ? saved : s)) : [...all, saved],
   );
+  saveOnline([saved]);
 }
 
 export function deleteShift(id: string) {
   shiftsStore.set((all) => all.filter((s) => s.id !== id));
+  supabase
+    .from('shifts')
+    .delete()
+    .eq('id', id)
+    .then(({ error }) => warnSaveFailed('shift', error));
 }
 
 export function toDateKey(date: Date) {
@@ -97,6 +159,7 @@ export function copyPreviousWeek(weekStart: Date) {
         ),
     );
   shiftsStore.set([...all, ...copies]);
+  saveOnline(copies);
   return copies.length;
 }
 
@@ -110,7 +173,7 @@ export function autoFillFromAvailability(
   employeeIds: string[],
   availability: Record<string, WeeklyAvailability>,
 ) {
-  let filled = 0;
+  const filled: RosterShift[] = [];
   const inRange = new Set(shiftsInRange(shiftsStore.get(), start, end).map((s) => s.id));
   shiftsStore.set((all) =>
     all.map((s) => {
@@ -119,9 +182,11 @@ export function autoFillFromAvailability(
         (id) => availabilityOn(availabilityFor(availability, id), fromDateKey(s.date), s) === 'available',
       );
       if (available.length === 0) return s;
-      filled += 1;
-      return { ...s, employeeIds: available };
+      const updated = { ...s, employeeIds: available };
+      filled.push(updated);
+      return updated;
     }),
   );
-  return filled;
+  saveOnline(filled);
+  return filled.length;
 }

@@ -1,7 +1,9 @@
-// Job reports written by employees after a shift. Submitting a
-// report also notifies the owner. In memory only until a database is connected.
-import { addNotification } from '@/data/notifications';
+// Job reports written by employees after a shift. Submitting a report saves it
+// online ("job_reports" table) and the database notifies the owner.
+import { currentEmployeeStore } from '@/data/current-employee';
 import { createStore } from '@/data/store';
+import { newId, warnSaveFailed } from '@/lib/ids';
+import { supabase } from '@/lib/supabase';
 
 export const JOB_OUTCOMES = ['Went well', 'Minor issues', "Didn't go well"] as const;
 export type JobOutcome = (typeof JOB_OUTCOMES)[number];
@@ -39,59 +41,51 @@ export function needsAttention(report: Pick<JobReport, 'outcome' | 'issues'>) {
 export function submitJobReport(report: Omit<JobReport, 'id' | 'submittedAt'>) {
   const saved: JobReport = {
     ...report,
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: newId(),
     submittedAt: new Date().toISOString(),
   };
   jobReportsStore.set((all) => [saved, ...all]);
-
-  const who = report.employeeName ?? 'An employee';
-  const job = report.jobTitle ?? 'a job';
-  const flagged = needsAttention(report);
-  const details = [
-    { label: 'Job', value: report.jobTitle ?? 'No job assigned' },
-    { label: 'Location', value: report.location || '—' },
-    { label: 'Reported by', value: report.employeeName ?? 'Unknown (not signed in)' },
-    { label: 'Time', value: report.time ?? '—' },
-    { label: 'Outcome', value: report.outcome },
-    { label: 'Job completed', value: report.completed ? 'Yes' : 'No' },
-  ];
-  const body = [
-    report.issues.trim() && `Issues:\n${report.issues.trim()}`,
-    report.notes.trim() && `Job notes:\n${report.notes.trim()}`,
-  ]
-    .filter(Boolean)
-    .join('\n\n');
-  const relatedShift = report.jobTitle
-    ? { date: report.date, title: report.jobTitle, subtitle: [report.location, report.time].filter(Boolean).join(' · ') }
-    : undefined;
-
-  if (flagged) {
-    // Minor issues / didn't go well / issues written: an incident that needs the owner's attention.
-    const serious = report.outcome === "Didn't go well";
-    addNotification({
-      audience: 'owner',
-      type: serious ? 'incident_report' : 'report_flagged',
-      title: serious ? 'Incident report submitted' : 'Job report flagged for review',
-      summary: `${who} reported ${report.outcome.toLowerCase()} on ${job}`,
-      body: body || 'No further details were given.',
-      status: 'Needs attention',
-      details,
-      photos: report.photos,
-      relatedShift,
-    });
-  } else {
-    // Went well with no issues: log quietly (already marked as read).
-    addNotification({
-      audience: 'owner',
-      type: 'job_completed',
-      title: 'Job report submitted',
-      summary: `${who} completed ${job} — went well`,
-      body: body || 'No notes were added.',
-      details,
-      photos: report.photos,
-      relatedShift,
-      read: true,
-    });
-  }
+  // Saved online in the background; the database then notifies the owner
+  // (flagged as an incident if there were issues).
+  saveOnline(saved).catch((error: Error) => warnSaveFailed('job report', error));
   return saved.id;
+}
+
+async function saveOnline(report: JobReport) {
+  const businessId = currentEmployeeStore.get()?.businessId;
+  if (!report.employeeId || !businessId) return;
+
+  // Photos go to private storage that only this employee and their owner can open.
+  const photoPaths: string[] = [];
+  for (const [i, uri] of report.photos.entries()) {
+    try {
+      const response = await fetch(uri);
+      const type = response.headers.get('content-type') ?? 'image/jpeg';
+      const ext = type.split('/')[1]?.split(';')[0] || 'jpg';
+      const path = `${businessId}/${report.employeeId}/reports/${report.id}-${i + 1}.${ext}`;
+      const { error } = await supabase.storage
+        .from('employee-documents')
+        .upload(path, await response.arrayBuffer(), { contentType: type });
+      if (error) throw error;
+      photoPaths.push(path);
+    } catch (error) {
+      warnSaveFailed('a job report photo', error as Error);
+    }
+  }
+
+  const { error } = await supabase.from('job_reports').insert({
+    id: report.id,
+    business_id: businessId,
+    employee_id: report.employeeId,
+    shift_date: report.date,
+    job_title: report.jobTitle,
+    location: report.location,
+    time_text: report.time,
+    outcome: report.outcome,
+    notes: report.notes,
+    issues: report.issues,
+    photos: photoPaths,
+    completed: report.completed,
+  });
+  if (error) throw error;
 }

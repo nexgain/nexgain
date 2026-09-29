@@ -1,9 +1,14 @@
 // What happens after someone logs in (or reopens the app while logged in):
 // load their data from the database and listen for live changes. Cleared on log out.
+import { availabilityStore } from '@/data/availability';
 import { businessStore, clearBusiness, loadMyBusiness } from '@/data/business';
+import { clockStore, loadClockSessions } from '@/data/clock-records';
 import { currentEmployeeStore } from '@/data/current-employee';
 import { employeesStore, loadOwnProfile, loadTeam } from '@/data/employees';
+import { jobReportsStore } from '@/data/job-reports';
 import { clearNotifications, loadNotifications, subscribeToNotifications } from '@/data/notifications';
+import { loadPayslips, payslipsStore } from '@/data/payroll';
+import { loadShifts, shiftsStore } from '@/data/shifts';
 import { supabase } from '@/lib/supabase';
 
 let stopListening: (() => void)[] = [];
@@ -27,6 +32,11 @@ export async function reloadSession() {
   await startSession(data.user.id);
 }
 
+/** Runs a reload, keeping what's on screen if it fails (e.g. no internet). */
+const refresh = (load: () => Promise<unknown>) => () => {
+  load().catch(() => {});
+};
+
 async function load(userId: string) {
   const { data: role } = await supabase.rpc('my_role');
   const business = await loadMyBusiness();
@@ -34,25 +44,61 @@ async function load(userId: string) {
 
   if (role === 'owner' && business?.id) {
     const businessId = business.id;
-    await loadTeam(businessId, businessName);
-    await loadNotifications(null);
+    const reloadTeam = refresh(() => loadTeam(businessId, businessStore.get()?.businessName ?? businessName));
+    await Promise.all([
+      loadTeam(businessId, businessName),
+      loadNotifications(null),
+      loadShifts().catch(() => {}),
+      loadClockSessions().catch(() => {}),
+      loadPayslips().catch(() => {}),
+    ]);
     stopListening.push(subscribeToNotifications(userId, null));
 
-    // New employees joining (or updating their details) appear straight away.
-    const team = supabase
-      .channel(`team-${businessId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'employees', filter: `business_id=eq.${businessId}` }, () => {
-        loadTeam(businessId, businessStore.get()?.businessName ?? businessName).catch(() => {});
-      })
+    // Changes made on employees' phones (joining, availability, clock in/out) appear straight away.
+    const filter = `business_id=eq.${businessId}`;
+    const live = supabase
+      .channel(`business-${businessId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'employees', filter }, reloadTeam)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clock_sessions', filter }, refresh(loadClockSessions))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shifts', filter }, refresh(loadShifts))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payslips', filter }, refresh(loadPayslips))
       .subscribe();
     stopListening.push(() => {
-      supabase.removeChannel(team);
+      supabase.removeChannel(live);
     });
   } else if (role === 'employee') {
     const me = await loadOwnProfile(userId, businessName);
     currentEmployeeStore.set(me);
-    await loadNotifications(me?.id ?? null);
-    stopListening.push(subscribeToNotifications(userId, me?.id ?? null));
+    await Promise.all([
+      loadNotifications(me?.id ?? null),
+      loadShifts().catch(() => {}),
+      loadClockSessions().catch(() => {}),
+      loadPayslips().catch(() => {}),
+    ]);
+
+    // A new roster or pay notification means there's something new to show.
+    stopListening.push(
+      subscribeToNotifications(userId, me?.id ?? null, (n) => {
+        if (n.type === 'roster_published' || n.type === 'shift_changed') refresh(loadShifts)();
+        if (n.type === 'payslip_available') refresh(loadPayslips)();
+      }),
+    );
+
+    if (me) {
+      // The owner changing their details (e.g. position or pay rate) shows straight away.
+      const live = supabase
+        .channel(`employee-${me.id}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'employees', filter: `id=eq.${me.id}` }, async () => {
+          const updated = await loadOwnProfile(userId, businessStore.get()?.businessName ?? businessName).catch(() => null);
+          if (updated) currentEmployeeStore.set(updated);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'shifts', filter: `business_id=eq.${me.businessId}` }, refresh(loadShifts))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'payslips', filter: `employee_id=eq.${me.id}` }, refresh(loadPayslips))
+        .subscribe();
+      stopListening.push(() => {
+        supabase.removeChannel(live);
+      });
+    }
   }
 }
 
@@ -65,4 +111,9 @@ export function endSession() {
   employeesStore.set([]);
   currentEmployeeStore.set(null);
   clearNotifications();
+  shiftsStore.set([]);
+  clockStore.set([]);
+  payslipsStore.set([]);
+  availabilityStore.set({});
+  jobReportsStore.set([]);
 }

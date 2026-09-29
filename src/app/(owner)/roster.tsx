@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { router } from 'expo-router';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -344,7 +345,11 @@ function EmployeeRow({
 
   return (
     <Card>
-      <View style={styles.employeeHeader}>
+      <Pressable
+        onPress={() => router.push({ pathname: '/employee/[id]', params: { id: employee.id } })}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${employeeFullName(employee)}'s profile`}
+        style={({ pressed }) => [styles.employeeHeader, pressed && styles.pressed]}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
             {employee.firstName[0]}
@@ -356,7 +361,7 @@ function EmployeeRow({
           <Text style={styles.muted}>{employee.role}</Text>
         </View>
         <Text style={styles.muted}>{Math.round(hours * 10) / 10} hrs</Text>
-      </View>
+      </Pressable>
       {single ? (
         cells
       ) : (
