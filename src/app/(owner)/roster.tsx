@@ -102,9 +102,8 @@ export default function OwnerRosterScreen() {
   const [view, setView] = useState<RosterView>('Week');
   const [anchor, setAnchor] = useState(() => startOfDay(new Date()));
 
-  // Opened from a notification ("View full job details"): show that job's day
-  // and a back arrow. Leaving the screen clears this, so the Roster tab itself
-  // never shows a back arrow.
+  // Opened from a notification ("View full job details") or a job: show that
+  // job's day. Leaving the screen clears this, so next time it opens normally.
   const navigation = useNavigation();
   const params = useLocalSearchParams<{ from?: string; date?: string }>();
   // Also opened from a job's "Open Roster" (from=job).
@@ -153,7 +152,10 @@ export default function OwnerRosterScreen() {
   return (
     <OwnerScreen>
       <PageHeader
-        onBack={fromNotification ? () => goBack(params.from === 'job' ? '/jobs' : ('/alerts' as Href)) : undefined}
+        // Opened from More (or a job / notification), so it always has a back arrow.
+        onBack={() =>
+          goBack(params.from === 'job' ? '/jobs' : params.from === 'notification' ? ('/alerts' as Href) : '/menu')
+        }
         title="Roster"
         subtitle="Plan shifts and assign your team."
         right={<Button label="Add Shift" icon={{ ios: 'plus', android: 'add', web: 'add' }} onPress={() => openNew()} />}

@@ -23,27 +23,15 @@ export default function OwnerMoreScreen() {
             onPress={() => router.navigate('/alerts' as Href)}
           />
           <ActionRow
-            icon={{ ios: 'person.2.fill', android: 'group', web: 'group' }}
-            label="Employees"
-            onPress={() => router.navigate('/employees' as Href)}
-            showDivider
-          />
-          <ActionRow
-            icon={{ ios: 'calendar', android: 'calendar_month', web: 'calendar_month' }}
-            label="Calendar"
-            onPress={() => router.navigate('/calendar')}
-            showDivider
-          />
-          <ActionRow
             icon={{ ios: 'briefcase.fill', android: 'work', web: 'work' }}
             label="Jobs"
             onPress={() => router.navigate('/jobs')}
             showDivider
           />
           <ActionRow
-            icon={{ ios: 'list.bullet.rectangle.fill', android: 'list_alt', web: 'list_alt' }}
-            label="Services"
-            onPress={() => router.navigate('/services')}
+            icon={{ ios: 'calendar.badge.clock', android: 'event_note', web: 'event_note' }}
+            label="Roster"
+            onPress={() => router.navigate('/roster')}
             showDivider
           />
           <ActionRow
@@ -53,15 +41,27 @@ export default function OwnerMoreScreen() {
             showDivider
           />
           <ActionRow
-            icon={{ ios: 'building.2.fill', android: 'store', web: 'store' }}
-            label="Business Profile"
-            onPress={() => router.navigate('/business-profile')}
+            icon={{ ios: 'person.2.fill', android: 'group', web: 'group' }}
+            label="Employees"
+            onPress={() => router.navigate('/employees' as Href)}
             showDivider
           />
           <ActionRow
             icon={{ ios: 'puzzlepiece.extension.fill', android: 'extension', web: 'extension' }}
             label="Integrations"
             onPress={() => router.navigate('/integrations')}
+            showDivider
+          />
+          <ActionRow
+            icon={{ ios: 'building.2.fill', android: 'store', web: 'store' }}
+            label="Business Profile"
+            onPress={() => router.navigate('/business-profile')}
+            showDivider
+          />
+          <ActionRow
+            icon={{ ios: 'list.bullet.rectangle.fill', android: 'list_alt', web: 'list_alt' }}
+            label="Services"
+            onPress={() => router.navigate('/services')}
             showDivider
           />
         </View>

@@ -41,9 +41,9 @@ export default function OwnerLayout() {
         }}
       />
       <Tabs.Screen
-        name="roster"
+        name="calendar"
         options={{
-          title: 'Roster',
+          title: 'Calendar',
           tabBarIcon: (props) => (
             <TabIcon
               name={{ ios: 'calendar', android: 'calendar_month', web: 'calendar_month' }}
@@ -110,7 +110,7 @@ export default function OwnerLayout() {
       <Tabs.Screen name="services" options={{ href: null, title: 'Services' }} />
       <Tabs.Screen name="business-profile" options={{ href: null, title: 'Business Profile' }} />
       <Tabs.Screen name="employee/[id]" options={{ href: null, title: 'Employee Profile' }} />
-      <Tabs.Screen name="calendar" options={{ href: null, title: 'Calendar' }} />
+      <Tabs.Screen name="roster" options={{ href: null, title: 'Roster' }} />
       <Tabs.Screen name="jobs" options={{ href: null, title: 'Jobs' }} />
       <Tabs.Screen name="job/[id]" options={{ href: null, title: 'Job Details' }} />
       <Tabs.Screen name="employees" options={{ href: null, title: 'Employees', popToTopOnBlur: true }} />

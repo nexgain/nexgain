@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { EventEditor } from '@/components/owner/event-editor';
 import { EventRow } from '@/components/owner/jobs-ui';
-import { Button, Card, goBack, Icon, OwnerScreen, PageHeader, TabRow } from '@/components/owner/ui';
+import { Button, Card, Icon, OwnerScreen, PageHeader, TabRow } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { WEEKDAY_NAMES } from '@/data/availability';
 import { useBusiness } from '@/data/business';
@@ -130,7 +130,6 @@ export default function CalendarScreen() {
   return (
     <OwnerScreen>
       <PageHeader
-        onBack={() => goBack()}
         title="Calendar"
         subtitle="Jobs, deliveries and reminders in one place."
         right={<Button label="Add Event" icon={{ ios: 'plus', android: 'add', web: 'add' }} onPress={addNew} />}
