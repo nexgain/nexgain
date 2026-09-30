@@ -36,7 +36,15 @@
       "@react-native-community/datetimepicker",
       "expo-sharing",
       "expo-sqlite",
-      "expo-mail-composer"
+      "expo-mail-composer",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos so you can add profile pictures, qualifications and receipts.",
+          "cameraPermission": "Allow $(PRODUCT_NAME) to use your camera so you can photograph receipts and documents.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

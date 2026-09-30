@@ -1,6 +1,8 @@
-// Employee qualifications. Saved in memory only (cleared when the app restarts)
-// until a database is connected and linked to the Owner dashboard.
-import { useSyncExternalStore } from 'react';
+// Employee qualifications (licences, tickets, certificates). Stored online
+// ("employee_qualifications" table) so the employee and their owner both see
+// them. Either of them can add or remove one. Files go to private storage.
+import { createStore } from '@/data/store';
+import { supabase } from '@/lib/supabase';
 
 export const QUALIFICATION_TYPES = [
   'White Card',
@@ -17,6 +19,7 @@ export const QUALIFICATION_TYPES = [
   'Other',
 ] as const;
 
+/** A file picked on the phone, before it's uploaded. */
 export type QualificationDocument = {
   uri: string;
   name: string;
@@ -27,34 +30,131 @@ export type QualificationDocument = {
 
 export type Qualification = {
   id: string;
+  employeeId: string;
   name: string;
   issueDate: Date | null;
   expiryDate: Date | null;
-  document: QualificationDocument | null;
+  document: {
+    name: string;
+    kind: 'image' | 'pdf';
+    storagePath: string;
+    /** Short-lived link for showing / opening the file. */
+    uri: string | null;
+  } | null;
 };
 
 export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 
-let qualifications: Qualification[] = [];
-const listeners = new Set<() => void>();
+type QualificationRow = {
+  id: string;
+  employee_id: string;
+  name: string;
+  issue_date: string | null;
+  expiry_date: string | null;
+  file_name: string | null;
+  storage_path: string | null;
+  mime_type: string | null;
+};
 
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+const pad = (n: number) => String(n).padStart(2, '0');
+const toDateKey = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const fromDateKey = (key: string | null) => {
+  if (!key) return null;
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d);
+};
+
+export function documentKind(name: string, mimeType: string | null): 'image' | 'pdf' {
+  return mimeType === 'application/pdf' || name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image';
 }
 
-export function addQualification(qualification: Omit<Qualification, 'id'>) {
-  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  qualifications = [{ ...qualification, id }, ...qualifications];
-  listeners.forEach((listener) => listener());
+/** Qualifications per employee id. */
+export const qualificationsStore = createStore<Record<string, Qualification[]>>({});
+
+export function useQualifications(employeeId: string | null | undefined): Qualification[] | null {
+  const all = qualificationsStore.use();
+  return employeeId ? (all[employeeId] ?? null) : null;
 }
 
-export function useQualifications() {
-  return useSyncExternalStore(
-    subscribe,
-    () => qualifications,
-    () => qualifications,
-  );
+export async function loadQualifications(employeeId: string) {
+  const { data, error } = await supabase
+    .from('employee_qualifications')
+    .select('id, employee_id, name, issue_date, expiry_date, file_name, storage_path, mime_type')
+    .eq('employee_id', employeeId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  const rows = data as QualificationRow[];
+  const paths = rows.map((r) => r.storage_path).filter((p): p is string => !!p);
+  const links: Record<string, string> = {};
+  if (paths.length > 0) {
+    const signed = await supabase.storage.from('employee-documents').createSignedUrls(paths, 60 * 60);
+    for (const d of signed.data ?? []) if (d.path && d.signedUrl) links[d.path] = d.signedUrl;
+  }
+  const list: Qualification[] = rows.map((r) => ({
+    id: r.id,
+    employeeId: r.employee_id,
+    name: r.name,
+    issueDate: fromDateKey(r.issue_date),
+    expiryDate: fromDateKey(r.expiry_date),
+    document: r.storage_path
+      ? {
+          name: r.file_name ?? 'Document',
+          kind: documentKind(r.file_name ?? '', r.mime_type),
+          storagePath: r.storage_path,
+          uri: links[r.storage_path] ?? null,
+        }
+      : null,
+  }));
+  qualificationsStore.set((all) => ({ ...all, [employeeId]: list }));
+  return list;
+}
+
+/**
+ * Saves a qualification (and uploads its file, if any) for an employee. Used by
+ * the employee, their owner, and employee sign-up. Throws if it couldn't be saved.
+ */
+export async function addQualification(
+  employee: { id: string; businessId: string },
+  qualification: { name: string; issueDate: Date | null; expiryDate: Date | null; document: Omit<QualificationDocument, 'kind'> | null },
+) {
+  let storagePath: string | null = null;
+  const doc = qualification.document;
+  if (doc) {
+    const body = await (await fetch(doc.uri)).arrayBuffer();
+    const safeName = doc.name.replace(/[^A-Za-z0-9._-]+/g, '_');
+    storagePath = `${employee.businessId}/${employee.id}/qualifications/${Date.now()}-${safeName}`;
+    const upload = await supabase.storage
+      .from('employee-documents')
+      .upload(storagePath, body, { contentType: doc.mimeType || undefined });
+    if (upload.error) throw upload.error;
+  }
+  const { error } = await supabase.from('employee_qualifications').insert({
+    employee_id: employee.id,
+    business_id: employee.businessId,
+    name: qualification.name.trim(),
+    issue_date: qualification.issueDate ? toDateKey(qualification.issueDate) : null,
+    expiry_date: qualification.expiryDate ? toDateKey(qualification.expiryDate) : null,
+    file_name: doc?.name ?? null,
+    storage_path: storagePath,
+    mime_type: doc?.mimeType || null,
+  });
+  if (error) {
+    if (storagePath) supabase.storage.from('employee-documents').remove([storagePath]).catch(() => {});
+    throw error;
+  }
+  await loadQualifications(employee.id).catch(() => {});
+}
+
+export async function deleteQualification(qualification: Qualification) {
+  const { error } = await supabase.from('employee_qualifications').delete().eq('id', qualification.id);
+  if (error) throw error;
+  if (qualification.document) {
+    supabase.storage.from('employee-documents').remove([qualification.document.storagePath]).catch(() => {});
+  }
+  qualificationsStore.set((all) => ({
+    ...all,
+    [qualification.employeeId]: (all[qualification.employeeId] ?? []).filter((q) => q.id !== qualification.id),
+  }));
 }
 
 export type QualificationStatus = {

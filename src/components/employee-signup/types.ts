@@ -17,8 +17,13 @@ export type PickedDocument = {
   size: number;
 };
 
-export const DOCUMENT_KINDS = ['White Card', "Driver's Licence", 'Other Qualifications'] as const;
-export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
+/** A licence / ticket / certificate added during sign-up; saved once the account exists. */
+export type SignupQualification = {
+  id: string;
+  name: string;
+  expiryDate: Date | null;
+  file: PickedDocument | null;
+};
 
 export const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Casual', 'Contractor'] as const;
 
@@ -34,6 +39,8 @@ export type EmployeeSignupData = {
   business: FoundBusiness | null;
   /** The code that `business` was found with. */
   businessCode: string | null;
+  /** Set when they opened their personal invite link from the owner. */
+  inviteId: string | null;
   // Step 3
   phone: string;
   dateOfBirth: Date | null;
@@ -50,7 +57,7 @@ export type EmployeeSignupData = {
   superFundOther: string;
   emergencyName: string;
   emergencyPhone: string;
-  documents: Partial<Record<DocumentKind, PickedDocument>>;
+  qualifications: SignupQualification[];
 };
 
 export const EMPTY_EMPLOYEE_SIGNUP: EmployeeSignupData = {
@@ -62,6 +69,7 @@ export const EMPTY_EMPLOYEE_SIGNUP: EmployeeSignupData = {
   link: '',
   business: null,
   businessCode: null,
+  inviteId: null,
   phone: '',
   dateOfBirth: null,
   address: '',
@@ -75,7 +83,7 @@ export const EMPTY_EMPLOYEE_SIGNUP: EmployeeSignupData = {
   superFundOther: '',
   emergencyName: '',
   emergencyPhone: '',
-  documents: {},
+  qualifications: [],
 };
 
 export type EmployeeStepProps = {

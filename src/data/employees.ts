@@ -18,6 +18,20 @@ export type BankAccount = {
   accountNumber: string;
 };
 
+export type EmployeeStatus = 'active' | 'on_leave' | 'inactive';
+export type PayType = 'hourly' | 'salary';
+
+export const EMPLOYEE_STATUS_LABEL: Record<EmployeeStatus, string> = {
+  active: 'Active',
+  on_leave: 'On Leave',
+  inactive: 'Inactive',
+};
+
+export const PAY_TYPE_LABEL: Record<PayType, string> = {
+  hourly: 'per hour',
+  salary: 'per year (salary)',
+};
+
 export type Employee = {
   id: string;
   userId: string;
@@ -38,8 +52,16 @@ export type Employee = {
   superFund: string;
   emergencyContactName: string;
   emergencyContactPhone: string;
-  /** Hourly rate in dollars, set by the owner. null until set. */
+  /** Hourly rate, or yearly salary when payType is 'salary'. Set by the owner; null until set. */
   payRate: number | null;
+  payType: PayType;
+  status: EmployeeStatus;
+  /** "YYYY-MM-DD" */
+  startDate: string | null;
+  /** Private storage path of their profile photo. */
+  photoPath: string | null;
+  /** Short-lived link for showing the photo. */
+  photoUrl: string | null;
   bankAccount: BankAccount | null;
   hasTfn: boolean;
 };
@@ -60,12 +82,16 @@ type EmployeeRow = {
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   availability: WeeklyAvailability | null;
+  status: EmployeeStatus | null;
+  pay_type: PayType | null;
+  start_date: string | null;
+  photo_path: string | null;
   employee_private?: { account_last4: string | null; has_tfn: boolean } | null;
 };
 
 const SELECT = '*, employee_private(account_last4, has_tfn)';
 
-export function fromRow(row: EmployeeRow, businessName = ''): Employee {
+export function fromRow(row: EmployeeRow, businessName = '', photoUrl: string | null = null): Employee {
   const parts = row.full_name.trim().split(/\s+/);
   const last4 = row.employee_private?.account_last4 ?? null;
   return {
@@ -86,6 +112,11 @@ export function fromRow(row: EmployeeRow, businessName = ''): Employee {
     emergencyContactName: row.emergency_contact_name ?? '',
     emergencyContactPhone: row.emergency_contact_phone ?? '',
     payRate: row.pay_rate === null ? null : Number(row.pay_rate),
+    payType: row.pay_type ?? 'hourly',
+    status: row.status ?? 'active',
+    startDate: row.start_date ?? null,
+    photoPath: row.photo_path ?? null,
+    photoUrl,
     bankAccount: last4 ? { accountName: 'On file', bsb: '', accountNumber: last4 } : null,
     hasTfn: row.employee_private?.has_tfn ?? false,
   };
@@ -107,7 +138,8 @@ export async function loadTeam(businessId: string, businessName: string) {
     .order('created_at');
   if (error) throw error;
   const rows = data as EmployeeRow[];
-  employeesStore.set(rows.map((row) => fromRow(row, businessName)));
+  const photos = await photoLinks(rows.map((row) => row.photo_path));
+  employeesStore.set(rows.map((row) => fromRow(row, businessName, row.photo_path ? (photos[row.photo_path] ?? null) : null)));
   setLoadedAvailability(Object.fromEntries(rows.map((row) => [row.id, row.availability])));
 }
 
@@ -115,12 +147,27 @@ export async function loadTeam(businessId: string, businessName: string) {
 export async function loadOwnProfile(userId: string, businessName: string) {
   const { data, error } = await supabase.from('employees').select(SELECT).eq('user_id', userId).maybeSingle<EmployeeRow>();
   if (error) throw error;
-  if (data) setLoadedAvailability({ [data.id]: data.availability });
-  return data ? fromRow(data, businessName) : null;
+  if (!data) return null;
+  setLoadedAvailability({ [data.id]: data.availability });
+  const photos = await photoLinks([data.photo_path]);
+  return fromRow(data, businessName, data.photo_path ? (photos[data.photo_path] ?? null) : null);
 }
 
+/** Private links (valid for a day) for showing profile photos. Missing ones are left out. */
+async function photoLinks(paths: (string | null)[]): Promise<Record<string, string>> {
+  const wanted = paths.filter((p): p is string => !!p);
+  if (wanted.length === 0) return {};
+  const { data, error } = await supabase.storage.from('employee-documents').createSignedUrls(wanted, 60 * 60 * 24);
+  if (error || !data) return {};
+  const links: Record<string, string> = {};
+  for (const d of data) if (d.path && d.signedUrl) links[d.path] = d.signedUrl;
+  return links;
+}
+
+type EditableFields = 'payRate' | 'payType' | 'role' | 'phone' | 'employmentType' | 'status' | 'startDate';
+
 /** Owner or employee edits: shows straight away, then saves to the database. */
-export async function updateEmployee(id: string, changes: Partial<Pick<Employee, 'payRate' | 'role' | 'phone' | 'employmentType'>>) {
+export async function updateEmployee(id: string, changes: Partial<Pick<Employee, EditableFields>>) {
   employeesStore.set((list) => list.map((e) => (e.id === id ? { ...e, ...changes } : e)));
   currentEmployeeStore.set((me) => (me?.id === id ? { ...me, ...changes } : me));
   const cols: Record<string, unknown> = {};
@@ -128,9 +175,80 @@ export async function updateEmployee(id: string, changes: Partial<Pick<Employee,
   if (changes.role !== undefined) cols.position = changes.role;
   if (changes.phone !== undefined) cols.phone = changes.phone;
   if (changes.employmentType !== undefined) cols.employment_type = changes.employmentType;
+  if (changes.payType !== undefined) cols.pay_type = changes.payType;
+  if (changes.status !== undefined) cols.status = changes.status;
+  if (changes.startDate !== undefined) cols.start_date = changes.startDate;
   const { error } = await supabase.from('employees').update(cols).eq('id', id);
   if (error) console.warn('Could not save employee changes:', error.message);
   return !error;
+}
+
+/**
+ * Uploads a new profile photo (owner, or the employee themselves) and shows it
+ * straight away. Returns false if it couldn't be saved.
+ */
+export async function setEmployeePhoto(employee: Employee, photo: { uri: string; mimeType?: string | null }) {
+  try {
+    const body = await (await fetch(photo.uri)).arrayBuffer();
+    const type = photo.mimeType || 'image/jpeg';
+    const ext = type.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
+    const path = `${employee.businessId}/${employee.id}/photo-${Date.now()}.${ext}`;
+    const upload = await supabase.storage.from('employee-documents').upload(path, body, { contentType: type });
+    if (upload.error) throw upload.error;
+    const { error } = await supabase.from('employees').update({ photo_path: path }).eq('id', employee.id);
+    if (error) throw error;
+    if (employee.photoPath) supabase.storage.from('employee-documents').remove([employee.photoPath]).catch(() => {});
+    const photoUrl = (await photoLinks([path]))[path] ?? photo.uri;
+    const changes = { photoPath: path, photoUrl };
+    employeesStore.set((list) => list.map((e) => (e.id === employee.id ? { ...e, ...changes } : e)));
+    currentEmployeeStore.set((me) => (me?.id === employee.id ? { ...me, ...changes } : me));
+    return true;
+  } catch (error) {
+    console.warn('Could not save profile photo:', (error as Error).message);
+    return false;
+  }
+}
+
+export type PayRateChange = {
+  id: string;
+  oldRate: number | null;
+  newRate: number | null;
+  oldPayType: PayType | null;
+  newPayType: PayType | null;
+  changedAt: string;
+};
+
+/** Every pay rate change for an employee, newest first (recorded by the database). */
+export async function loadPayRateHistory(employeeId: string): Promise<PayRateChange[]> {
+  const { data, error } = await supabase
+    .from('pay_rate_history')
+    .select('id, old_rate, new_rate, old_pay_type, new_pay_type, changed_at')
+    .eq('employee_id', employeeId)
+    .order('changed_at', { ascending: false });
+  if (error) throw error;
+  const num = (v: number | string | null) => (v === null ? null : Number(v));
+  return data.map((r) => ({
+    id: r.id,
+    oldRate: num(r.old_rate),
+    newRate: num(r.new_rate),
+    oldPayType: r.old_pay_type,
+    newPayType: r.new_pay_type,
+    changedAt: r.changed_at,
+  }));
+}
+
+/** e.g. "$28.00/hr" or "$75,000/yr". */
+export function formatPayRate(rate: number | null, payType: PayType | null) {
+  if (rate === null) return 'Not set';
+  if (payType === 'salary') {
+    return `$${Math.round(rate).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}/yr`;
+  }
+  return `$${rate.toFixed(2)}/hr`;
+}
+
+export function employeeInitialsOf(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase() || '?';
 }
 
 export type EmployeeDocument = { id: string; kind: string; fileName: string; storagePath: string; createdAt: string };

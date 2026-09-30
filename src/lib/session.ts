@@ -4,10 +4,14 @@ import { availabilityStore } from '@/data/availability';
 import { businessStore, clearBusiness, loadMyBusiness } from '@/data/business';
 import { clockStore, loadClockSessions } from '@/data/clock-records';
 import { currentEmployeeStore } from '@/data/current-employee';
+import { invitesStore, loadInvites } from '@/data/employee-invites';
+import { expensesStore, loadExpenses } from '@/data/finance';
+import { clearDocs, loadDocs } from '@/data/invoices';
 import { employeesStore, loadOwnProfile, loadTeam } from '@/data/employees';
 import { jobReportsStore } from '@/data/job-reports';
 import { clearNotifications, loadNotifications, subscribeToNotifications } from '@/data/notifications';
 import { loadPayslips, payslipsStore } from '@/data/payroll';
+import { qualificationsStore } from '@/data/qualifications';
 import { loadShifts, shiftsStore } from '@/data/shifts';
 import { supabase } from '@/lib/supabase';
 
@@ -44,9 +48,14 @@ async function load(userId: string) {
 
   if (role === 'owner' && business?.id) {
     const businessId = business.id;
-    const reloadTeam = refresh(() => loadTeam(businessId, businessStore.get()?.businessName ?? businessName));
+    const reloadTeam = refresh(() =>
+      Promise.all([loadTeam(businessId, businessStore.get()?.businessName ?? businessName), loadInvites()]),
+    );
     await Promise.all([
       loadTeam(businessId, businessName),
+      loadInvites().catch(() => {}),
+      loadDocs().catch(() => {}),
+      loadExpenses().catch(() => {}),
       loadNotifications(null),
       loadShifts().catch(() => {}),
       loadClockSessions().catch(() => {}),
@@ -59,6 +68,7 @@ async function load(userId: string) {
     const live = supabase
       .channel(`business-${businessId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'employees', filter }, reloadTeam)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'employee_invites', filter }, refresh(loadInvites))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clock_sessions', filter }, refresh(loadClockSessions))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'shifts', filter }, refresh(loadShifts))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payslips', filter }, refresh(loadPayslips))
@@ -109,6 +119,10 @@ export function endSession() {
   loading = null;
   clearBusiness();
   employeesStore.set([]);
+  invitesStore.set([]);
+  clearDocs();
+  expensesStore.set([]);
+  qualificationsStore.set({});
   currentEmployeeStore.set(null);
   clearNotifications();
   shiftsStore.set([]);
