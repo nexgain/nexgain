@@ -1,24 +1,49 @@
-// Upcoming deliveries, orders and important dates for the owner. These will be
-// found by AI scanning the owner's connected email and integrations; nothing is
-// connected yet, so the list is empty.
+// Upcoming jobs, deliveries and reminders for the owner's Dashboard, taken from
+// the Calendar (one source of truth: change it there and it changes here).
+import { useCalendarEvents, type CalendarEvent } from '@/data/calendar';
+import { useClients } from '@/data/clients';
 import { format12h } from '@/data/employee-roster';
+import { fromDateKey } from '@/data/shifts';
 
-export type UpcomingItemType = 'delivery' | 'materials' | 'job' | 'inspection';
+export type UpcomingItemType = 'delivery' | 'materials' | 'job' | 'inspection' | 'other';
 
 export type UpcomingItem = {
   id: string;
   type: UpcomingItemType;
   title: string;
-  /** Who it's from, e.g. a supplier name. */
+  /** Who it's for or from, e.g. the client or supplier. */
   source: string;
   location: string;
   date: Date;
   /** 24h "HH:MM". */
   time: string;
+  /** The calendar event it came from. */
+  event: CalendarEvent;
 };
 
-export function getUpcomingItems(): UpcomingItem[] {
-  return [];
+/** The next few calendar items that haven't finished, soonest first. */
+export function useUpcomingItems(limit = 5): UpcomingItem[] {
+  const events = useCalendarEvents();
+  const clients = useClients();
+  const now = new Date().toISOString();
+  return events
+    .filter((e) => e.endsAt >= now && e.status !== 'completed' && e.status !== 'cancelled')
+    .slice(0, limit)
+    .map((e) => ({
+      id: e.id,
+      type: e.type,
+      title: e.title,
+      source:
+        e.type === 'job'
+          ? (clients.find((c) => c.id === e.clientId)?.name ?? '')
+          : e.type === 'delivery'
+            ? e.supplier
+            : 'Reminder',
+      location: e.address,
+      date: fromDateKey(e.date),
+      time: e.start,
+      event: e,
+    }));
 }
 
 export type UpcomingTone = 'today' | 'tomorrow' | 'soon' | 'later';
