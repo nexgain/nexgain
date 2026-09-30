@@ -1,9 +1,11 @@
 // The owner's business profile, created during owner sign-up and read by the
 // Dashboard, Quotes & Invoices, Business Profile and employee sign-up.
 // Stored online (Supabase "businesses" table) and loaded after logging in.
-import { GST_RATE } from '@/data/invoices';
 import { createStore } from '@/data/store';
 import { supabase } from '@/lib/supabase';
+
+/** Australian GST rate, charged on quotes and invoices when GST registered. */
+export const GST_RATE = 0.1;
 
 export type BusinessProfile = {
   /** Database id; null only while sign-up is still in progress. */
@@ -164,6 +166,15 @@ export function updateBusiness(changes: Partial<BusinessProfile>) {
     const { error } = await supabase.from('businesses').update(cols).eq('id', id);
     if (error) console.warn('Could not save business changes:', error.message);
   }, 700);
+}
+
+/** Owner only: makes a new invite code. The old code stops working straight away. */
+export async function regenerateInviteCode() {
+  const { data, error } = await supabase.rpc('regenerate_invite_code');
+  if (error) throw error;
+  const code = data as string;
+  businessStore.set((b) => (b ? { ...b, inviteCode: code } : b));
+  return code;
 }
 
 export function ownerFirstName(profile: BusinessProfile | null) {

@@ -3,7 +3,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DateField } from '@/components/employee/date-field';
@@ -11,6 +11,7 @@ import { FormField, SelectField } from '@/components/employee/form-fields';
 import { Card, Icon } from '@/components/employee/ui';
 import { EmployeeColors as C } from '@/constants/employee-theme';
 import { Radius, Spacing } from '@/constants/theme';
+import { useCurrentEmployee } from '@/data/current-employee';
 import {
   addQualification,
   formatFileSize,
@@ -41,6 +42,9 @@ export default function AddQualificationScreen() {
   const [document, setDocument] = useState<QualificationDocument | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const me = useCurrentEmployee();
 
   const typeError = !type ? 'Choose a qualification type.' : undefined;
   const otherError =
@@ -100,16 +104,24 @@ export default function AddQualificationScreen() {
     ]);
   }
 
-  function save() {
+  async function save() {
     setSubmitted(true);
-    if (typeError || otherError || dateError || !type) return;
-    addQualification({
-      name: type === 'Other' ? otherName.trim() : type,
-      issueDate,
-      expiryDate,
-      document,
-    });
-    router.back();
+    if (typeError || otherError || dateError || !type || !me || saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await addQualification(me, {
+        name: type === 'Other' ? otherName.trim() : type,
+        issueDate,
+        expiryDate,
+        document,
+      });
+      router.back();
+    } catch {
+      setSaveError('Couldn’t save your qualification. Check your internet connection and try again.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -214,11 +226,14 @@ export default function AddQualificationScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.three }]}>
+        {saveError ? <Text style={styles.saveError}>{saveError}</Text> : null}
         <Pressable
           onPress={save}
+          disabled={saving}
           accessibilityRole="button"
-          style={({ pressed }) => [styles.saveButton, pressed && styles.pressed]}>
-          <Text style={styles.saveButtonText}>Save Qualification</Text>
+          accessibilityState={{ disabled: saving }}
+          style={({ pressed }) => [styles.saveButton, (pressed || saving) && styles.pressed]}>
+          {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.saveButtonText}>Save Qualification</Text>}
         </Pressable>
       </View>
     </View>
@@ -325,6 +340,11 @@ const styles = StyleSheet.create({
     backgroundColor: C.card,
     borderTopWidth: 1,
     borderTopColor: C.border,
+  },
+  saveError: {
+    color: C.danger,
+    fontSize: 14,
+    marginBottom: Spacing.two,
   },
   saveButton: {
     paddingVertical: Spacing.three,

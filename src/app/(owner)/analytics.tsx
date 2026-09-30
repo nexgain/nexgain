@@ -16,7 +16,9 @@ import {
 import { useClockSessions } from '@/data/clock-records';
 import { formatShortDate } from '@/data/employee-roster';
 import { useEmployees } from '@/data/employees';
-import { formatMoney, getPayPeriods, labourCost } from '@/data/payroll';
+import { byCategory, expenseEntries, inRange, revenueEntries, sumEntries, useExpenses } from '@/data/finance';
+import { useDocs } from '@/data/invoices';
+import { formatMoney, getPayPeriods, labourCost, usePayslipRecords } from '@/data/payroll';
 
 const TABS = ['Overview', 'Labour Costs', 'Finance', 'Productivity', 'Suppliers', 'Custom'] as const;
 type Tab = (typeof TABS)[number];
@@ -59,12 +61,17 @@ export default function AnalyticsScreen() {
   const labourByBucket = buckets.map((b) => labourCost(employees, sessions, b, now));
   const totalLabour = labourByBucket.reduce((sum, v) => sum + v, 0);
 
-  // Revenue and expenses need a sales / accounting source (e.g. Xero, Stripe or
-  // Shopify via Integrations). None is connected yet, so they stay at zero.
-  const revenueByBucket = buckets.map(() => 0);
-  const expensesByBucket = buckets.map(() => 0);
-  const totalRevenue = 0;
-  const totalExpenses = 0;
+  // Revenue = paid invoices; expenses = approved payroll + entered expenses.
+  const revenue = revenueEntries(useDocs());
+  const expenses = expenseEntries(useExpenses(), usePayslipRecords(), employees);
+  const revenueByBucket = buckets.map((b) => sumEntries(inRange(revenue, b)));
+  const expensesByBucket = buckets.map((b) => sumEntries(inRange(expenses, b)));
+  const totalRevenue = revenueByBucket.reduce((sum, v) => sum + v, 0);
+  const totalExpenses = expensesByBucket.reduce((sum, v) => sum + v, 0);
+  const periodExpenses = inRange(expenses, { start: buckets[0].start, end: buckets[buckets.length - 1].end });
+  const topCategories = byCategory(periodExpenses)
+    .slice(0, SeriesColors.length)
+    .map((c, i) => ({ name: c.category, value: c.amount, color: SeriesColors[i] }));
   const labourPercent = totalRevenue > 0 ? Math.round((totalLabour / totalRevenue) * 100) : 0;
 
   return (
@@ -128,7 +135,7 @@ export default function AnalyticsScreen() {
 
           <ResponsiveRow>
             <Card title="Top Expense Categories" icon={OwnerIcons.card}>
-              <DonutChart segments={[]} formatValue={money} />
+              <DonutChart segments={topCategories} formatValue={money} />
             </Card>
             <Card title="AI Insights" icon={OwnerIcons.sparkles}>
               <EmptyState icon={OwnerIcons.sparkles} message="No data yet" />

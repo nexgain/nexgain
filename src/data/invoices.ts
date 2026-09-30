@@ -1,6 +1,10 @@
-// Invoices and quotes created in the Owner section. In memory only until a
-// database is connected.
+// Invoices and quotes created in the Owner section. Shown straight away, then
+// saved online in the background ("sales_docs" table, business owner only).
+// Paid invoices are the business's Revenue.
+import { businessStore, GST_RATE } from '@/data/business';
 import { createStore } from '@/data/store';
+import { newId, warnSaveFailed } from '@/lib/ids';
+import { supabase } from '@/lib/supabase';
 
 export type DocKind = 'invoice' | 'quote';
 
@@ -49,7 +53,7 @@ export type SalesDoc = {
 
 export type ReceiptStatus = 'not_sent' | 'sent';
 
-export const GST_RATE = 0.1;
+export { GST_RATE };
 
 export const docsStore = createStore<SalesDoc[]>([]);
 
@@ -74,7 +78,7 @@ export function saveDoc(doc: Omit<SalesDoc, 'id' | 'number' | 'createdAt'> & { i
     if (id && all.some((d) => d.id === id)) {
       return all.map((d) => (d.id === id ? { ...d, ...doc, id: d.id } : d));
     }
-    id = newItemId();
+    id = newId();
     const number = nextNumber(doc.kind, all);
     return [
       {
@@ -87,11 +91,13 @@ export function saveDoc(doc: Omit<SalesDoc, 'id' | 'number' | 'createdAt'> & { i
       ...all,
     ];
   });
+  scheduleSave(id!);
   return id!;
 }
 
 export function updateDoc(id: string, changes: Partial<Omit<SalesDoc, 'id' | 'kind' | 'number'>>) {
   docsStore.set((all) => all.map((d) => (d.id === id ? { ...d, ...changes } : d)));
+  scheduleSave(id);
 }
 
 /**
@@ -115,6 +121,116 @@ export function setDocStatus(id: string, status: DocStatus) {
 
 export function deleteDoc(id: string) {
   docsStore.set((all) => all.filter((d) => d.id !== id));
+  pendingSaves.delete(id);
+  supabase
+    .from('sales_docs')
+    .delete()
+    .eq('id', id)
+    .then(({ error }) => warnSaveFailed('invoice deletion', error));
+}
+
+// ---------------------------------------------------------------------------
+// Saving online
+// ---------------------------------------------------------------------------
+
+type SalesDocRow = {
+  id: string;
+  business_id: string;
+  kind: DocKind;
+  number: string;
+  status: DocStatus;
+  client: Client;
+  job_type: string | null;
+  job_date: string | null;
+  description: string;
+  items: LineItem[];
+  due_date: string | null;
+  payment_reference: string;
+  gst_rate: number | string;
+  paid_at: string | null;
+  receipt_status: ReceiptStatus | null;
+  created_at: string;
+};
+
+const NO_CLIENT: Client = { name: '', phone: '', email: '', address: '' };
+
+function fromRow(row: SalesDocRow): SalesDoc {
+  return {
+    id: row.id,
+    kind: row.kind,
+    number: row.number,
+    status: row.status,
+    client: { ...NO_CLIENT, ...row.client },
+    jobType: row.job_type,
+    jobDate: row.job_date,
+    description: row.description,
+    items: row.items ?? [],
+    dueDate: row.due_date,
+    paymentReference: row.payment_reference,
+    gstRate: Number(row.gst_rate),
+    createdAt: row.created_at,
+    paidAt: row.paid_at,
+    receiptStatus: row.receipt_status,
+  };
+}
+
+function toRow(doc: SalesDoc, businessId: string): SalesDocRow {
+  return {
+    id: doc.id,
+    business_id: businessId,
+    kind: doc.kind,
+    number: doc.number,
+    status: doc.status,
+    client: doc.client,
+    job_type: doc.jobType,
+    job_date: doc.jobDate,
+    description: doc.description,
+    items: doc.items,
+    due_date: doc.dueDate,
+    payment_reference: doc.paymentReference,
+    gst_rate: doc.gstRate,
+    paid_at: doc.paidAt ?? null,
+    receipt_status: doc.receiptStatus ?? null,
+    created_at: doc.createdAt,
+  };
+}
+
+/** Loads the business's invoices and quotes (owner only). */
+export async function loadDocs() {
+  const { data, error } = await supabase.from('sales_docs').select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  docsStore.set((data as SalesDocRow[]).map(fromRow));
+}
+
+// Changes are saved shortly after they stop, so a field edited letter by letter
+// (e.g. the payment reference) doesn't send a request per keystroke.
+const pendingSaves = new Set<string>();
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleSave(id: string) {
+  pendingSaves.add(id);
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushSaves, 600);
+}
+
+async function flushSaves() {
+  const businessId = businessStore.get()?.id;
+  const ids = [...pendingSaves];
+  pendingSaves.clear();
+  if (!businessId) return;
+  const rows = docsStore
+    .get()
+    .filter((d) => ids.includes(d.id))
+    .map((d) => toRow(d, businessId));
+  if (rows.length === 0) return;
+  const { error } = await supabase.from('sales_docs').upsert(rows);
+  warnSaveFailed('invoices', error);
+}
+
+export function clearDocs() {
+  pendingSaves.clear();
+  if (saveTimer) clearTimeout(saveTimer);
+  docsStore.set([]);
 }
 
 function roundCents(amount: number) {

@@ -1,13 +1,17 @@
+import { useEffect, useState } from 'react';
 import { Image } from 'expo-image';
 import { router, Stack } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Card, Icon, IconBadge, type IconName } from '@/components/employee/ui';
 import { EmployeeColors as C } from '@/constants/employee-theme';
 import { Radius, Spacing } from '@/constants/theme';
+import { useCurrentEmployee } from '@/data/current-employee';
 import { formatShortDate } from '@/data/employee-roster';
 import {
+  deleteQualification,
   getQualificationStatus,
+  loadQualifications,
   useQualifications,
   type Qualification,
   type QualificationStatus,
@@ -20,7 +24,16 @@ const CERTIFICATE_ICON: IconName = {
 };
 
 export default function QualificationsScreen() {
-  const qualifications = useQualifications();
+  const me = useCurrentEmployee();
+  const qualifications = useQualifications(me?.id);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    if (!me?.id) return;
+    loadQualifications(me.id)
+      .then(() => setLoadError(false))
+      .catch(() => setLoadError(true));
+  }, [me?.id]);
 
   return (
     <>
@@ -45,7 +58,12 @@ export default function QualificationsScreen() {
           they&apos;re expiring.
         </Text>
 
-        {qualifications.length === 0 ? (
+        {loadError && (
+          <Text style={styles.error}>Couldn&apos;t load your qualifications. Check your internet connection.</Text>
+        )}
+        {qualifications === null ? (
+          loadError ? null : <ActivityIndicator color={C.primary} />
+        ) : qualifications.length === 0 ? (
           <Card style={styles.emptyCard}>
             <IconBadge name={CERTIFICATE_ICON} />
             <Text style={styles.emptyTitle}>No qualifications added yet</Text>
@@ -72,10 +90,31 @@ function QualificationCard({ qualification }: { qualification: Qualification }) 
   const colors = STATUS_COLORS[status.tone];
   const doc = qualification.document;
 
+  async function remove() {
+    try {
+      await deleteQualification(qualification);
+    } catch {
+      Alert.alert('Couldn’t remove it', 'Check your internet connection and try again.');
+    }
+  }
+
+  function showOptions() {
+    if (Platform.OS === 'web') {
+      if (doc?.uri) Linking.openURL(doc.uri);
+      return;
+    }
+    Alert.alert(qualification.name, undefined, [
+      ...(doc?.uri ? [{ text: 'Open File', onPress: () => Linking.openURL(doc.uri!) }] : []),
+      { text: 'Remove', style: 'destructive' as const, onPress: remove },
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }
+
   return (
+    <Pressable onPress={showOptions} accessibilityRole="button" accessibilityLabel={`${qualification.name} options`}>
     <Card style={styles.card}>
       <View style={styles.thumbnail}>
-        {doc?.kind === 'image' ? (
+        {doc?.kind === 'image' && doc.uri ? (
           <Image source={{ uri: doc.uri }} style={styles.thumbnailImage} contentFit="cover" />
         ) : (
           <Icon
@@ -104,6 +143,7 @@ function QualificationCard({ qualification }: { qualification: Qualification }) 
         </View>
       </View>
     </Card>
+    </Pressable>
   );
 }
 
@@ -135,6 +175,10 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.6,
+  },
+  error: {
+    color: C.danger,
+    fontSize: 14,
   },
   emptyCard: {
     alignItems: 'center',

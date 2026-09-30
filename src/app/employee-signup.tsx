@@ -13,7 +13,7 @@ import { EMPLOYEE_STEP_NAMES, EMPTY_EMPLOYEE_SIGNUP, type EmployeeSignupData } f
 import { SignupColors as C } from '@/components/signup/fields';
 import { SignupShell } from '@/components/signup/signup-shell';
 import { signUp } from '@/lib/auth';
-import { completeEmployeeSignup, uploadDocuments } from '@/lib/employee-signup';
+import { completeEmployeeSignup, findInvite, saveQualifications } from '@/lib/employee-signup';
 import { reloadSession } from '@/lib/session';
 import { supabase } from '@/lib/supabase';
 
@@ -22,17 +22,22 @@ const STEPS = [
   { title: 'Join your employer', subtitle: 'Enter the business code or invite link your employer gave you.' },
   { title: 'Personal details', subtitle: 'Tell your employer a little about you.' },
   { title: 'Bank details', subtitle: 'Where your pay will be sent.' },
-  { title: 'Additional information', subtitle: 'Tax, super, an emergency contact and any documents.' },
+  { title: 'Additional information', subtitle: 'Tax, super, an emergency contact and your qualifications.' },
   { title: 'Review & complete', subtitle: 'Check your details before creating your account.' },
 ];
 const REVIEW = 5;
 const SUCCESS = 6;
 
-/** Employee sign-up: 6 steps plus a success screen. Opens with ?code=... from an invite link. */
+/**
+ * Employee sign-up: 6 steps plus a success screen. Opens with ?code=... from an
+ * invite link, plus &invite=... from the owner's personal invite (pre-fills their details).
+ */
 export default function EmployeeSignupScreen() {
-  const params = useLocalSearchParams<{ code?: string }>();
+  const params = useLocalSearchParams<{ code?: string; invite?: string }>();
   const [data, setData] = useState<EmployeeSignupData>(() =>
-    params.code ? { ...EMPTY_EMPLOYEE_SIGNUP, code: params.code.toUpperCase() } : EMPTY_EMPLOYEE_SIGNUP,
+    params.code
+      ? { ...EMPTY_EMPLOYEE_SIGNUP, code: params.code.toUpperCase(), inviteId: params.invite ?? null }
+      : EMPTY_EMPLOYEE_SIGNUP,
   );
   const [step, setStep] = useState(0);
   const [returnToReview, setReturnToReview] = useState(false);
@@ -42,6 +47,24 @@ export default function EmployeeSignupScreen() {
   const [joinedBusiness, setJoinedBusiness] = useState('');
 
   const update = (changes: Partial<EmployeeSignupData>) => setData((d) => ({ ...d, ...changes }));
+
+  // Personal invite: fill in what the owner already entered (only empty fields).
+  useEffect(() => {
+    if (!params.code || !params.invite) return;
+    let cancelled = false;
+    findInvite(params.code, params.invite).then((invite) => {
+      if (!invite || cancelled) return;
+      setData((d) => ({
+        ...d,
+        fullName: d.fullName || invite.fullName,
+        email: d.email || invite.email,
+        phone: d.phone || invite.phone,
+      }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [params.code, params.invite]);
 
   function goBack() {
     setError(null);
@@ -88,7 +111,7 @@ export default function EmployeeSignupScreen() {
         }
       }
       const employee = await completeEmployeeSignup(data);
-      const failed = await uploadDocuments(employee.business_id, employee.id, data.documents);
+      const failed = await saveQualifications({ id: employee.id, businessId: employee.business_id }, data.qualifications);
       await reloadSession();
       setFailedUploads(failed);
       setJoinedBusiness(data.business?.name ?? 'your employer');

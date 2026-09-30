@@ -1,7 +1,8 @@
 // Employee sign-up: find the business by invite code, then create the employee
 // profile in that business. Bank details and TFN are sent once, over HTTPS, and
 // stored encrypted by the database; they're never logged or kept in the app.
-import type { EmployeeSignupData, FoundBusiness, PickedDocument } from '@/components/employee-signup/types';
+import type { EmployeeSignupData, FoundBusiness, SignupQualification } from '@/components/employee-signup/types';
+import { addQualification } from '@/data/qualifications';
 import { supabase } from '@/lib/supabase';
 
 export async function findBusinessByCode(code: string): Promise<FoundBusiness | null> {
@@ -9,6 +10,14 @@ export async function findBusinessByCode(code: string): Promise<FoundBusiness | 
   if (error) throw error;
   const row = (data as { id: string; name: string; logo: string | null; industry: string | null; industry_category: string | null }[])[0];
   return row ? { id: row.id, name: row.name, logo: row.logo, industry: row.industry, industryCategory: row.industry_category } : null;
+}
+
+/** Name / email / phone the owner entered, for a personal invite link. null if it's not valid. */
+export async function findInvite(code: string, inviteId: string) {
+  const { data, error } = await supabase.rpc('get_invite', { p_code: code.trim().toUpperCase(), p_invite: inviteId });
+  if (error) return null;
+  const row = (data as { full_name: string; email: string | null; phone: string | null }[])[0];
+  return row ? { fullName: row.full_name, email: row.email ?? '', phone: row.phone ?? '' } : null;
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -34,6 +43,7 @@ export async function completeEmployeeSignup(data: EmployeeSignupData) {
       bsb: data.bsb,
       account_number: data.accountNumber,
       tfn: data.tfn,
+      invite_id: data.inviteId ?? '',
     },
   });
   if (error) throw error;
@@ -41,29 +51,16 @@ export async function completeEmployeeSignup(data: EmployeeSignupData) {
 }
 
 /**
- * Uploads the employee's documents to private storage (only they and their owner
- * can open them). Returns the names of any that failed.
+ * Saves the qualifications added during sign-up (files go to private storage
+ * that only the employee and their owner can open). Returns the names of any that failed.
  */
-export async function uploadDocuments(businessId: string, employeeId: string, documents: Partial<Record<string, PickedDocument>>) {
+export async function saveQualifications(employee: { id: string; businessId: string }, qualifications: SignupQualification[]) {
   const failed: string[] = [];
-  for (const [kind, doc] of Object.entries(documents)) {
-    if (!doc) continue;
+  for (const q of qualifications) {
     try {
-      const body = await (await fetch(doc.uri)).arrayBuffer();
-      const safeName = doc.name.replace(/[^A-Za-z0-9._-]+/g, '_');
-      const path = `${businessId}/${employeeId}/${Date.now()}-${safeName}`;
-      const upload = await supabase.storage.from('employee-documents').upload(path, body, { contentType: doc.mimeType || undefined });
-      if (upload.error) throw upload.error;
-      const record = await supabase.from('employee_documents').insert({
-        employee_id: employeeId,
-        business_id: businessId,
-        kind,
-        file_name: doc.name,
-        storage_path: path,
-      });
-      if (record.error) throw record.error;
+      await addQualification(employee, { name: q.name, issueDate: null, expiryDate: q.expiryDate, document: q.file });
     } catch {
-      failed.push(kind);
+      failed.push(q.name);
     }
   }
   return failed;

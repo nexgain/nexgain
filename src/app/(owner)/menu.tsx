@@ -1,6 +1,7 @@
 import { router, type Href } from 'expo-router';
 import { View } from 'react-native';
 
+import { InviteCodeCard } from '@/components/owner/employee-ui';
 import { ActionRow, Card, OwnerScreen, PageHeader } from '@/components/owner/ui';
 import { ownerNotifications, useNotifications } from '@/data/notifications';
 import { logOut } from '@/lib/auth';
@@ -12,6 +13,7 @@ export default function OwnerMoreScreen() {
   return (
     <OwnerScreen>
       <PageHeader title="More" />
+      <InviteCodeCard />
       <Card>
         <View>
           <ActionRow
@@ -19,6 +21,12 @@ export default function OwnerMoreScreen() {
             label={unread > 0 ? `Notifications (${unread} new)` : 'Notifications'}
             // Typed routes only list '/alerts/index' for a folder index screen.
             onPress={() => router.navigate('/alerts' as Href)}
+          />
+          <ActionRow
+            icon={{ ios: 'person.2.fill', android: 'group', web: 'group' }}
+            label="Employees"
+            onPress={() => router.navigate('/employees' as Href)}
+            showDivider
           />
           <ActionRow
             icon={{ ios: 'list.bullet.rectangle.fill', android: 'list_alt', web: 'list_alt' }}
