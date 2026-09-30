@@ -30,7 +30,7 @@ export default function OwnerNotificationsScreen() {
 
   return (
     <OwnerScreen>
-      <ScreenHeader title="Notifications" onBack={() => router.navigate('/menu')} />
+      <ScreenHeader title="Notifications" />
       <SearchBar value={query} onChange={setQuery} palette={OWNER_PALETTE} placeholder="Search notifications..." />
       <FilterPills filters={OWNER_FILTERS} counts={counts} active={filter} onChange={setFilter} palette={OWNER_PALETTE} />
 

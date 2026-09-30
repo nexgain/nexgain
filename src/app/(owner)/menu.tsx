@@ -21,6 +21,18 @@ export default function OwnerMoreScreen() {
             onPress={() => router.navigate('/alerts' as Href)}
           />
           <ActionRow
+            icon={{ ios: 'calendar', android: 'calendar_month', web: 'calendar_month' }}
+            label="Calendar"
+            onPress={() => router.navigate('/calendar')}
+            showDivider
+          />
+          <ActionRow
+            icon={{ ios: 'briefcase.fill', android: 'work', web: 'work' }}
+            label="Jobs"
+            onPress={() => router.navigate('/jobs')}
+            showDivider
+          />
+          <ActionRow
             icon={{ ios: 'list.bullet.rectangle.fill', android: 'list_alt', web: 'list_alt' }}
             label="Services"
             onPress={() => router.navigate('/services')}

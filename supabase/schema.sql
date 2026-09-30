@@ -653,13 +653,21 @@ create policy "employee uploads own documents" on storage.objects for insert to 
     and (storage.foldername(name))[1] = public.my_employee_business_id()::text
     and (storage.foldername(name))[2] = public.my_employee_id()::text
   );
+-- Is the signed-in person the owner of the business with this id (the first folder of a file path)?
+create or replace function public.owns_business_folder(folder text)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.businesses where id::text = folder and owner_id = auth.uid());
+$$;
+revoke execute on function public.owns_business_folder(text) from public, anon;
+grant execute on function public.owns_business_folder(text) to authenticated;
+
 drop policy if exists "documents readable by self and owner" on storage.objects;
 create policy "documents readable by self and owner" on storage.objects for select to authenticated
   using (
     bucket_id = 'employee-documents'
     and (
       (storage.foldername(name))[2] = public.my_employee_id()::text
-      or exists (select 1 from public.businesses b where b.id::text = (storage.foldername(name))[1] and b.owner_id = auth.uid())
+      or public.owns_business_folder((storage.foldername(name))[1])
     )
   );
 

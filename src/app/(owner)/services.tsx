@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ScreenHeader } from '@/components/owner/invoices-ui';
@@ -25,7 +24,7 @@ export default function ServicesScreen() {
 
   return (
     <OwnerScreen>
-      <ScreenHeader title="Services" onBack={() => router.navigate('/menu')} />
+      <ScreenHeader title="Services" />
       <Text style={styles.subtitle}>The services you offer. They appear as job types when you create quotes and invoices.</Text>
 
       {!business ? (

@@ -4,6 +4,7 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SvgXml } from 'react-native-svg';
 
+import { BackButton } from '@/components/owner/ui';
 import { BrandLogos, StripeBrandColor, type BrandLogoName } from '@/constants/brand-logos';
 import { Colors, Radius, Spacing } from '@/constants/theme';
 
@@ -109,7 +110,10 @@ export default function IntegrationsScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
         <View>
-          <Text style={styles.title}>Integrations</Text>
+          <View style={styles.titleRow}>
+            <BackButton />
+            <Text style={styles.title}>Integrations</Text>
+          </View>
           <Text style={styles.subtitle}>
             {connected.size} of {INTEGRATIONS.length} connected
           </Text>
@@ -165,7 +169,13 @@ const styles = StyleSheet.create({
     padding: Spacing.four,
     gap: Spacing.four,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three - 4,
+  },
   title: {
+    flexShrink: 1,
     color: Colors.text,
     fontSize: 32,
     fontWeight: '700',

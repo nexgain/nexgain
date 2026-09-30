@@ -33,7 +33,7 @@ export default function BusinessProfileScreen() {
 
   return (
     <OwnerScreen>
-      <ScreenHeader title="Business Profile" onBack={() => router.navigate('/menu')} />
+      <ScreenHeader title="Business Profile" />
 
       {!business ? (
         <Card title="Business Details">

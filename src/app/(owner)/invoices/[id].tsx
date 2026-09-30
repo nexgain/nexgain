@@ -29,6 +29,7 @@ import {
   type DocStatus,
   type SalesDoc,
 } from '@/data/invoices';
+import { useJobs } from '@/data/jobs';
 import { formatMoney } from '@/data/payroll';
 import { fromDateKey } from '@/data/shifts';
 
@@ -37,6 +38,7 @@ const dateText = (key: string | null) => (key ? formatShortDate(fromDateKey(key)
 export default function DocDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const doc = useDocs().find((d) => d.id === id);
+  const jobs = useJobs();
   const payment = useBusinessPayment();
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -60,8 +62,10 @@ export default function DocDetailScreen() {
   const totals = docTotals(doc.items, doc.gstRate);
   const due = dateText(doc.dueDate);
   const isPaidInvoice = doc.kind === 'invoice' && doc.status === 'Paid';
+  // A booked quote belongs to its job now, so its status can't be changed here.
   const statusOptions: DocStatus[] =
-    doc.kind === 'invoice' ? ['Draft', 'Pending', 'Paid'] : ['Draft', 'Sent', 'Accepted'];
+    doc.kind === 'invoice' ? ['Draft', 'Pending', 'Paid'] : doc.status === 'Booked' ? [] : ['Draft', 'Sent', 'Accepted'];
+  const bookedJob = doc.kind === 'quote' ? jobs.find((j) => j.quoteId === doc.id) : undefined;
   const menuOptions = [...statusOptions.map((s) => `Mark as ${s}`), `Delete ${label}`];
 
   async function run(action: (d: SalesDoc) => Promise<void>) {
@@ -142,6 +146,32 @@ export default function DocDetailScreen() {
         </Text>
         {isPaidInvoice && <ReceiptLabel status={doc.receiptStatus} />}
       </View>
+
+      {doc.kind === 'quote' && doc.status === 'Accepted' && (
+        <Card title="Ready to book" icon={OwnerIcons.check}>
+          <Text style={styles.muted}>
+            The client accepted this quote. Confirm the job to pick a date and time, email the client, and add it to
+            your Jobs page and Calendar.
+          </Text>
+          <Button
+            label="Confirm Job"
+            icon={OwnerIcons.calendar}
+            onPress={() => router.push({ pathname: '/invoices/confirm/[id]', params: { id: doc.id } })}
+          />
+        </Card>
+      )}
+      {doc.kind === 'quote' && doc.status === 'Booked' && (
+        <Card title="Booked" icon={OwnerIcons.calendar}>
+          <Text style={styles.muted}>This quote has been booked in as a job, so it can&apos;t be booked again.</Text>
+          {bookedJob && (
+            <Button
+              label="View Job"
+              variant="secondary"
+              onPress={() => router.navigate({ pathname: '/job/[id]', params: { id: bookedJob.id } })}
+            />
+          )}
+        </Card>
+      )}
 
       <Card>
         <View style={styles.clientHeader}>

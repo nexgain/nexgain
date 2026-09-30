@@ -29,6 +29,8 @@ export type RosterShift = {
   location: string;
   tasks: string[];
   notes: string;
+  /** The job this shift is for (set with "Select Job"); the job then shows as Assigned. */
+  jobId?: string | null;
 };
 
 export const shiftsStore = createStore<RosterShift[]>([]);
@@ -47,6 +49,7 @@ type ShiftRow = {
   location: string;
   tasks: string[];
   notes: string;
+  job_id?: string | null;
 };
 
 function fromRow(row: ShiftRow): RosterShift {
@@ -60,6 +63,7 @@ function fromRow(row: ShiftRow): RosterShift {
     location: row.location,
     tasks: row.tasks,
     notes: row.notes,
+    jobId: row.job_id ?? null,
   };
 }
 
@@ -75,6 +79,7 @@ function toRow(shift: RosterShift) {
     location: shift.location,
     tasks: shift.tasks,
     notes: shift.notes,
+    job_id: shift.jobId ?? null,
   };
 }
 
@@ -150,7 +155,8 @@ export function copyPreviousWeek(weekStart: Date) {
     .map((s) => {
       const date = fromDateKey(s.date);
       date.setDate(date.getDate() + 7);
-      return { ...s, id: newId(), date: toDateKey(date) };
+      // Copies aren't linked to last week's job.
+      return { ...s, id: newId(), date: toDateKey(date), jobId: null };
     })
     .filter(
       (c) =>

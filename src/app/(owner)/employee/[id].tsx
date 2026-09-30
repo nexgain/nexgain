@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { FormField, TextField } from '@/components/owner/form';
 import { ScreenHeader } from '@/components/owner/invoices-ui';
-import { Badge, Button, Card, Icon, OwnerIcons, OwnerScreen } from '@/components/owner/ui';
+import { Badge, Button, Card, goBack, Icon, OwnerIcons, OwnerScreen } from '@/components/owner/ui';
 import { Colors as C, Spacing } from '@/constants/theme';
 import { availabilityFor, useAvailability, WEEKDAY_NAMES } from '@/data/availability';
 import { format12h, formatShortDate } from '@/data/employee-roster';
@@ -45,7 +45,7 @@ export default function EmployeeProfileScreen() {
     };
   }, [id]);
 
-  const back = () => router.navigate('/roster');
+  const back = () => goBack('/roster');
 
   if (!employee) {
     return (

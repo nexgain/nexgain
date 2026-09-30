@@ -33,9 +33,18 @@ export default function OwnerNotificationDetail() {
     );
   }
 
+  // The roster opens on the job's day, with a back arrow to return here.
+  const openRoster = () =>
+    router.navigate({ pathname: '/roster', params: { from: 'notification', date: n.relatedShift?.date ?? '' } });
+
   const actions: DetailAction[] = typeInfo(n).actions.map((label) => ({
     label,
-    onPress: ACTION_ROUTES[label] ? () => router.navigate(ACTION_ROUTES[label]) : undefined,
+    onPress:
+      ACTION_ROUTES[label] === '/roster'
+        ? openRoster
+        : ACTION_ROUTES[label]
+          ? () => router.navigate(ACTION_ROUTES[label])
+          : undefined,
   }));
 
   return (
@@ -45,7 +54,7 @@ export default function OwnerNotificationDetail() {
         n={n}
         palette={OWNER_PALETTE}
         actions={actions}
-        onOpenRelated={n.relatedShift ? () => router.navigate('/roster') : undefined}
+        onOpenRelated={n.relatedShift ? openRoster : undefined}
       />
     </OwnerScreen>
   );

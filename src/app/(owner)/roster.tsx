@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { router } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams, useNavigation, type Href } from 'expo-router';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -10,6 +10,7 @@ import {
   Button,
   Card,
   EmptyState,
+  goBack,
   Icon,
   OwnerIcons,
   OwnerScreen,
@@ -100,6 +101,28 @@ export default function OwnerRosterScreen() {
   const availability = useAvailability();
   const [view, setView] = useState<RosterView>('Week');
   const [anchor, setAnchor] = useState(() => startOfDay(new Date()));
+
+  // Opened from a notification ("View full job details"): show that job's day
+  // and a back arrow. Leaving the screen clears this, so the Roster tab itself
+  // never shows a back arrow.
+  const navigation = useNavigation();
+  const params = useLocalSearchParams<{ from?: string; date?: string }>();
+  // Also opened from a job's "Open Roster" (from=job).
+  const fromNotification = params.from === 'notification' || params.from === 'job';
+  const [shownDate, setShownDate] = useState<string | null>(null);
+  if (fromNotification && params.date && params.date !== shownDate) {
+    setShownDate(params.date);
+    setAnchor(fromDateKey(params.date));
+    setView('Day');
+  } else if (!fromNotification && shownDate !== null) {
+    setShownDate(null);
+  }
+  useFocusEffect(
+    useCallback(
+      () => () => navigation.setParams({ from: undefined, date: undefined } as never),
+      [navigation],
+    ),
+  );
   const [draft, setDraft] = useState<ShiftDraft | null>(null);
   const [showAvailability, setShowAvailability] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -130,6 +153,7 @@ export default function OwnerRosterScreen() {
   return (
     <OwnerScreen>
       <PageHeader
+        onBack={fromNotification ? () => goBack(params.from === 'job' ? '/jobs' : ('/alerts' as Href)) : undefined}
         title="Roster"
         subtitle="Plan shifts and assign your team."
         right={<Button label="Add Shift" icon={{ ios: 'plus', android: 'add', web: 'add' }} onPress={() => openNew()} />}

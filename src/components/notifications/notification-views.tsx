@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Image } from 'expo-image';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EmployeeColors } from '@/constants/employee-theme';
 import { Colors, Radius, Spacing } from '@/constants/theme';
@@ -205,6 +206,34 @@ export function NotificationsEmpty({ palette, message }: { palette: Palette; mes
 
 export type DetailAction = { label: string; icon?: IconName; onPress?: () => void };
 
+/** Full-screen view of one photo. Tap the ✕ (or anywhere around the photo) to close. */
+function PhotoViewer({ uri, onClose }: { uri: string | null; onClose: () => void }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <Modal visible={uri !== null} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={styles.viewer}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close photo" />
+        {uri && (
+          <Image
+            source={{ uri }}
+            style={[styles.viewerImage, { marginTop: insets.top + 56, marginBottom: insets.bottom + Spacing.four }]}
+            contentFit="contain"
+            pointerEvents="none"
+          />
+        )}
+        <Pressable
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+          hitSlop={8}
+          style={({ pressed }) => [styles.viewerClose, { top: insets.top + Spacing.two }, pressed && styles.pressed]}>
+          <Icon name={{ ios: 'xmark', android: 'close', web: 'close' }} color="#FFFFFF" size={18} />
+        </Pressable>
+      </View>
+    </Modal>
+  );
+}
+
 /** Detail layout shared by every notification type; sections appear only when they have content. */
 export function NotificationDetail({
   n,
@@ -221,6 +250,7 @@ export function NotificationDetail({
 }) {
   const info = typeInfo(n);
   const status = n.status ? toneColors(info.tone, palette) : null;
+  const [openPhoto, setOpenPhoto] = useState<string | null>(null);
 
   return (
     <View style={styles.detail}>
@@ -258,11 +288,19 @@ export function NotificationDetail({
         <DetailSection title={`Photos (${n.photos.length})`} palette={palette}>
           <View style={styles.photos}>
             {n.photos.map((uri, i) => (
-              <Image key={`${uri}-${i}`} source={{ uri }} style={styles.photo} contentFit="cover" />
+              <Pressable
+                key={`${uri}-${i}`}
+                onPress={() => setOpenPhoto(uri)}
+                accessibilityRole="imagebutton"
+                accessibilityLabel={`View photo ${i + 1} full size`}
+                style={({ pressed }) => pressed && styles.pressed}>
+                <Image source={{ uri }} style={[styles.photo, { backgroundColor: palette.cardAlt }]} contentFit="cover" />
+              </Pressable>
             ))}
           </View>
         </DetailSection>
       )}
+      <PhotoViewer uri={openPhoto} onClose={() => setOpenPhoto(null)} />
 
       {n.attachments && n.attachments.length > 0 && (
         <DetailSection title="Attachments" palette={palette}>
@@ -527,6 +565,24 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: Radius.medium,
+  },
+  viewer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.92)',
+  },
+  viewerImage: {
+    flex: 1,
+    marginHorizontal: Spacing.three,
+  },
+  viewerClose: {
+    position: 'absolute',
+    right: Spacing.three,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
   },
   attachment: {
     flexDirection: 'row',

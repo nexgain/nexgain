@@ -9,6 +9,8 @@ export type Shift = {
   role: string;
   location: string;
   tasks: string[];
+  /** The job this shift is for, if the owner linked one. */
+  jobId?: string | null;
 };
 
 export type RosterDay = {
@@ -32,7 +34,7 @@ function shiftOn(date: Date, { shifts, employeeId }: ShiftSource): Shift | null 
     .filter((s) => s.date === key && s.employeeIds.includes(employeeId))
     .sort((a, b) => a.start.localeCompare(b.start))[0];
   return match
-    ? { start: match.start, end: match.end, role: match.jobType, location: match.location, tasks: match.tasks }
+    ? { start: match.start, end: match.end, role: match.jobType, location: match.location, tasks: match.tasks, jobId: match.jobId }
     : null;
 }
 

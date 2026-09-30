@@ -12,6 +12,7 @@ import {
   shiftDurationMs,
 } from '@/data/employee-roster';
 import { useCurrentEmployee } from '@/data/current-employee';
+import { useJobs } from '@/data/jobs';
 import { useShifts } from '@/data/shifts';
 
 export default function JobDetailsScreen() {
@@ -21,6 +22,8 @@ export default function JobDetailsScreen() {
   const shiftDate = date ?? dateKey(new Date());
   const day = getShiftForDate(shiftDate, new Date(), shiftSource);
   const shift = day?.shift ?? null;
+  // Work description of the linked job (only jobs assigned to this employee are ever loaded).
+  const job = useJobs().find((j) => j.id === shift?.jobId) ?? null;
   // Task progress lives in memory and isn't sent anywhere yet.
   const [done, setDone] = useState<Set<number>>(new Set());
 
@@ -68,6 +71,16 @@ export default function JobDetailsScreen() {
           </View>
         </View>
       </Card>
+
+      {job && (
+        <>
+          <Text style={[employeeStyles.sectionLabel, styles.sectionGap]}>Job</Text>
+          <Card style={styles.infoCard}>
+            <Text style={styles.jobTitle}>{job.title}</Text>
+            {job.description ? <Text style={styles.jobDescription}>{job.description}</Text> : null}
+          </Card>
+        </>
+      )}
 
       <View style={styles.tasksHeader}>
         <Text style={employeeStyles.sectionLabel}>Tasks</Text>
@@ -157,6 +170,19 @@ const styles = StyleSheet.create({
     color: C.text,
     fontSize: 15,
     fontWeight: '600',
+  },
+  sectionGap: {
+    marginTop: Spacing.two,
+  },
+  jobTitle: {
+    color: C.text,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  jobDescription: {
+    color: C.text,
+    fontSize: 15,
+    lineHeight: 22,
   },
   tasksHeader: {
     flexDirection: 'row',

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Button, Icon, OwnerIcons } from '@/components/owner/ui';
+import { BackButton, Button, Icon, OwnerIcons } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { formatShortDate } from '@/data/employee-roster';
 import {
@@ -36,6 +36,7 @@ const STATUS_TONE: Record<DocStatus, Tone> = {
   Sent: 'amber',
   Paid: 'green',
   Accepted: 'green',
+  Booked: 'blue',
   Overdue: 'red',
   Expired: 'red',
 };
@@ -102,19 +103,13 @@ export function ScreenHeader({
   right,
 }: {
   title: string;
-  onBack: () => void;
+  /** Defaults to the previous screen. */
+  onBack?: () => void;
   right?: ReactNode;
 }) {
   return (
     <View style={styles.header}>
-      <Pressable
-        onPress={onBack}
-        accessibilityRole="button"
-        accessibilityLabel="Back"
-        hitSlop={8}
-        style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}>
-        <Icon name={{ ios: 'chevron.left', android: 'chevron_left', web: 'chevron_left' }} color={C.text} size={16} />
-      </Pressable>
+      <BackButton onPress={onBack} />
       <Text style={styles.headerTitle} numberOfLines={1}>
         {title}
       </Text>

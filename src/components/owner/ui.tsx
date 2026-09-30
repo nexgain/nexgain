@@ -10,6 +10,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { router, type Href } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -74,19 +75,49 @@ export function OwnerScreen({
   );
 }
 
+/** Goes to the previous screen, or to `fallback` when there isn't one (e.g. the page was reloaded). */
+export function goBack(fallback: Href = '/menu') {
+  if (router.canGoBack()) router.back();
+  else router.navigate(fallback);
+}
+
+/** Round "<" button shown to the left of a sub-page's title. Goes back by default. */
+export function BackButton({ onPress = () => goBack() }: { onPress?: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="Back"
+      hitSlop={8}
+      style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
+      <Icon name={{ ios: 'chevron.left', android: 'chevron_left', web: 'chevron_left' }} color={C.text} size={16} />
+    </Pressable>
+  );
+}
+
 export function PageHeader({
   title,
   subtitle,
   right,
+  onBack,
 }: {
   title: string;
   subtitle?: string;
   right?: ReactNode;
+  /** Shows the back button (sub-pages only, not the main tabs). */
+  onBack?: () => void;
 }) {
   return (
     <View style={styles.pageHeader}>
       <View style={styles.pageHeaderText}>
-        <Text style={styles.pageTitle}>{title}</Text>
+        {onBack ? (
+          <View style={styles.pageTitleRow}>
+            <BackButton onPress={onBack} />
+            <Text style={[styles.pageTitle, styles.flexShrink]}>{title}</Text>
+          </View>
+        ) : (
+          <Text style={styles.pageTitle}>{title}</Text>
+        )}
         {subtitle ? <Text style={styles.pageSubtitle}>{subtitle}</Text> : null}
       </View>
       {right ? <View style={styles.pageHeaderRight}>{right}</View> : null}
@@ -411,6 +442,24 @@ const styles = StyleSheet.create({
     color: C.text,
     fontSize: 28,
     fontWeight: '700',
+  },
+  pageTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three - 4,
+  },
+  flexShrink: {
+    flexShrink: 1,
+  },
+  backButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
   },
   pageSubtitle: {
     color: C.textSecondary,

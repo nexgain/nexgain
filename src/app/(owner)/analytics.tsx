@@ -4,6 +4,7 @@ import { BarChart, DonutChart, LineChart, SeriesColors } from '@/components/owne
 import {
   Card,
   EmptyState,
+  goBack,
   OwnerIcons,
   OwnerScreen,
   PageHeader,
@@ -70,6 +71,7 @@ export default function AnalyticsScreen() {
   return (
     <OwnerScreen>
       <PageHeader
+        onBack={() => goBack()}
         title="Analytics"
         subtitle="Get deeper insights into your business performance."
         right={<RangeSelect options={RANGES} value={range} onChange={setRange} />}

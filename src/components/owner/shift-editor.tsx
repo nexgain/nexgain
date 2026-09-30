@@ -21,7 +21,10 @@ import {
 } from '@/data/availability';
 import { format12h, formatShortDate, formatWeekday } from '@/data/employee-roster';
 import { employeeFullName, type Employee } from '@/data/employees';
-import { deleteShift, JOB_TYPES, saveShift, toDateKey } from '@/data/shifts';
+import { jobWhen } from '@/components/owner/jobs-ui';
+import { useClients } from '@/data/clients';
+import { unassignedJobs, useJobs, type Job } from '@/data/jobs';
+import { deleteShift, fromDateKey, JOB_TYPES, saveShift, toDateKey } from '@/data/shifts';
 import { toMinutes } from '@/data/time';
 
 export type ShiftDraft = {
@@ -34,6 +37,8 @@ export type ShiftDraft = {
   location: string;
   tasks: string[];
   notes: string;
+  /** Job picked with "Select Job" (null for shifts not linked to a job). */
+  jobId?: string | null;
 };
 
 export function newShiftDraft(date: Date, employeeIds: string[] = []): ShiftDraft {
@@ -46,6 +51,7 @@ export function newShiftDraft(date: Date, employeeIds: string[] = []): ShiftDraf
     location: '',
     tasks: [],
     notes: '',
+    jobId: null,
   };
 }
 
@@ -66,7 +72,26 @@ export function ShiftEditor({
 }) {
   const insets = useSafeAreaInsets();
   const [draft, setDraft] = useState(initial);
-  const [step, setStep] = useState<'form' | 'employees'>('form');
+  const [step, setStep] = useState<'form' | 'employees' | 'jobs'>('form');
+  const jobs = useJobs();
+  const clients = useClients();
+  const linkedJob = jobs.find((j) => j.id === draft.jobId) ?? null;
+  const jobClient = (job: Job) => clients.find((c) => c.id === job.clientId)?.name ?? '';
+
+  /** Fills the shift from a job; the owner can still change anything afterwards. */
+  function applyJob(job: Job) {
+    const matchingType = JOB_TYPES.find((t) => t.toLowerCase() === job.title.trim().toLowerCase());
+    update({
+      jobId: job.id,
+      date: fromDateKey(job.date),
+      start: job.start,
+      end: job.end,
+      location: job.address,
+      jobType: matchingType ?? draft.jobType ?? 'Other',
+      notes: draft.notes.trim() ? draft.notes : job.description,
+    });
+    setStep('form');
+  }
   const [jobSheetOpen, setJobSheetOpen] = useState(false);
   const [newTask, setNewTask] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -97,6 +122,7 @@ export function ShiftEditor({
       location: draft.location.trim(),
       tasks: draft.tasks,
       notes: draft.notes.trim(),
+      jobId: draft.jobId ?? null,
     });
     onClose();
   }
@@ -108,7 +134,15 @@ export function ShiftEditor({
   return (
     <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <View style={[styles.screen, { paddingTop: insets.top }]}>
-        {step === 'employees' ? (
+        {step === 'jobs' ? (
+          <SelectJob
+            jobs={[...(linkedJob ? [linkedJob] : []), ...unassignedJobs(jobs).filter((j) => j.id !== linkedJob?.id)]}
+            selectedId={draft.jobId ?? null}
+            clientName={jobClient}
+            onBack={() => setStep('form')}
+            onSelect={applyJob}
+          />
+        ) : step === 'employees' ? (
           <SelectEmployees
             draft={draft}
             employees={employees}
@@ -175,12 +209,39 @@ export function ShiftEditor({
               </FormField>
 
               <FormField label="Address / Location">
-                <TextField
-                  value={draft.location}
-                  onChangeText={(location) => update({ location })}
-                  placeholder="e.g. 12 Smith St, Newtown"
-                  accessibilityLabel="Address / Location"
-                />
+                <View style={styles.addressRow}>
+                  <View style={styles.flex}>
+                    <TextField
+                      value={draft.location}
+                      onChangeText={(location) => update({ location })}
+                      placeholder="e.g. 12 Smith St, Newtown"
+                      accessibilityLabel="Address / Location"
+                    />
+                  </View>
+                  <Pressable
+                    onPress={() => setStep('jobs')}
+                    accessibilityRole="button"
+                    accessibilityLabel="Select Job"
+                    style={({ pressed }) => [styles.selectJob, pressed && styles.pressed]}>
+                    <Icon name={{ ios: 'briefcase.fill', android: 'work', web: 'work' }} color={C.accent} size={14} />
+                    <Text style={styles.selectJobText}>Select Job</Text>
+                  </Pressable>
+                </View>
+                {linkedJob && (
+                  <View style={styles.linkedJob}>
+                    <Icon name={{ ios: 'link', android: 'link', web: 'link' }} color={C.accent} size={14} />
+                    <Text style={styles.linkedJobText} numberOfLines={2}>
+                      Job: {[jobClient(linkedJob), linkedJob.title].filter(Boolean).join(' · ')}
+                    </Text>
+                    <Pressable
+                      onPress={() => update({ jobId: null })}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Unlink job">
+                      <Text style={styles.unlinkText}>Unlink</Text>
+                    </Pressable>
+                  </View>
+                )}
               </FormField>
 
               <FormField label="Tasks">
@@ -301,6 +362,66 @@ function Header({
         {subtitle ? <Text style={styles.headerSubtitle}>{subtitle}</Text> : null}
       </View>
     </View>
+  );
+}
+
+/** Jobs that still need staff (Scheduled, not yet assigned), soonest first. */
+function SelectJob({
+  jobs,
+  selectedId,
+  clientName,
+  onBack,
+  onSelect,
+}: {
+  jobs: Job[];
+  selectedId: string | null;
+  clientName: (job: Job) => string;
+  onBack: () => void;
+  onSelect: (job: Job) => void;
+}) {
+  return (
+    <>
+      <Header title="Select Job" subtitle="Scheduled jobs that still need staff" onClose={onBack} closeIcon="back" />
+      {jobs.length === 0 ? (
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyText}>
+            No jobs waiting for staff. Jobs appear here once you confirm an accepted quote. You can still type an
+            address for this shift.
+          </Text>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={[styles.list, styles.selectBody]}>
+          {jobs.map((job) => {
+            const selected = job.id === selectedId;
+            return (
+              <Pressable
+                key={job.id}
+                onPress={() => onSelect(job)}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`${clientName(job) || job.title}, ${jobWhen(job)}`}
+                style={({ pressed }) => [styles.jobRow, selected && styles.jobRowSelected, pressed && styles.pressed]}>
+                <View style={styles.jobRowTop}>
+                  <Text style={[styles.employeeName, styles.flex]} numberOfLines={1}>
+                    {clientName(job) || job.title}
+                  </Text>
+                  {selected && <Badge label="Linked" tone="success" />}
+                </View>
+                <Text style={styles.employeeMeta}>{jobWhen(job)}</Text>
+                <Text style={styles.employeeMeta} numberOfLines={1}>
+                  {job.address || 'No address'}
+                </Text>
+                {job.description ? (
+                  <Text style={styles.jobDescription} numberOfLines={2}>
+                    {job.description}
+                  </Text>
+                ) : null}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      )}
+    </>
   );
 }
 
@@ -606,5 +727,67 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.7,
+  },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  selectJob: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 44,
+    paddingHorizontal: Spacing.three - 4,
+    borderRadius: Radius.medium - 2,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+  },
+  selectJobText: {
+    color: C.accent,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  linkedJob: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    marginTop: Spacing.two,
+    padding: Spacing.two + 2,
+    borderRadius: Radius.medium - 2,
+    backgroundColor: 'rgba(79, 140, 255, 0.12)',
+  },
+  linkedJobText: {
+    flex: 1,
+    color: C.text,
+    fontSize: 14,
+  },
+  unlinkText: {
+    color: C.danger,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  jobRow: {
+    gap: 3,
+    padding: Spacing.three - 4,
+    borderRadius: Radius.medium,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surface,
+  },
+  jobRowSelected: {
+    borderColor: C.accent,
+  },
+  jobRowTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  jobDescription: {
+    color: C.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2,
   },
 });
