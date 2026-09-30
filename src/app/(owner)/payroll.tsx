@@ -19,7 +19,7 @@ import {
 import { Colors as C, Spacing } from '@/constants/theme';
 import { useClockSessions } from '@/data/clock-records';
 import { formatShortDate } from '@/data/employee-roster';
-import { employeeFullName, useEmployees } from '@/data/employees';
+import { employeeFullName, formatPayRate, useEmployees } from '@/data/employees';
 import {
   approvePayments,
   calculatePayLines,
@@ -129,9 +129,10 @@ export default function PayrollScreen() {
     {
       key: 'rate',
       label: 'Rate',
-      width: 90,
+      width: 100,
       align: 'right',
-      render: (l) => (l.rate === null ? <Badge label="Not set" tone="warning" /> : `${formatMoney(l.rate)}/hr`),
+      render: (l) =>
+        l.rate === null ? <Badge label="Not set" tone="warning" /> : formatPayRate(l.rate, l.employee.payType),
     },
     { key: 'gross', label: 'Gross Pay', width: 100, align: 'right', render: (l) => moneyOrDash(l.gross) },
     { key: 'tax', label: 'Tax', width: 90, align: 'right', render: (l) => moneyOrDash(l.tax) },

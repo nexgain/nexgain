@@ -25,6 +25,11 @@ export function StepReview({
     { label: 'Employment type', value: data.employmentType ?? '—', step: 2 },
     { label: 'Bank account', value: maskLast4(data.accountNumber), step: 3 },
     { label: 'Superannuation', value: superFund || 'Not provided', step: 4 },
+    {
+      label: 'Qualifications',
+      value: data.qualifications.map((q) => q.name).join(', ') || 'None added',
+      step: 4,
+    },
     { label: 'Business', value: data.business?.name ?? '—', step: 1 },
   ];
 

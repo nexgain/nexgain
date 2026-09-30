@@ -4,14 +4,17 @@ import { availabilityStore } from '@/data/availability';
 import { businessStore, clearBusiness, loadMyBusiness } from '@/data/business';
 import { eventsStore, loadEvents } from '@/data/calendar';
 import { clientsStore, loadClients } from '@/data/clients';
-import { clearDocs, loadDocs } from '@/data/invoices';
 import { jobsStore, loadJobs, loadMyAssignedJobs } from '@/data/jobs';
 import { clockStore, loadClockSessions } from '@/data/clock-records';
 import { currentEmployeeStore } from '@/data/current-employee';
+import { invitesStore, loadInvites } from '@/data/employee-invites';
+import { expensesStore, loadExpenses } from '@/data/finance';
+import { clearDocs, loadDocs } from '@/data/invoices';
 import { employeesStore, loadOwnProfile, loadTeam } from '@/data/employees';
 import { jobReportsStore } from '@/data/job-reports';
 import { clearNotifications, loadNotifications, subscribeToNotifications } from '@/data/notifications';
 import { loadPayslips, payslipsStore } from '@/data/payroll';
+import { qualificationsStore } from '@/data/qualifications';
 import { loadShifts, shiftsStore } from '@/data/shifts';
 import { supabase } from '@/lib/supabase';
 
@@ -48,14 +51,18 @@ async function load(userId: string) {
 
   if (role === 'owner' && business?.id) {
     const businessId = business.id;
-    const reloadTeam = refresh(() => loadTeam(businessId, businessStore.get()?.businessName ?? businessName));
+    const reloadTeam = refresh(() =>
+      Promise.all([loadTeam(businessId, businessStore.get()?.businessName ?? businessName), loadInvites()]),
+    );
     await Promise.all([
       loadTeam(businessId, businessName),
+      loadInvites().catch(() => {}),
+      loadDocs().catch(() => {}),
+      loadExpenses().catch(() => {}),
       loadNotifications(null),
       loadShifts().catch(() => {}),
       loadClockSessions().catch(() => {}),
       loadPayslips().catch(() => {}),
-      loadDocs(businessId).catch(() => {}),
       loadClients().catch(() => {}),
       loadJobs().catch(() => {}),
       loadEvents().catch(() => {}),
@@ -67,13 +74,13 @@ async function load(userId: string) {
     const live = supabase
       .channel(`business-${businessId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'employees', filter }, reloadTeam)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'employee_invites', filter }, refresh(loadInvites))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clock_sessions', filter }, refresh(loadClockSessions))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'shifts', filter }, refresh(loadShifts))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payslips', filter }, refresh(loadPayslips))
       // Jobs change when shifts are linked to them (Assigned) and when they're booked or moved.
       .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs', filter }, refresh(loadJobs))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_events', filter }, refresh(loadEvents))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_docs', filter }, refresh(() => loadDocs(businessId)))
       .subscribe();
     stopListening.push(() => {
       supabase.removeChannel(live);
@@ -128,6 +135,10 @@ export function endSession() {
   loading = null;
   clearBusiness();
   employeesStore.set([]);
+  invitesStore.set([]);
+  clearDocs();
+  expensesStore.set([]);
+  qualificationsStore.set({});
   currentEmployeeStore.set(null);
   clearNotifications();
   shiftsStore.set([]);
@@ -135,7 +146,6 @@ export function endSession() {
   payslipsStore.set([]);
   availabilityStore.set({});
   jobReportsStore.set([]);
-  clearDocs();
   clientsStore.set([]);
   jobsStore.set([]);
   eventsStore.set([]);

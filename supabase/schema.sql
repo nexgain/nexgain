@@ -3,6 +3,8 @@
 -- Paste this whole file into Supabase > SQL Editor > New query > Run.
 -- It is safe to run again: it only adds what's missing and updates
 -- functions and security rules.
+-- AFTER running this file, also run each file in supabase/migrations/
+-- (oldest first) the same way.
 -- =====================================================================
 
 create extension if not exists pgcrypto with schema extensions;

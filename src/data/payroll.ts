@@ -96,12 +96,17 @@ export function hoursInPeriod(
   return ms / HOUR_MS;
 }
 
-export function calculatePayLine(employee: Employee, hours: number, status: PayStatus): PayLine {
+/**
+ * One employee's pay for a period. Hourly staff: hours x rate. Salary staff:
+ * yearly salary / 52 per week, whatever hours they clocked. The rate always
+ * comes from the employee's profile, so a changed rate applies straight away.
+ */
+export function calculatePayLine(employee: Employee, hours: number, status: PayStatus, weeks = 1): PayLine {
   const rate = employee.payRate;
   if (rate === null) {
     return { employee, hours, rate, gross: null, tax: null, net: null, super: null, status };
   }
-  const gross = roundCents(hours * rate);
+  const gross = roundCents(employee.payType === 'salary' ? (rate / 52) * weeks : hours * rate);
   const tax = roundCents(gross * TAX_RATE_PLACEHOLDER);
   return {
     employee,
@@ -115,6 +120,24 @@ export function calculatePayLine(employee: Employee, hours: number, status: PayS
   };
 }
 
+const WEEK_MS = 7 * 24 * HOUR_MS;
+
+/** Inactive employees only appear in payroll if they worked during the period. */
+function payableLines(
+  employees: Employee[],
+  sessions: ClockSession[],
+  range: Pick<Period, 'start' | 'end'>,
+  statuses: Record<string, PayStatus>,
+  now: Date,
+) {
+  const weeks = (range.end.getTime() - range.start.getTime()) / WEEK_MS;
+  return employees
+    .map((employee) =>
+      calculatePayLine(employee, hoursInPeriod(sessions, employee.id, range, now), statuses[employee.id] ?? 'Pending', weeks),
+    )
+    .filter((l) => l.employee.status !== 'inactive' || l.hours > 0 || l.status === 'Paid');
+}
+
 export function calculatePayLines(
   employees: Employee[],
   sessions: ClockSession[],
@@ -122,13 +145,7 @@ export function calculatePayLines(
   statuses: Record<string, PayStatus> = {},
   now = new Date(),
 ): PayLine[] {
-  return employees.map((employee) =>
-    calculatePayLine(
-      employee,
-      hoursInPeriod(sessions, employee.id, period, now),
-      statuses[employee.id] ?? 'Pending',
-    ),
-  );
+  return payableLines(employees, sessions, period, statuses, now);
 }
 
 export function payTotals(lines: PayLine[]): PayTotals {
@@ -158,9 +175,7 @@ export function labourCost(
   range: Pick<Period, 'start' | 'end'>,
   now = new Date(),
 ) {
-  return payTotals(
-    employees.map((e) => calculatePayLine(e, hoursInPeriod(sessions, e.id, range, now), 'Pending')),
-  ).gross;
+  return payTotals(payableLines(employees, sessions, range, {}, now)).gross;
 }
 
 // Payslips: one per employee per pay period, created when the owner approves
@@ -246,6 +261,7 @@ export function approvePayments(periodId: string, employeeIds: string[]) {
   const created: PayslipRecord[] = employeesStore
     .get()
     .filter((e) => employeeIds.includes(e.id) && !alreadyPaid.has(e.id))
+    // Each employee's current rate from their profile; the payslip keeps it, so later changes don't affect it.
     .map((e) => calculatePayLine(e, hoursInPeriod(sessions, e.id, period), 'Pending'))
     .filter((l) => l.rate !== null && l.gross !== null)
     .map((l) => ({

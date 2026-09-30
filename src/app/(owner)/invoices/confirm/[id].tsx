@@ -6,7 +6,6 @@ import { DateField, FormField, TextField, TimeField } from '@/components/owner/f
 import { ScreenHeader } from '@/components/owner/invoices-ui';
 import { Button, Card, EmptyState, OwnerIcons, OwnerScreen } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
-import { useBusiness } from '@/data/business';
 import { addDaysKey, todayKey } from '@/data/business-time';
 import { loadEvents } from '@/data/calendar';
 import { loadClients } from '@/data/clients';
@@ -29,7 +28,6 @@ function workSummary(quote: SalesDoc) {
 // Book an accepted quote in as a job and email the client a confirmation.
 export default function ConfirmJobScreen() {
   const me = useCurrentEmployee();
-  const business = useBusiness();
   const { id } = useLocalSearchParams<{ id: string }>();
   const quote = useDocs().find((d) => d.id === id);
 
@@ -85,12 +83,7 @@ export default function ConfirmJobScreen() {
       return;
     }
     // Show the new job, its calendar event and the Booked quote straight away.
-    await Promise.all([
-      loadJobs(),
-      loadEvents(),
-      loadClients(),
-      business?.id ? loadDocs(business.id) : Promise.resolve(),
-    ]).catch(() => {});
+    await Promise.all([loadJobs(), loadEvents(), loadClients(), loadDocs()]).catch(() => {});
     setBusy(false);
     router.back();
     router.navigate({ pathname: '/job/[id]', params: { id: result.jobId } });

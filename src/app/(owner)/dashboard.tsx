@@ -17,9 +17,18 @@ import {
 import { UpcomingSection } from '@/components/owner/upcoming';
 import { Colors as C } from '@/constants/theme';
 import { ownerFirstName, useBusiness } from '@/data/business';
-import { useClockSessions } from '@/data/clock-records';
 import { useEmployees } from '@/data/employees';
-import { calculatePayLines, formatHours, formatMoney, getPayPeriods, payTotals } from '@/data/payroll';
+import {
+  expenseEntries,
+  financeRanges,
+  inRange,
+  percentChange,
+  revenueEntries,
+  sumEntries,
+  useExpenses,
+} from '@/data/finance';
+import { useDocs } from '@/data/invoices';
+import { formatMoney, usePayslipRecords } from '@/data/payroll';
 
 const NO_INSIGHTS = 'No insights yet — check back once you have more activity data.';
 
@@ -32,14 +41,16 @@ function greetingFor(date: Date) {
 
 export default function OwnerDashboardScreen() {
   const now = new Date();
-  const employees = useEmployees();
-  const sessions = useClockSessions();
   // Filled in by owner sign-up; before that the greeting stays as it was.
   const business = useBusiness();
   const firstName = ownerFirstName(business);
 
-  const [thisWeek] = getPayPeriods(now, 1);
-  const totals = payTotals(calculatePayLines(employees, sessions, thisWeek, {}, now));
+  // This month's money in and out, compared with last month.
+  const [thisMonth, lastMonth] = financeRanges(now);
+  const revenue = revenueEntries(useDocs());
+  const expenses = expenseEntries(useExpenses(), usePayslipRecords(), useEmployees());
+  const revenueNow = sumEntries(inRange(revenue, thisMonth));
+  const expensesNow = sumEntries(inRange(expenses, thisMonth));
 
   return (
     <OwnerScreen>
@@ -65,18 +76,33 @@ export default function OwnerDashboardScreen() {
         }
       />
 
-      <StatGrid columns={3}>
-        <StatCard
-          icon={OwnerIcons.money}
-          label="Total Payroll (This Week)"
-          value={formatMoney(totals.gross, { cents: false })}
-        />
-        <StatCard
-          icon={OwnerIcons.clock}
-          label="Hours Worked"
-          value={`${formatHours(totals.hours)} hrs`}
-        />
-        <StatCard icon={OwnerIcons.people} label="Active Employees" value={`${employees.length}`} />
+      <StatGrid columns={2}>
+        <Pressable
+          onPress={() => router.navigate('/revenue')}
+          accessibilityRole="button"
+          accessibilityLabel={`Revenue this month ${formatMoney(revenueNow)}. Open revenue.`}
+          style={({ pressed }) => pressed && styles.pressed}>
+          <StatCard
+            icon={OwnerIcons.trendingUp}
+            label="Revenue (This Month)"
+            value={formatMoney(revenueNow, { cents: false })}
+            change={percentChange(revenueNow, sumEntries(inRange(revenue, lastMonth)))}
+            changeLabel="vs last month"
+          />
+        </Pressable>
+        <Pressable
+          onPress={() => router.navigate('/expenses' as Href)}
+          accessibilityRole="button"
+          accessibilityLabel={`Expenses this month ${formatMoney(expensesNow)}. Open expenses.`}
+          style={({ pressed }) => pressed && styles.pressed}>
+          <StatCard
+            icon={OwnerIcons.card}
+            label="Expenses (This Month)"
+            value={formatMoney(expensesNow, { cents: false })}
+            change={percentChange(expensesNow, sumEntries(inRange(expenses, lastMonth)))}
+            changeLabel="vs last month"
+          />
+        </Pressable>
       </StatGrid>
 
       <UpcomingSection />
@@ -92,6 +118,13 @@ export default function OwnerDashboardScreen() {
               icon={OwnerIcons.calendar}
               label="Create Roster"
               onPress={() => router.navigate('/roster')}
+            />
+            <ActionRow
+              icon={OwnerIcons.people}
+              label="Employees"
+              // Typed routes only list '/employees/index' for a folder index screen.
+              onPress={() => router.navigate('/employees' as Href)}
+              showDivider
             />
             <ActionRow
               icon={OwnerIcons.money}

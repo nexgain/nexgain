@@ -302,6 +302,7 @@ const BADGE_TONES = {
   success: { color: C.success, background: 'rgba(34, 197, 94, 0.14)' },
   warning: { color: C.warning, background: 'rgba(245, 158, 11, 0.14)' },
   danger: { color: C.danger, background: 'rgba(239, 68, 68, 0.14)' },
+  info: { color: C.accent, background: 'rgba(79, 140, 255, 0.14)' },
   neutral: { color: C.textSecondary, background: C.surfaceRaised },
 } as const;
 
