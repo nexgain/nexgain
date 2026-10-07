@@ -14,6 +14,7 @@ import { StepTeam } from '@/components/signup/step-team';
 import { StepType } from '@/components/signup/step-type';
 import { EMPTY_SIGNUP, STEP_NAMES, type SignupData } from '@/components/signup/types';
 import { createBusinessOnline, updateBusiness, type BusinessProfile } from '@/data/business';
+import { saveBusinessPayment, updateBusinessPayment } from '@/data/invoices';
 import { DEFAULT_SELECTED_COUNT, findIndustry, industryDefaults } from '@/data/industries';
 import { signUp } from '@/lib/auth';
 import { reloadSession } from '@/lib/session';
@@ -25,10 +26,11 @@ const STEPS = [
   { title: 'Services you provide', subtitle: 'Choose the services you offer. These appear when you create quotes and invoices.' },
   { title: 'Subscription & payment', subtitle: 'Start your NexGain subscription.' },
   { title: 'Financial year & accounting', subtitle: 'Set up how NexGain handles your financial year and GST.' },
-  { title: 'Connect bank & accounting', subtitle: 'Connect your bank and accounting software. You can also do this later.' },
+  { title: 'Email, bank & accounting', subtitle: 'How you send quotes and invoices, and where customers pay you.' },
   { title: 'Team & payroll setup', subtitle: 'Invite your team to join your business on NexGain.' },
 ];
 
+const EMAIL_STEP = 6;
 const TEAM_STEP = 7;
 
 /** The business details from sign-up, in the shape the rest of the app uses. */
@@ -53,6 +55,8 @@ function toProfile(data: SignupData): Omit<BusinessProfile, 'id' | 'inviteCode' 
     trackGstInReports: data.trackGstInReports,
     bankConnected: false,
     accountingSoftware: null,
+    emailApp: data.emailApp,
+    businessEmail: data.businessEmail.trim(),
   };
 }
 
@@ -104,6 +108,12 @@ export default function OwnerSignupScreen() {
         return false;
       }
       const business = await createBusinessOnline(toProfile(data));
+      updateBusinessPayment({
+        accountName: data.bankAccountName,
+        bsb: data.bankBsb,
+        account: data.bankAccountNumber,
+      });
+      await saveBusinessPayment().catch((e) => console.warn('Could not save bank details:', e.message));
       // Start loading the new owner's data and live notifications.
       await reloadSession();
       setInviteCode(business.inviteCode);
@@ -130,6 +140,10 @@ export default function OwnerSignupScreen() {
     if (step === 2 && industryName !== data.servicesFor) {
       update({ services: industry ? industry.services.slice(0, DEFAULT_SELECTED_COUNT) : [], servicesFor: industryName });
     }
+    // Entering Email & Bank: suggest the sign-up email as the business email.
+    if (step === EMAIL_STEP - 1 && !data.businessEmail.trim()) {
+      update({ businessEmail: data.email.trim() });
+    }
     // Entering Team & Payroll: create the account and business (only once).
     if (step === TEAM_STEP - 1 && !accountCreated) {
       const ok = await createAccount();
@@ -142,6 +156,7 @@ export default function OwnerSignupScreen() {
     // Save any business details changed after the account was created (e.g. by going back a step).
     const { email: _email, ...editable } = toProfile(data);
     updateBusiness(editable);
+    updateBusinessPayment({ accountName: data.bankAccountName, bsb: data.bankBsb, account: data.bankAccountNumber });
     router.replace('/dashboard');
   }
 

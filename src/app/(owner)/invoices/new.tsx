@@ -4,7 +4,6 @@ import { BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ConfirmDialog } from '@/components/owner/confirm-dialog';
 import { FieldButton, FormField, OptionSheet, OWNER_PICKER_THEME, TextField } from '@/components/owner/form';
-import { sendDoc } from '@/components/owner/invoice-pdf';
 import { KIND_LABEL, ScreenHeader, TotalsBlock } from '@/components/owner/invoices-ui';
 import { emptyItem, ItemsEditor, toNumber, type EditItem } from '@/components/owner/items-editor';
 import { Button, Card, OwnerIcons, OwnerScreen } from '@/components/owner/ui';
@@ -12,7 +11,6 @@ import { useNativePicker } from '@/components/pickers/use-native-picker';
 import { Colors as C, Spacing } from '@/constants/theme';
 import { formatShortDate, formatWeekday } from '@/data/employee-roster';
 import {
-  businessPaymentStore,
   docsStore,
   docTotals,
   lineAmount,
@@ -119,7 +117,7 @@ export default function NewDocScreen() {
     leave();
   }
 
-  async function saveAndSend() {
+  function saveAndSend() {
     const problems = [
       !draft.client.name.trim() && 'Add a client name.',
       items.length === 0 && 'Add at least one item.',
@@ -128,17 +126,10 @@ export default function NewDocScreen() {
     setErrors(problems);
     if (problems.length > 0) return;
 
-    const keepStatus = existing && ['Paid', 'Accepted'].includes(existing.status);
-    const id = persist(keepStatus ? existing.status : kind === 'invoice' ? 'Pending' : 'Sent');
-    const saved = docsStore.get().find((d) => d.id === id);
-    router.replace({ pathname: '/invoices/[id]', params: { id } });
-    if (saved) {
-      try {
-        await sendDoc(saved, businessPaymentStore.get());
-      } catch {
-        // Share sheet dismissed or unavailable; the document is still saved.
-      }
-    }
+    // The status changes to Sent / Pending once the email has actually been sent.
+    const id = persist(existing?.status ?? 'Draft');
+    // The details screen opens the owner's email app with it ready to send.
+    router.replace({ pathname: '/invoices/[id]', params: { id, send: '1' } });
   }
 
   // Closes this screen but stays in the Invoices stack (back to the list, or to the

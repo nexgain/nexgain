@@ -3,8 +3,11 @@
 // online ("jobs" table). The database keeps each job's calendar event and any
 // linked shifts in step with it, so there's only one source of truth.
 // Employees only ever load their own assigned jobs, without prices or notes.
+import { businessStore } from '@/data/business';
 import { localParts, toTimestamp, todayKey } from '@/data/business-time';
+import { format12h } from '@/data/employee-roster';
 import { createStore } from '@/data/store';
+import { openEmailDraft } from '@/lib/email';
 import { warnSaveFailed } from '@/lib/ids';
 import { supabase } from '@/lib/supabase';
 
@@ -141,48 +144,69 @@ export type ConfirmJobInput = {
   clientPhone: string;
 };
 
-async function callConfirmJob(body: Record<string, unknown>): Promise<{ jobId?: string; error?: string }> {
-  const { data, error } = await supabase.functions.invoke('confirm-job', { body });
-  if (error) {
-    // The function's own message (e.g. why the email failed), when there is one.
-    const context = (error as { context?: Response }).context;
-    const message = context && typeof context.json === 'function' ? (await context.json().catch(() => null))?.error : null;
-    return {
-      error:
-        message ??
-        (/not found|404|Failed to send/i.test(error.message)
-          ? "Couldn't reach the email service. Check your internet connection, and that the confirm-job function is set up in Supabase."
-          : error.message),
-    };
-  }
-  return data as { jobId: string };
-}
-
 /**
- * Books a job from an accepted quote and emails the client. Either everything
- * happens (job, calendar event, quote marked Booked, email sent) or nothing does.
+ * Books a job from an accepted quote: the job, its calendar event and the client are
+ * created and the quote is marked Booked, all at once (or none of it if anything fails).
+ * The confirmation email is then opened in the owner's email app (see emailJobDetails).
  */
-export async function confirmJob(quoteId: string, input: ConfirmJobInput) {
-  return callConfirmJob({
-    mode: 'confirm',
-    quoteId,
-    job: {
+export async function confirmJob(quoteId: string, input: ConfirmJobInput): Promise<{ job?: Job; error?: string }> {
+  const { data, error } = await supabase.rpc('book_job', {
+    p_quote_id: quoteId,
+    p: {
       title: input.title.trim(),
       description: input.description.trim(),
       address: input.address.trim(),
       start: toTimestamp(input.date, input.start),
       end: toTimestamp(input.date, input.end),
       notes: input.notes.trim(),
-      clientName: input.clientName.trim(),
-      clientEmail: input.clientEmail.trim(),
-      clientPhone: input.clientPhone.trim(),
+      client_name: input.clientName.trim(),
+      client_email: input.clientEmail.trim(),
+      client_phone: input.clientPhone.trim(),
     },
   });
+  if (error) {
+    return {
+      error: /fetch|network/i.test(error.message)
+        ? "Couldn't reach the server. Check your internet connection and try again. Nothing was booked."
+        : error.message,
+    };
+  }
+  return { job: fromRow(data as JobRow) };
 }
 
-/** Emails the client the job's current date and time. */
-export async function sendJobUpdateEmail(jobId: string) {
-  return callConfirmJob({ mode: 'update', jobId });
+/** "2026-10-20" -> "Tuesday 20 October 2026". */
+function longDate(dateKey: string) {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const weekday = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][date.getDay()];
+  const month = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][m - 1];
+  return `${weekday} ${d} ${month} ${y}`;
+}
+
+/** The job confirmation (or "booking updated") email, written for the owner to send. */
+export function jobEmailText(job: Job, clientName: string, updated: boolean) {
+  const business = businessStore.get()?.businessName.trim() || 'us';
+  const heading = updated ? 'Your booking has been updated' : 'Your job is confirmed';
+  const intro = updated
+    ? `The date or time of your booking with ${business} has changed. Here are the new details:`
+    : `Thanks for choosing ${business}. Your job is booked in. Here are the details:`;
+  const work = job.description.trim() ? `\n\nWork to be done:\n${job.description.trim()}` : '';
+  return {
+    subject: `${heading} - ${business}`,
+    body:
+      `Hi ${clientName.trim() || 'there'},\n\n${intro}\n\n` +
+      `Date: ${longDate(job.date)}\nTime: ${format12h(job.start)} - ${format12h(job.end)}\n` +
+      `Address: ${job.address || '-'}\nJob: ${job.title}${work}\n\n` +
+      `If you need to change anything, just reply to this email.\n\nThanks,\n${business}`,
+  };
+}
+
+/** Opens the owner's email app with the job's details written, ready to send to the client. */
+export function emailJobDetails(job: Job, client: { name: string; email: string }, updated: boolean) {
+  return openEmailDraft(
+    { to: client.email.trim(), ...jobEmailText(job, client.name, updated) },
+    businessStore.get()?.emailApp ?? 'other',
+  );
 }
 
 /** Jobs still needing staff, soonest first (for the Roster's "Select Job"). */

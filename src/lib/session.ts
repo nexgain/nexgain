@@ -10,7 +10,7 @@ import { clockStore, loadClockSessions } from '@/data/clock-records';
 import { currentEmployeeStore } from '@/data/current-employee';
 import { invitesStore, loadInvites } from '@/data/employee-invites';
 import { expensesStore, loadExpenses } from '@/data/finance';
-import { clearDocs, loadDocs } from '@/data/invoices';
+import { applyRemoteDoc, clearBusinessPayment, clearDocs, loadBusinessPayment, loadDocs } from '@/data/invoices';
 import { employeesStore, isContractor, loadOwnProfile, loadTeam } from '@/data/employees';
 import { jobReportsStore } from '@/data/job-reports';
 import { clearNotifications, loadNotifications, subscribeToNotifications } from '@/data/notifications';
@@ -59,6 +59,7 @@ async function load(userId: string) {
       loadTeam(businessId, businessName),
       loadInvites().catch(() => {}),
       loadDocs().catch(() => {}),
+      loadBusinessPayment().catch(() => {}),
       loadExpenses().catch(() => {}),
       loadNotifications(null),
       loadShifts().catch(() => {}),
@@ -84,6 +85,10 @@ async function load(userId: string) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs', filter }, refresh(loadJobs))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_events', filter }, refresh(loadEvents))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'contractor_invoices', filter }, refresh(loadContractorInvoices))
+      // Customers accepting or declining quotes online, and quotes being booked as jobs.
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_docs', filter }, (payload) =>
+        applyRemoteDoc(payload.eventType, (payload.eventType === 'DELETE' ? payload.old : payload.new) as Parameters<typeof applyRemoteDoc>[1]),
+      )
       .subscribe();
     stopListening.push(() => {
       supabase.removeChannel(live);
@@ -149,6 +154,7 @@ export function endSession() {
   employeesStore.set([]);
   invitesStore.set([]);
   clearDocs();
+  clearBusinessPayment();
   expensesStore.set([]);
   qualificationsStore.set({});
   currentEmployeeStore.set(null);

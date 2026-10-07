@@ -14,8 +14,8 @@ import { formatShortDate } from '@/data/employee-roster';
 import { useEmployees } from '@/data/employees';
 import { docTotals, lineAmount, useDocs } from '@/data/invoices';
 import {
+  emailJobDetails,
   rescheduleJob,
-  sendJobUpdateEmail,
   setJobStatus,
   updateJobNotes,
   useJobs,
@@ -84,14 +84,16 @@ export default function JobDetailScreen() {
 
   async function emailUpdate() {
     setAskEmail(false);
+    // Let the pop-up finish closing; iOS can't open the email screen over it.
+    await new Promise((resolve) => setTimeout(resolve, 400));
     setBusy(true);
-    const result = await sendJobUpdateEmail(job!.id);
-    setBusy(false);
-    setMessage(
-      result.error
-        ? { tone: 'error', text: result.error }
-        : { tone: 'ok', text: `Updated confirmation sent to ${contact.email}.` },
-    );
+    try {
+      await emailJobDetails(job!, contact, true);
+    } catch {
+      setMessage({ tone: 'error', text: "Couldn't open your email app. Please try again." });
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function changeStatus(status: JobStatus) {

@@ -1,0 +1,323 @@
+<!doctype html>
+<!--
+  NexGain customer quote page. Hosted free on GitHub Pages (this repo's docs/ folder):
+  https://nexgain.github.io/nexgain/quote/?q=<secret code>
+
+  This page holds no business data and no keys. It asks the Supabase Edge Function
+  "quote-page" for the one quote matching the secret code in the link, and sends
+  the customer's Accept / Decline back to it. All checks happen on the server.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light">
+  <title>Your quote</title>
+  <style>
+    :root {
+      --page: #f3f4f6;
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --brand: #2563eb;
+      --green: #16a34a;
+      --green-soft: #ecfdf3;
+      --red: #dc2626;
+      --red-soft: #fef2f2;
+      --amber: #b45309;
+      --amber-soft: #fffbeb;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--text);
+      font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    main { max-width: 640px; margin: 0 auto; padding: 16px 16px calc(32px + env(safe-area-inset-bottom)); }
+    .card { background: var(--card); border-radius: 16px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .card + .card { margin-top: 12px; }
+    .biz { display: flex; align-items: center; gap: 14px; }
+    .biz img { width: 56px; height: 56px; object-fit: contain; border-radius: 10px; flex: none; background: #fff; }
+    .biz-name { font-size: 19px; font-weight: 700; line-height: 1.25; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; }
+    h1 { font-size: 24px; margin: 0; color: var(--brand); }
+    .badge { font-size: 13px; font-weight: 700; padding: 4px 12px; border-radius: 999px; white-space: nowrap; }
+    .badge.open { background: var(--amber-soft); color: var(--amber); }
+    .badge.accepted { background: var(--green-soft); color: var(--green); }
+    .badge.declined { background: var(--red-soft); color: var(--red); }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 16px; }
+    .meta div span { display: block; }
+    .meta .label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    .meta .value { font-weight: 600; }
+    .desc { margin: 16px 0 0; white-space: pre-line; }
+    h2 { font-size: 15px; margin: 0 0 4px; }
+    .item { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+    .item-name { font-weight: 600; overflow-wrap: anywhere; }
+    .item-amount { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .totals { margin-top: 12px; }
+    .totals div { display: flex; justify-content: space-between; padding: 4px 0; font-variant-numeric: tabular-nums; }
+    .totals .grand { font-size: 20px; font-weight: 800; border-top: 2px solid var(--text); margin-top: 6px; padding-top: 10px; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+    button {
+      font: inherit; font-weight: 700; font-size: 17px; border-radius: 12px; padding: 15px 16px;
+      min-height: 52px; cursor: pointer; border: 2px solid transparent;
+    }
+    button:disabled { opacity: .6; cursor: default; }
+    .accept { background: var(--green); color: #fff; }
+    .decline { background: #fff; color: var(--red); border-color: var(--red); }
+    .result { display: flex; gap: 12px; align-items: flex-start; border-radius: 12px; padding: 16px; margin-top: 20px; font-weight: 600; }
+    .result.accepted { background: var(--green-soft); color: #14532d; }
+    .result.declined { background: var(--red-soft); color: #7f1d1d; }
+    .result .icon { font-size: 20px; line-height: 1.2; }
+    .error { background: var(--red-soft); color: #7f1d1d; border-radius: 12px; padding: 12px 14px; margin-top: 16px; font-size: 15px; }
+    .contact { text-align: center; margin-top: 16px; }
+    .contact a { color: var(--brand); }
+    .center { text-align: center; padding: 48px 20px; }
+    .spinner { width: 32px; height: 32px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--brand); margin: 0 auto 12px; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .backdrop { position: fixed; inset: 0; background: rgba(17,24,39,.5); display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .dialog { background: #fff; border-radius: 16px; padding: 22px; width: 100%; max-width: 380px; }
+    .dialog p { margin: 0 0 18px; font-size: 18px; font-weight: 700; }
+    .dialog .actions { margin-top: 0; }
+    .cancel { background: #f3f4f6; color: var(--text); }
+    .yes-decline { background: var(--red); color: #fff; }
+    [hidden] { display: none !important; }
+    @media (max-width: 360px) { .actions { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div id="loading" class="card center">
+      <div class="spinner" aria-hidden="true"></div>
+      <div class="muted">Loading your quote…</div>
+    </div>
+
+    <div id="missing" class="card center" hidden>
+      <h2>This quote can't be found</h2>
+      <p class="muted">The link may be incomplete. Please check you opened the whole link from the email, or contact the business that sent it.</p>
+    </div>
+
+    <div id="quote" hidden>
+      <section class="card">
+        <div class="biz">
+          <img id="logo" alt="" hidden>
+          <div>
+            <div id="biz-name" class="biz-name"></div>
+            <div id="biz-abn" class="muted"></div>
+          </div>
+        </div>
+        <div class="title-row">
+          <h1 id="title"></h1>
+          <span id="badge" class="badge"></span>
+        </div>
+        <div class="meta">
+          <div><span class="label">Prepared for</span><span id="customer" class="value"></span></div>
+          <div><span class="label">Date</span><span id="date" class="value"></span></div>
+          <div id="valid-wrap"><span class="label">Valid until</span><span id="valid" class="value"></span></div>
+        </div>
+        <p id="desc" class="desc muted" hidden></p>
+      </section>
+
+      <section class="card">
+        <h2>Items</h2>
+        <div id="items"></div>
+        <div class="totals">
+          <div><span>Subtotal</span><span id="subtotal"></span></div>
+          <div><span id="gst-label"></span><span id="gst"></span></div>
+          <div class="grand"><span>Total</span><span id="total"></span></div>
+        </div>
+
+        <div id="actions" class="actions" hidden>
+          <button id="accept" class="accept" type="button">Accept</button>
+          <button id="decline" class="decline" type="button">Decline</button>
+        </div>
+        <div id="error" class="error" role="alert" hidden></div>
+        <div id="result" class="result" role="status" hidden>
+          <span id="result-icon" class="icon" aria-hidden="true"></span>
+          <span id="result-text"></span>
+        </div>
+      </section>
+
+      <p id="contact" class="contact muted" hidden></p>
+    </div>
+  </main>
+
+  <div id="confirm" class="backdrop" role="dialog" aria-modal="true" aria-labelledby="confirm-text" hidden>
+    <div class="dialog">
+      <p id="confirm-text">Are you sure you want to decline this quote?</p>
+      <div class="actions">
+        <button id="confirm-cancel" class="cancel" type="button">Cancel</button>
+        <button id="confirm-yes" class="yes-decline" type="button">Yes, decline</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // The Supabase Edge Function that holds the data (the address is public; no keys here).
+    var API = 'https://pwxvaygxpxoaemjpricy.supabase.co/functions/v1/quote-page';
+
+    var code = new URLSearchParams(location.search).get('q') || '';
+    var busy = false;
+    var $ = function (id) { return document.getElementById(id); };
+
+    var money = new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' });
+    var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    function day(value) {
+      if (!value) return '';
+      var parts = String(value).slice(0, 10).split('-').map(Number);
+      return parts[2] + ' ' + MONTHS[parts[1] - 1] + ' ' + parts[0];
+    }
+    function text(id, value) { $(id).textContent = value; }
+    function show(id, visible) { $(id).hidden = !visible; }
+
+    function render(q) {
+      document.title = 'Quote ' + q.number.replace(/^[A-Za-z]+-/, '#') + ' from ' + q.business.name;
+      text('biz-name', q.business.name);
+      text('biz-abn', q.business.abn ? 'ABN ' + q.business.abn : '');
+      // Only pictures stored in the database itself are shown.
+      if (q.business.logo && /^data:image\/(png|jpe?g|webp);base64,/.test(q.business.logo)) {
+        $('logo').src = q.business.logo;
+        show('logo', true);
+      }
+      text('title', 'Quote ' + q.number.replace(/^[A-Za-z]+-/, '#'));
+      text('customer', q.customerName || '—');
+      text('date', day(q.createdAt));
+      text('valid', day(q.validUntil));
+      show('valid-wrap', !!q.validUntil);
+      text('desc', q.description || '');
+      show('desc', !!q.description);
+
+      var list = $('items');
+      list.textContent = '';
+      q.items.forEach(function (item) {
+        var row = document.createElement('div');
+        row.className = 'item';
+        var left = document.createElement('div');
+        var name = document.createElement('div');
+        name.className = 'item-name';
+        name.textContent = item.description || 'Item';
+        var detail = document.createElement('div');
+        detail.className = 'muted';
+        detail.textContent = item.qty + ' × ' + money.format(item.rate);
+        left.appendChild(name);
+        left.appendChild(detail);
+        var amount = document.createElement('div');
+        amount.className = 'item-amount';
+        amount.textContent = money.format(item.amount);
+        row.appendChild(left);
+        row.appendChild(amount);
+        list.appendChild(row);
+      });
+      text('subtotal', money.format(q.subtotal));
+      text('gst-label', q.gstRate > 0 ? 'GST (' + Math.round(q.gstRate * 100) + '%)' : 'GST');
+      text('gst', money.format(q.gst));
+      text('total', money.format(q.total));
+
+      var badge = $('badge');
+      badge.className = 'badge ' + q.state;
+      badge.textContent = q.state === 'accepted' ? 'Accepted' : q.state === 'declined' ? 'Declined' : 'Awaiting your reply';
+
+      // Once answered, the buttons are gone and the page just shows the result.
+      show('actions', q.state === 'open');
+      show('result', q.state !== 'open');
+      if (q.state === 'accepted') {
+        $('result').className = 'result accepted';
+        text('result-icon', '✓');
+        text('result-text', 'Thank you, the quote has been accepted.');
+      } else if (q.state === 'declined') {
+        $('result').className = 'result declined';
+        text('result-icon', '✕');
+        text('result-text', 'This quote has been declined.');
+      }
+
+      var contact = $('contact');
+      contact.textContent = '';
+      if (q.business.email) {
+        contact.appendChild(document.createTextNode('Questions? Contact ' + q.business.name + ' at '));
+        var a = document.createElement('a');
+        a.href = 'mailto:' + q.business.email;
+        a.textContent = q.business.email;
+        contact.appendChild(a);
+        show('contact', true);
+      }
+
+      show('loading', false);
+      show('missing', false);
+      show('quote', true);
+    }
+
+    function notFound() {
+      show('loading', false);
+      show('quote', false);
+      show('missing', true);
+    }
+
+    function load() {
+      if (!/^[A-Za-z0-9_-]{32}$/.test(code)) return notFound();
+      fetch(API + '?q=' + encodeURIComponent(code), { cache: 'no-store' })
+        .then(function (res) {
+          if (res.status === 404) return notFound();
+          if (!res.ok) throw new Error();
+          return res.json().then(render);
+        })
+        .catch(function () {
+          show('loading', false);
+          show('missing', true);
+          text('missing', '');
+          var p = document.createElement('p');
+          p.textContent = "We couldn't load your quote. Please check your internet connection and refresh the page.";
+          $('missing').appendChild(p);
+        });
+    }
+
+    function respond(action) {
+      if (busy) return;
+      busy = true;
+      show('error', false);
+      $('accept').disabled = true;
+      $('decline').disabled = true;
+      fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q: code, action: action }),
+      })
+        .then(function (res) {
+          if (!res.ok) throw new Error();
+          return res.json();
+        })
+        .then(render)
+        .catch(function () {
+          text('error', "Sorry, your answer couldn't be saved. Please check your internet connection and try again.");
+          show('error', true);
+        })
+        .finally(function () {
+          busy = false;
+          $('accept').disabled = false;
+          $('decline').disabled = false;
+        });
+    }
+
+    $('accept').addEventListener('click', function () { respond('accept'); });
+    $('decline').addEventListener('click', function () {
+      show('confirm', true);
+      $('confirm-cancel').focus();
+    });
+    $('confirm-cancel').addEventListener('click', function () { show('confirm', false); });
+    $('confirm-yes').addEventListener('click', function () {
+      show('confirm', false);
+      respond('decline');
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') show('confirm', false);
+    });
+
+    load();
+  </script>
+</body>
+</html>

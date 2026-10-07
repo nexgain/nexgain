@@ -1,6 +1,7 @@
 // Everything typed during owner sign-up. Held in memory while the owner moves
 // between steps (so going back never loses anything) and saved as the business
 // profile at the end. The password is never saved.
+import type { EmailApp } from '@/data/business';
 
 export type SelectedIndustry = {
   name: string;
@@ -36,6 +37,12 @@ export type SignupData = {
   gstRegistered: boolean;
   currency: string;
   trackGstInReports: boolean;
+  // Step 7
+  emailApp: EmailApp;
+  businessEmail: string;
+  bankAccountName: string;
+  bankBsb: string;
+  bankAccountNumber: string;
 };
 
 export const EMPTY_SIGNUP: SignupData = {
@@ -59,6 +66,11 @@ export const EMPTY_SIGNUP: SignupData = {
   gstRegistered: true,
   currency: 'AUD – Australian Dollar',
   trackGstInReports: true,
+  emailApp: 'gmail',
+  businessEmail: '',
+  bankAccountName: '',
+  bankBsb: '',
+  bankAccountNumber: '',
 };
 
 export type StepProps = {
@@ -74,6 +86,6 @@ export const STEP_NAMES = [
   'Services',
   'Subscription',
   'Financial Year',
-  'Connect Bank',
+  'Email & Bank',
   'Team & Payroll',
 ] as const;

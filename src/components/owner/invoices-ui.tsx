@@ -8,6 +8,7 @@ import {
   displayStatus,
   docTotals,
   gstLabel,
+  isQuoteExpired,
   type DocKind,
   type DocStatus,
   type ReceiptStatus,
@@ -38,7 +39,7 @@ const STATUS_TONE: Record<DocStatus, Tone> = {
   Accepted: 'green',
   Booked: 'blue',
   Overdue: 'red',
-  Expired: 'red',
+  Declined: 'red',
 };
 
 export function StatusPill({ status }: { status: DocStatus }) {
@@ -46,6 +47,17 @@ export function StatusPill({ status }: { status: DocStatus }) {
   return (
     <View style={[styles.pill, { backgroundColor: colors.background }]}>
       <Text style={[styles.pillText, { color: colors.text }]}>{status}</Text>
+    </View>
+  );
+}
+
+/** Small red tag on sent quotes past their "valid until" date (the customer can still accept). */
+export function ExpiredTag({ doc }: { doc: SalesDoc }) {
+  if (!isQuoteExpired(doc)) return null;
+  const colors = ToneColors.red;
+  return (
+    <View style={[styles.pill, { backgroundColor: colors.background }]}>
+      <Text style={[styles.receiptText, { color: colors.text }]}>Expired</Text>
     </View>
   );
 }
@@ -214,6 +226,7 @@ export function DocCard({ doc, onPress }: { doc: SalesDoc; onPress: () => void }
         <Text style={styles.docTotal}>{formatMoney(total)}</Text>
         <StatusPill status={displayStatus(doc)} />
         {doc.status === 'Paid' && <ReceiptLabel status={doc.receiptStatus} />}
+        <ExpiredTag doc={doc} />
       </View>
       <Icon name={OwnerIcons.chevron} color={C.textSecondary} size={14} />
     </Pressable>
