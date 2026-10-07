@@ -48,6 +48,8 @@ export const OWNER_TYPES = {
   job_completed: { category: 'Jobs', icon: ICONS.check, tone: 'green', actions: ['View full job details', 'Add note'] },
   quote_request: { category: 'Jobs', icon: ICONS.quote, tone: 'blue', actions: ['Create quote', 'Message customer'] },
   customer_message: { category: 'Jobs', icon: ICONS.chat, tone: 'blue', actions: ['Reply to customer'] },
+  quote_accepted: { category: 'Jobs', icon: ICONS.check, tone: 'green', actions: ['View quote'] },
+  quote_declined: { category: 'Jobs', icon: ICONS.quote, tone: 'red', actions: ['View quote'] },
   employee_late: { category: 'Employees', icon: ICONS.clock, tone: 'amber', actions: ['Message employee', 'Open roster'] },
   employee_added: { category: 'Employees', icon: ICONS.personAdd, tone: 'blue', actions: ['View employee'] },
   document_uploaded: { category: 'Employees', icon: ICONS.document, tone: 'purple', actions: ['View document'] },
@@ -93,6 +95,8 @@ type Base = {
   attachments?: Attachment[];
   /** Shift this notification is about. */
   relatedShift?: { date: string; title: string; subtitle?: string };
+  /** Quote or invoice this notification is about (opened when it's tapped). */
+  relatedDocId?: string;
 };
 
 export type OwnerNotification = Base & { audience: 'owner'; type: OwnerNotificationType };
@@ -162,6 +166,7 @@ type NotificationRow = {
   photos: string[] | null;
   attachments: Attachment[] | null;
   related_shift: { date: string; title: string; subtitle?: string } | null;
+  related_doc_id?: string | null;
   read: boolean;
   created_at: string;
 };
@@ -181,6 +186,7 @@ function fromRow(row: NotificationRow, employeeId: string | null): AppNotificati
     relatedShift: row.related_shift
       ? { date: row.related_shift.date, title: row.related_shift.title, subtitle: row.related_shift.subtitle ?? undefined }
       : undefined,
+    relatedDocId: row.related_doc_id ?? undefined,
   };
   return row.audience === 'owner'
     ? { ...base, audience: 'owner', type: row.type as OwnerNotificationType }

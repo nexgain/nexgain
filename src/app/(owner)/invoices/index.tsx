@@ -38,7 +38,7 @@ const SUMMARY = {
     { label: 'Total Quotes', status: null, tone: 'blue' },
     { label: 'Sent', status: 'Sent', tone: 'amber' },
     { label: 'Accepted', status: 'Accepted', tone: 'green' },
-    { label: 'Expired', status: 'Expired', tone: 'red' },
+    { label: 'Declined', status: 'Declined', tone: 'red' },
   ],
 } as const;
 

@@ -40,7 +40,9 @@ export default function OwnerNotificationDetail() {
   const actions: DetailAction[] = typeInfo(n).actions.map((label) => ({
     label,
     onPress:
-      ACTION_ROUTES[label] === '/roster'
+      label === 'View quote' && n.relatedDocId
+        ? () => router.navigate({ pathname: '/invoices/[id]', params: { id: n.relatedDocId! } })
+        : ACTION_ROUTES[label] === '/roster'
         ? openRoster
         : ACTION_ROUTES[label]
           ? () => router.navigate(ACTION_ROUTES[label])

@@ -1,13 +1,22 @@
-import * as MailComposer from 'expo-mail-composer';
+import { File, Paths } from 'expo-file-system';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { Linking, Platform } from 'react-native';
+import { Platform } from 'react-native';
 
 import { formatShortDate } from '@/data/employee-roster';
 import { businessStore, type BusinessProfile } from '@/data/business';
-import { docTotals, gstLabel, lineAmount, type BusinessPayment, type SalesDoc } from '@/data/invoices';
+import {
+  docNumberLabel,
+  docTotals,
+  gstLabel,
+  lineAmount,
+  quoteLinkToken,
+  type BusinessPayment,
+  type SalesDoc,
+} from '@/data/invoices';
 import { formatMoney } from '@/data/payroll';
 import { fromDateKey } from '@/data/shifts';
+import { openEmailDraft, type EmailResult } from '@/lib/email';
 
 function escape(text: string) {
   return text
@@ -62,9 +71,10 @@ export function buildDocHtml(doc: SalesDoc, payment: BusinessPayment, { receipt 
       <div>Amount paid: ${formatMoney(total)}<br>Date paid: ${paidDateText(doc)}<br>
       Reference: ${escape(doc.paymentReference || doc.number)}</div>`
     : doc.kind === 'invoice'
-      ? `<h3>Payment information</h3>
-      <div>Bank: ${escape(payment.bank || '—')}<br>BSB: ${escape(payment.bsb || '—')}<br>
-      Account: ${escape(payment.account || '—')}<br>Reference: ${escape(doc.paymentReference || doc.number)}</div>`
+      ? `<h3>Payment details</h3>
+      <div>Account name: ${escape(payment.accountName || '—')}<br>BSB: ${escape(payment.bsb || '—')}<br>
+      Account number: ${escape(payment.account || '—')}<br>${payment.bank ? `Bank: ${escape(payment.bank)}<br>` : ''}
+      Reference: ${escape(doc.paymentReference || doc.number)}</div>`
       : '';
   const rows = doc.items
     .map(
@@ -129,17 +139,34 @@ export function buildDocHtml(doc: SalesDoc, payment: BusinessPayment, { receipt 
   </body></html>`;
 }
 
+/** Creates the PDF, named e.g. "Quote-0001.pdf" (what the customer sees as the attachment). */
+async function makePdf(doc: SalesDoc, payment: BusinessPayment, options: HtmlOptions = {}) {
+  const { uri } = await Print.printToFileAsync({ html: buildDocHtml(doc, payment, options) });
+  const kind = options.receipt ? 'Receipt' : doc.kind === 'invoice' ? 'Invoice' : 'Quote';
+  const name = `${kind}-${doc.number.replace(/^[A-Za-z]+-/, '').replace(/[^\w-]/g, '')}.pdf`;
+  try {
+    // Make a copy with the nice name and attach that copy. (The printed file stays
+    // where it is, so there is always a real file to fall back on.)
+    const named = new File(Paths.cache, name);
+    if (named.exists) named.delete();
+    new File(uri).copy(named);
+    return named.exists ? named.uri : uri;
+  } catch {
+    // Keep the printed file's own name if it can't be renamed.
+    return uri;
+  }
+}
+
 /**
- * Phone: creates a PDF and opens the share sheet (Save to Files, AirDrop, email...).
+ * Phone: creates a PDF and opens the share sheet (Save to Files, AirDrop...).
  * Web: opens the browser print dialog, where it can be saved as a PDF.
  */
 export async function downloadPdf(doc: SalesDoc, payment: BusinessPayment) {
-  const html = buildDocHtml(doc, payment);
   if (Platform.OS === 'web') {
-    await Print.printToFileAsync({ html });
+    await Print.printToFileAsync({ html: buildDocHtml(doc, payment) });
     return;
   }
-  const { uri } = await Print.printToFileAsync({ html });
+  const uri = await makePdf(doc, payment);
   await Sharing.shareAsync(uri, {
     mimeType: 'application/pdf',
     UTI: 'com.adobe.pdf',
@@ -147,68 +174,56 @@ export async function downloadPdf(doc: SalesDoc, payment: BusinessPayment) {
   });
 }
 
-/**
- * Hands the document to the phone's share sheet (email, SMS...) as a PDF. On web,
- * opens an email draft to the client instead, since browsers can't attach files.
- * Nothing is sent from a server until an email service is connected.
- */
-export async function sendDoc(doc: SalesDoc, payment: BusinessPayment) {
-  if (Platform.OS === 'web') {
-    const { total } = docTotals(doc.items, doc.gstRate);
-    const kind = doc.kind === 'invoice' ? 'Invoice' : 'Quote';
-    const subject = encodeURIComponent(`${kind} ${doc.number}`);
-    const body = encodeURIComponent(`Hi${doc.client.name ? ` ${doc.client.name}` : ''},\n\nPlease find ${kind.toLowerCase()} ${doc.number} for ${formatMoney(total)} (inc. GST).\n`);
-    await Linking.openURL(`mailto:${encodeURIComponent(doc.client.email)}?subject=${subject}&body=${body}`);
-    return;
-  }
-  await downloadPdf(doc, payment);
+const emailApp = () => businessStore.get()?.emailApp ?? 'other';
+const businessName = () => businessStore.get()?.businessName.trim() || 'us';
+const greeting = (doc: SalesDoc) => `Hi ${doc.client.name.trim() || 'there'},`;
+
+/** Address of the customer's quote page for this link code. */
+export function quotePageLink(token: string) {
+  const base = process.env.EXPO_PUBLIC_QUOTE_PAGE_URL;
+  if (!base) throw new Error("The quote page address isn't set up (EXPO_PUBLIC_QUOTE_PAGE_URL in .env).");
+  return `${base.replace(/\/?$/, '/')}?q=${encodeURIComponent(token)}`;
 }
 
-/**
- * What happened when sending a receipt:
- * - "sent": the mail app confirmed it was sent (iPhone only)
- * - "not_sent": the email was cancelled or saved as a draft
- * - "ask": we can't tell (Android mail, share sheet, web), so ask the user
- */
-export type ReceiptSendResult = 'sent' | 'not_sent' | 'ask';
+/** The quote email: PDF attached, with a link to the customer's page to accept or decline. */
+export function quoteEmailText(doc: SalesDoc, link: string) {
+  const business = businessName();
+  return {
+    subject: `Quote ${docNumberLabel(doc)} from ${business}`,
+    body: `${greeting(doc)}\n\nPlease find attached your quote from ${business}. To view and accept or decline this quote, tap the link below:\n\n${link}\n\nThank you!`,
+  };
+}
 
-/**
- * Emails the client a receipt PDF for a paid invoice. Uses the phone's mail app when
- * available, otherwise the share sheet (Gmail, Outlook...). On web, opens an email
- * draft, since browsers can't attach files.
- */
-export async function sendReceipt(doc: SalesDoc, payment: BusinessPayment): Promise<ReceiptSendResult> {
-  const businessName = businessStore.get()?.businessName.trim() ?? '';
+/** The invoice email: PDF attached (with the bank details), no link. */
+export function invoiceEmailText(doc: SalesDoc) {
+  const business = businessName();
+  return {
+    subject: `Invoice ${docNumberLabel(doc)} from ${business}`,
+    body: `${greeting(doc)}\n\nPlease find attached your invoice from ${business}. Payment details are included on the invoice.\n\nThank you!`,
+  };
+}
+
+/** Creates the quote's link and PDF, then opens the owner's email app ready to send. */
+export async function emailQuote(doc: SalesDoc, payment: BusinessPayment): Promise<EmailResult> {
+  const link = quotePageLink(await quoteLinkToken(doc.id));
+  const attachmentUri = Platform.OS === 'web' ? undefined : await makePdf(doc, payment);
+  return openEmailDraft({ to: doc.client.email.trim(), ...quoteEmailText(doc, link), attachmentUri }, emailApp());
+}
+
+/** Creates the invoice PDF, then opens the owner's email app ready to send. */
+export async function emailInvoice(doc: SalesDoc, payment: BusinessPayment): Promise<EmailResult> {
+  const attachmentUri = Platform.OS === 'web' ? undefined : await makePdf(doc, payment);
+  return openEmailDraft({ to: doc.client.email.trim(), ...invoiceEmailText(doc), attachmentUri }, emailApp());
+}
+
+
+/** Emails the client a receipt PDF for a paid invoice, from the owner's email app. */
+export async function sendReceipt(doc: SalesDoc, payment: BusinessPayment): Promise<EmailResult> {
+  const business = businessStore.get()?.businessName.trim() ?? '';
   const { total } = docTotals(doc.items, doc.gstRate);
   const firstName = doc.client.name.trim().split(/\s+/)[0] ?? '';
-  const subject = `Receipt for Invoice ${doc.number}${businessName ? ` - ${businessName}` : ''}`;
-  const body = `Hi${firstName ? ` ${firstName}` : ''}, thanks for your payment of ${formatMoney(total)}. Your receipt is attached.\n\nKind regards,\n${businessName}`;
-
-  if (Platform.OS === 'web') {
-    await Linking.openURL(
-      `mailto:${encodeURIComponent(doc.client.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
-    );
-    return 'ask';
-  }
-
-  const { uri } = await Print.printToFileAsync({ html: buildDocHtml(doc, payment, { receipt: true }) });
-
-  if (await MailComposer.isAvailableAsync()) {
-    const result = await MailComposer.composeAsync({
-      recipients: doc.client.email ? [doc.client.email] : [],
-      subject,
-      body,
-      attachments: [uri],
-    });
-    // Android always reports "sent", even when cancelled, so only trust it on iPhone.
-    if (Platform.OS !== 'ios') return 'ask';
-    return result.status === MailComposer.MailComposerStatus.SENT ? 'sent' : 'not_sent';
-  }
-
-  await Sharing.shareAsync(uri, {
-    mimeType: 'application/pdf',
-    UTI: 'com.adobe.pdf',
-    dialogTitle: subject,
-  });
-  return 'ask';
+  const subject = `Receipt for Invoice ${doc.number}${business ? ` - ${business}` : ''}`;
+  const body = `Hi${firstName ? ` ${firstName}` : ''}, thanks for your payment of ${formatMoney(total)}. Your receipt is attached.\n\nKind regards,\n${business}`;
+  const attachmentUri = Platform.OS === 'web' ? undefined : await makePdf(doc, payment, { receipt: true });
+  return openEmailDraft({ to: doc.client.email.trim(), subject, body, attachmentUri }, emailApp());
 }

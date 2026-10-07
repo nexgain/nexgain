@@ -11,7 +11,7 @@ import { loadEvents } from '@/data/calendar';
 import { loadClients } from '@/data/clients';
 import { useCurrentEmployee } from '@/data/current-employee';
 import { loadDocs, useDocs, type SalesDoc } from '@/data/invoices';
-import { confirmJob, loadJobs } from '@/data/jobs';
+import { confirmJob, emailJobDetails, loadJobs } from '@/data/jobs';
 import { fromDateKey, toDateKey } from '@/data/shifts';
 import { toMinutes } from '@/data/time';
 
@@ -25,7 +25,7 @@ function workSummary(quote: SalesDoc) {
   return [quote.description.trim(), items.join('\n')].filter(Boolean).join('\n\n');
 }
 
-// Book an accepted quote in as a job and email the client a confirmation.
+// Book an accepted quote in as a job, then email the client a confirmation from the owner's email app.
 export default function ConfirmJobScreen() {
   const me = useCurrentEmployee();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -77,16 +77,18 @@ export default function ConfirmJobScreen() {
     if (hasErrors || busy) return;
     setBusy(true);
     const result = await confirmJob(quote!.id, { ...form, date: toDateKey(form.date) });
-    if (result.error || !result.jobId) {
+    if (result.error || !result.job) {
       setBusy(false);
       setError(result.error ?? 'Something went wrong. Nothing was booked; please try again.');
       return;
     }
     // Show the new job, its calendar event and the Booked quote straight away.
     await Promise.all([loadJobs(), loadEvents(), loadClients(), loadDocs()]).catch(() => {});
+    // The job is booked; now the confirmation opens in the owner's email app, ready to send.
+    await emailJobDetails(result.job, { name: form.clientName, email: form.clientEmail }, false).catch(() => {});
     setBusy(false);
     router.back();
-    router.navigate({ pathname: '/job/[id]', params: { id: result.jobId } });
+    router.navigate({ pathname: '/job/[id]', params: { id: result.job.id } });
   }
 
   if (quote.status === 'Booked') {
@@ -104,7 +106,7 @@ export default function ConfirmJobScreen() {
     <OwnerScreen>
       <ScreenHeader title="Confirm Job" />
       <Text style={styles.muted}>
-        Quote {quote.number}. Pick the job date and times, check the details, then send the client a confirmation email.
+        Quote {quote.number}. Pick the job date and times, check the details, then book it. Your email app then opens with the client&apos;s confirmation written, ready to send.
         The job is added to your Jobs page and Calendar at the same time.
       </Text>
 
@@ -169,10 +171,10 @@ export default function ConfirmJobScreen() {
       {busy ? (
         <View style={styles.busy}>
           <ActivityIndicator color={C.accent} />
-          <Text style={styles.muted}>Booking the job and sending the email…</Text>
+          <Text style={styles.muted}>Booking the job…</Text>
         </View>
       ) : (
-        <Button label="Send Confirmation" icon={{ ios: 'paperplane.fill', android: 'send', web: 'send' }} onPress={send} />
+        <Button label="Book Job & Email Client" icon={{ ios: 'paperplane.fill', android: 'send', web: 'send' }} onPress={send} />
       )}
     </OwnerScreen>
   );

@@ -1,14 +1,109 @@
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { comingSoon } from '@/components/auth/auth-screen';
-import { Button, fieldStyles, Icon, Note, SignupColors as C } from '@/components/signup/fields';
+import { Button, Field, fieldStyles, Icon, Input, Note, SignupColors as C } from '@/components/signup/fields';
 import type { StepProps } from '@/components/signup/types';
+import { EMAIL_APPS } from '@/data/business';
+import { formatBsb } from '@/components/employee-signup/types';
+import { emailAppHint } from '@/lib/email';
 
 const ACCOUNTING = ['QuickBooks', 'Xero', 'MYOB', 'Other'];
 
-export function StepConnect({ onNext }: StepProps) {
+const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
+
+export function StepConnect({ data, update, onNext }: StepProps) {
+  const [tried, setTried] = useState(false);
+  const bsbDigits = data.bankBsb.replace(/\D/g, '');
+  const errors = {
+    businessEmail: !isEmail(data.businessEmail) && 'Enter the email address you send quotes and invoices from.',
+    bsb: bsbDigits.length > 0 && bsbDigits.length !== 6 && 'A BSB has 6 digits.',
+  };
+
   return (
     <>
+      <Text style={styles.sectionTitle}>Sending quotes & invoices</Text>
+      <View style={fieldStyles.card}>
+        <Text style={styles.cardText}>
+          Quotes, invoices and receipts open in your own email app, written and with the PDF attached. You just press
+          Send.
+        </Text>
+        <Field label="Which email app do you use?" hint={emailAppHint(data.emailApp)}>
+          <View style={styles.choices} accessibilityRole="radiogroup">
+            {EMAIL_APPS.map((app) => {
+              const selected = data.emailApp === app.value;
+              return (
+                <Pressable
+                  key={app.value}
+                  onPress={() => update({ emailApp: app.value })}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  style={({ pressed }) => [styles.choice, selected && styles.choiceSelected, pressed && styles.pressed]}>
+                  <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>{app.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Field>
+        <Field label="Business email address" error={tried && errors.businessEmail}>
+          <Input
+            value={data.businessEmail}
+            onChangeText={(businessEmail) => update({ businessEmail })}
+            placeholder="e.g. hello@smithcarpentry.com.au"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            accessibilityLabel="Business email address"
+            icon={{ ios: 'envelope', android: 'mail', web: 'mail' }}
+            hasError={tried && !!errors.businessEmail}
+          />
+        </Field>
+      </View>
+
+      <Text style={styles.sectionTitle}>
+        Bank details for invoices <Text style={styles.optional}>(optional)</Text>
+      </Text>
+      <View style={fieldStyles.card}>
+        <Text style={styles.cardText}>Printed on your invoices so customers can pay you by bank transfer.</Text>
+        <Field label="Account name">
+          <Input
+            value={data.bankAccountName}
+            onChangeText={(bankAccountName) => update({ bankAccountName })}
+            placeholder="e.g. Smith Carpentry Pty Ltd"
+            autoCapitalize="words"
+            accessibilityLabel="Account name"
+          />
+        </Field>
+        <View style={fieldStyles.row}>
+          <View style={fieldStyles.flex}>
+            <Field label="BSB" error={tried && errors.bsb}>
+              <Input
+                value={data.bankBsb}
+                onChangeText={(bankBsb) => update({ bankBsb: formatBsb(bankBsb) })}
+                placeholder="000-000"
+                keyboardType="number-pad"
+                accessibilityLabel="BSB"
+                hasError={tried && !!errors.bsb}
+              />
+            </Field>
+          </View>
+          <View style={fieldStyles.flex}>
+            <Field label="Account number">
+              <Input
+                value={data.bankAccountNumber}
+                onChangeText={(bankAccountNumber) => update({ bankAccountNumber: bankAccountNumber.replace(/[^\d\s-]/g, '') })}
+                placeholder="12345678"
+                keyboardType="number-pad"
+                accessibilityLabel="Account number"
+              />
+            </Field>
+          </View>
+        </View>
+      </View>
+
+      <Text style={styles.sectionTitle}>
+        Bank connection <Text style={styles.optional}>(optional)</Text>
+      </Text>
       <View style={fieldStyles.card}>
         <View style={styles.headerRow}>
           <View style={styles.bigIcon}>
@@ -59,8 +154,15 @@ export function StepConnect({ onNext }: StepProps) {
         ))}
       </View>
 
-      <Note>You can connect these later from Integrations. Nothing is connected yet.</Note>
-      <Button label="Next" arrow onPress={onNext} />
+      <Note>You can change your email and bank details later in Business Profile, and connect apps from Integrations.</Note>
+      <Button
+        label="Next"
+        arrow
+        onPress={() => {
+          setTried(true);
+          if (!errors.businessEmail && !errors.bsb) onNext();
+        }}
+      />
     </>
   );
 }
@@ -170,5 +272,30 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.7,
+  },
+  choices: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  choice: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.field,
+  },
+  choiceSelected: {
+    borderColor: C.primary,
+    backgroundColor: C.primarySoft,
+  },
+  choiceText: {
+    color: C.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  choiceTextSelected: {
+    color: C.primary,
   },
 });

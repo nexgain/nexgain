@@ -31,10 +31,22 @@ export type BusinessProfile = {
   trackGstInReports: boolean;
   bankConnected: boolean;
   accountingSoftware: string | null;
+  /** Email app quotes and invoices are sent from. */
+  emailApp: EmailApp;
+  /** Address customers see and reply to (falls back to the login email). */
+  businessEmail: string;
   /** Code employees will use to join this business. */
   inviteCode: string;
   createdAt: string;
 };
+
+export type EmailApp = 'gmail' | 'outlook' | 'other';
+
+export const EMAIL_APPS: { value: EmailApp; label: string }[] = [
+  { value: 'gmail', label: 'Gmail' },
+  { value: 'outlook', label: 'Outlook' },
+  { value: 'other', label: 'Other' },
+];
 
 type BusinessRow = {
   id: string;
@@ -54,6 +66,8 @@ type BusinessRow = {
   gst_registered: boolean;
   currency: string;
   track_gst_in_reports: boolean;
+  email_app?: EmailApp;
+  business_email?: string;
   invite_code: string;
   created_at: string;
 };
@@ -81,6 +95,8 @@ export function fromRow(row: BusinessRow): BusinessProfile {
     // Not connected yet (no bank / accounting integrations exist).
     bankConnected: false,
     accountingSoftware: null,
+    emailApp: row.email_app ?? 'other',
+    businessEmail: row.business_email ?? '',
     inviteCode: row.invite_code,
     createdAt: row.created_at,
   };
@@ -105,6 +121,8 @@ function toColumns(p: Partial<BusinessProfile>) {
   if (p.gstRegistered !== undefined) cols.gst_registered = p.gstRegistered;
   if (p.currency !== undefined) cols.currency = p.currency;
   if (p.trackGstInReports !== undefined) cols.track_gst_in_reports = p.trackGstInReports;
+  if (p.emailApp !== undefined) cols.email_app = p.emailApp;
+  if (p.businessEmail !== undefined) cols.business_email = p.businessEmail;
   return cols;
 }
 
@@ -141,7 +159,14 @@ export async function createBusinessOnline(profile: Omit<BusinessProfile, 'id' |
     },
   });
   if (error) throw error;
-  const saved = fromRow(data as BusinessRow);
+  const created = fromRow(data as BusinessRow);
+  // The email settings aren't part of create_business, so save them straight after.
+  const { error: emailError } = await supabase
+    .from('businesses')
+    .update({ email_app: profile.emailApp, business_email: profile.businessEmail })
+    .eq('id', created.id);
+  if (emailError) console.warn('Could not save email settings:', emailError.message);
+  const saved = { ...created, emailApp: profile.emailApp, businessEmail: profile.businessEmail };
   businessStore.set(saved);
   return saved;
 }
@@ -175,6 +200,11 @@ export async function regenerateInviteCode() {
   const code = data as string;
   businessStore.set((b) => (b ? { ...b, inviteCode: code } : b));
   return code;
+}
+
+/** The address quotes and invoices come from: the business email, or the login email. */
+export function businessEmailAddress(profile: BusinessProfile | null) {
+  return profile?.businessEmail.trim() || profile?.email || '';
 }
 
 export function ownerFirstName(profile: BusinessProfile | null) {

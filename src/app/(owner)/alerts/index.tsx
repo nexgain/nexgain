@@ -12,6 +12,7 @@ import { ScreenHeader } from '@/components/owner/invoices-ui';
 import { OwnerScreen } from '@/components/owner/ui';
 import {
   groupByDate,
+  markRead,
   matchesFilter,
   matchesSearch,
   OWNER_FILTERS,
@@ -45,7 +46,15 @@ export default function OwnerNotificationsScreen() {
         <NotificationGroups
           groups={groups}
           palette={OWNER_PALETTE}
-          onOpen={(n) => router.push({ pathname: '/alerts/[id]', params: { id: n.id } })}
+          onOpen={(n) => {
+            // A customer accepting or declining a quote opens that quote.
+            if (n.relatedDocId) {
+              markRead(n.id);
+              router.push({ pathname: '/invoices/[id]', params: { id: n.relatedDocId } });
+            } else {
+              router.push({ pathname: '/alerts/[id]', params: { id: n.id } });
+            }
+          }}
         />
       )}
     </OwnerScreen>
