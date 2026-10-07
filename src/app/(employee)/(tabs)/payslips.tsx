@@ -1,34 +1,91 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { router } from 'expo-router';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Card, EmployeeScreen, Icon, IconBadge, Icons, ListRow } from '@/components/employee/ui';
+import { Card, EmployeeScreen, Icon, IconBadge, Icons } from '@/components/employee/ui';
 import { EmployeeColors as C } from '@/constants/employee-theme';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
+import { useCurrentEmployee } from '@/data/current-employee';
 import { formatShortDate } from '@/data/employee-roster';
-import { formatCurrency, usePayslips } from '@/data/employee-payslips';
+import { formatCurrency, usePayslipViews, type PayslipView } from '@/data/employee-payslips';
+
+const TABS = ['Payslips', 'Payment History'] as const;
+type Tab = (typeof TABS)[number];
 
 export default function PayslipsScreen() {
-  const payslips = usePayslips();
+  const payslips = usePayslipViews();
+  const me = useCurrentEmployee();
+  const [tab, setTab] = useState<Tab>('Payslips');
+
+  const open = (p: PayslipView) => router.push({ pathname: '/payslip/[id]', params: { id: p.id } });
 
   return (
     <EmployeeScreen title="Payslips">
-      {payslips.length > 0 ? (
-        <Card>
-          {payslips.map((payslip, i) => (
-            <ListRow
-              key={payslip.id}
-              icon={<IconBadge name={Icons.payslip} />}
-              title={formatShortDate(payslip.payDate)}
-              subtitle={payslip.label}
-              right={<Text style={styles.amount}>{formatCurrency(payslip.amount)}</Text>}
-              showDivider={i > 0}
-            />
-          ))}
-        </Card>
-      ) : (
+      <Text style={styles.subtitle}>View and download your payslips</Text>
+
+      <View style={styles.toggle} accessibilityRole="tablist">
+        {TABS.map((t) => {
+          const selected = t === tab;
+          return (
+            <Pressable
+              key={t}
+              onPress={() => setTab(t)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              style={[styles.toggleTab, selected && styles.toggleTabSelected]}>
+              <Text style={[styles.toggleText, selected && styles.toggleTextSelected]}>{t}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {payslips.length === 0 ? (
         <Card style={styles.emptyCard}>
           <IconBadge name={Icons.payslip} />
           <Text style={styles.emptyTitle}>No payslips yet</Text>
           <Text style={styles.emptyBody}>Your payslips will appear here once you&apos;ve been paid.</Text>
+        </Card>
+      ) : tab === 'Payslips' ? (
+        <View style={styles.list}>
+          {payslips.map((p) => (
+            <Pressable
+              key={p.id}
+              onPress={() => open(p)}
+              accessibilityRole="button"
+              accessibilityLabel={`Payslip ${p.rangeLabel}, ${formatCurrency(p.net)}`}
+              style={({ pressed }) => [styles.payCard, pressed && styles.pressed]}>
+              <IconBadge name={Icons.payslip} />
+              <View style={styles.flex}>
+                <Text style={styles.range}>{p.rangeLabel}</Text>
+                <View style={styles.metaRow}>
+                  <Text style={styles.meta}>{p.frequency}</Text>
+                  <View style={styles.paidBadge}>
+                    <Text style={styles.paidText}>Paid</Text>
+                  </View>
+                </View>
+              </View>
+              <Text style={styles.amount}>{formatCurrency(p.net)}</Text>
+              <Icon name={Icons.chevron} color={C.textMuted} size={14} />
+            </Pressable>
+          ))}
+        </View>
+      ) : (
+        <Card>
+          {payslips.map((p, i) => (
+            <Pressable
+              key={p.id}
+              onPress={() => open(p)}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.historyRow, i > 0 && styles.divider, pressed && styles.pressed]}>
+              <View style={styles.flex}>
+                <Text style={styles.range}>{formatShortDate(p.paidAt)}</Text>
+                <Text style={styles.meta}>
+                  {me?.bankAccount ? `Paid to account ***${me.bankAccount.accountNumber}` : 'Paid'} · {p.rangeLabel}
+                </Text>
+              </View>
+              <Text style={styles.amount}>{formatCurrency(p.net)}</Text>
+            </Pressable>
+          ))}
         </Card>
       )}
 
@@ -47,6 +104,91 @@ export default function PayslipsScreen() {
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  subtitle: {
+    color: C.textSecondary,
+    fontSize: 15,
+    marginTop: -Spacing.two,
+  },
+  toggle: {
+    flexDirection: 'row',
+    padding: 4,
+    borderRadius: Radius.medium,
+    backgroundColor: '#E9EDF3',
+  },
+  toggleTab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: Spacing.two + 2,
+    borderRadius: Radius.medium - 3,
+  },
+  toggleTabSelected: {
+    backgroundColor: C.card,
+    boxShadow: '0px 1px 3px rgba(15, 23, 42, 0.12)',
+  },
+  toggleText: {
+    color: C.textSecondary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  toggleTextSelected: {
+    color: C.primary,
+  },
+  list: {
+    gap: Spacing.three - 4,
+  },
+  payCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three - 4,
+    padding: Spacing.three,
+    borderRadius: 16,
+    backgroundColor: C.card,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  range: {
+    color: C.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    marginTop: 4,
+  },
+  meta: {
+    color: C.textSecondary,
+    fontSize: 13,
+  },
+  paidBadge: {
+    paddingHorizontal: Spacing.two,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: C.successSoft,
+  },
+  paidText: {
+    color: C.success,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three - 4,
+    paddingVertical: Spacing.three - 2,
+    paddingHorizontal: Spacing.three,
+  },
+  divider: {
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+  },
   emptyCard: {
     alignItems: 'center',
     gap: Spacing.two,

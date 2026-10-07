@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
-import { Platform, Share, StyleSheet, Text, View, type ScrollView } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View, type ScrollView } from 'react-native';
 
+import { FormField, TextField } from '@/components/owner/form';
+import { downloadPayrollReport } from '@/components/owner/payroll-report-pdf';
 import { Table, type Column } from '@/components/owner/table';
 import {
   Badge,
@@ -17,7 +19,9 @@ import {
   TabRow,
 } from '@/components/owner/ui';
 import { Colors as C, Spacing } from '@/constants/theme';
+import { overtimeRulesOf, updateBusiness, useBusiness } from '@/data/business';
 import { useClockSessions } from '@/data/clock-records';
+import { PAY_FREQUENCY } from '@/data/employee-payslips';
 import { formatShortDate } from '@/data/employee-roster';
 import { employeeFullName, formatPayRate, useEmployees } from '@/data/employees';
 import {
@@ -30,6 +34,7 @@ import {
   payTotals,
   SUPER_GUARANTEE_RATE,
   TAX_RATE_PLACEHOLDER,
+  usePayslipRecords,
   usePayStatuses,
   type PayLine,
   type Period,
@@ -56,39 +61,6 @@ function percentChange(current: number, previous: number) {
   return `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`;
 }
 
-function buildCsv(period: Period, lines: PayLine[]) {
-  const header = ['Name', 'Hours', 'Rate', 'Gross Pay', 'Tax', 'Net Pay', 'Super', 'Status'];
-  const rows = lines.map((l) => [
-    employeeFullName(l.employee),
-    formatHours(l.hours),
-    l.rate?.toFixed(2) ?? '',
-    l.gross?.toFixed(2) ?? '',
-    l.tax?.toFixed(2) ?? '',
-    l.net?.toFixed(2) ?? '',
-    l.super?.toFixed(2) ?? '',
-    l.status,
-  ]);
-  const escape = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-  return [`Payroll report,${periodSpan(period)}`, header.join(','), ...rows.map((r) => r.map(escape).join(','))].join(
-    '\n',
-  );
-}
-
-async function downloadReport(period: Period, lines: PayLine[]) {
-  const csv = buildCsv(period, lines);
-  const fileName = `payroll-${period.id}.csv`;
-  if (Platform.OS === 'web') {
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    link.click();
-    URL.revokeObjectURL(url);
-    return;
-  }
-  await Share.share({ title: fileName, message: csv });
-}
-
 export default function PayrollScreen() {
   const now = new Date();
   const employees = useEmployees();
@@ -98,17 +70,34 @@ export default function PayrollScreen() {
   const [tab, setTab] = useState<Tab>('Employees');
   const scrollRef = useRef<ScrollView>(null);
   const approveCardY = useRef(0);
+  const business = useBusiness();
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   const periodIndex = Math.max(0, periods.findIndex((p) => p.id === periodId));
   const period = periods[periodIndex];
   const statuses = usePayStatuses(period.id);
-  const lines = calculatePayLines(employees, sessions, period, statuses, now);
+  // Approved weeks show exactly what was saved on their payslips.
+  const payslips = usePayslipRecords();
+  const lines = calculatePayLines(employees, sessions, period, statuses, now, payslips);
   const totals = payTotals(lines);
 
   const previousPeriod = getPayPeriods(period.start, 2)[1];
   const previousTotals = payTotals(
-    calculatePayLines(employees, sessions, previousPeriod, {}, now),
+    calculatePayLines(employees, sessions, previousPeriod, {}, now, payslips),
   );
+
+  async function downloadReport() {
+    setReportBusy(true);
+    setReportError(null);
+    try {
+      await downloadPayrollReport(period, PAY_FREQUENCY, business, lines);
+    } catch {
+      setReportError('Sorry, the report PDF couldn’t be made. Please try again.');
+    } finally {
+      setReportBusy(false);
+    }
+  }
 
   const payable = lines.filter((l) => l.gross !== null && l.status === 'Pending');
   const missingRate = lines.filter((l) => l.rate === null);
@@ -125,7 +114,14 @@ export default function PayrollScreen() {
 
   const employeeColumns: Column<PayLine>[] = [
     nameColumn,
-    { key: 'hours', label: 'Hours', width: 70, align: 'right', render: (l) => formatHours(l.hours) },
+    { key: 'hours', label: 'Hours', width: 70, align: 'right', render: (l) => formatHours(l.ordinaryHours) },
+    {
+      key: 'overtime',
+      label: 'OT Hours',
+      width: 80,
+      align: 'right',
+      render: (l) => formatHours(l.overtimeHours),
+    },
     {
       key: 'rate',
       label: 'Rate',
@@ -133,6 +129,13 @@ export default function PayrollScreen() {
       align: 'right',
       render: (l) =>
         l.rate === null ? <Badge label="Not set" tone="warning" /> : formatPayRate(l.rate, l.employee.payType),
+    },
+    {
+      key: 'otRate',
+      label: 'OT Rate',
+      width: 90,
+      align: 'right',
+      render: (l) => (l.overtimeRate === null ? '—' : `${formatMoney(l.overtimeRate)}/hr`),
     },
     { key: 'gross', label: 'Gross Pay', width: 100, align: 'right', render: (l) => moneyOrDash(l.gross) },
     { key: 'tax', label: 'Tax', width: 90, align: 'right', render: (l) => moneyOrDash(l.tax) },
@@ -244,7 +247,8 @@ export default function PayrollScreen() {
             emptyMessage={noEmployees}
             footer={{
               name: 'Total',
-              hours: formatHours(totals.hours),
+              hours: formatHours(totals.ordinaryHours),
+              overtime: formatHours(totals.overtimeHours),
               gross: formatMoney(totals.gross),
               tax: formatMoney(totals.tax),
               net: formatMoney(totals.net),
@@ -257,7 +261,8 @@ export default function PayrollScreen() {
             {[
               ['Pay period', periodSpan(period)],
               ['Employees', `${lines.length}`],
-              ['Total hours', formatHours(totals.hours)],
+              ['Normal hours', formatHours(totals.ordinaryHours)],
+              ['Overtime hours', formatHours(totals.overtimeHours)],
               ['Total gross pay', formatMoney(totals.gross)],
               [`Tax withheld (${TAX_PERCENT} placeholder)`, formatMoney(totals.tax)],
               ['Total net pay', formatMoney(totals.net)],
@@ -288,7 +293,8 @@ export default function PayrollScreen() {
             />
             <Text style={ownerStyles.mutedText}>
               Tax is a flat {TAX_PERCENT} placeholder until proper PAYG withholding is set up. Super is
-              the {SUPER_PERCENT} Superannuation Guarantee, paid by you on top of gross pay.
+              the {SUPER_PERCENT} Superannuation Guarantee on normal (ordinary-time) pay, not overtime, paid by
+              you on top of gross pay.
             </Text>
           </View>
         )}
@@ -335,13 +341,15 @@ export default function PayrollScreen() {
               onPress={() => approvePayments(period.id, payable.map((l) => l.employee.id))}
             />
             <Button
-              label="Download Report"
+              label={reportBusy ? 'Making PDF…' : 'Download Report (PDF)'}
               icon={OwnerIcons.download}
               variant="secondary"
-              disabled={lines.length === 0}
-              onPress={() => downloadReport(period, lines)}
+              disabled={lines.length === 0 || reportBusy}
+              onPress={downloadReport}
             />
           </View>
+          {reportBusy && <ActivityIndicator color={C.accent} />}
+          {reportError && <Warning text={reportError} />}
 
           <Text style={ownerStyles.mutedText}>
             Approving marks payments as Paid in NexGain. No money is transferred until a payment
@@ -349,7 +357,52 @@ export default function PayrollScreen() {
           </Text>
         </Card>
       </View>
+
+      <PayrollSettingsCard />
     </OwnerScreen>
+  );
+}
+
+/** Owner-only payroll settings: when overtime starts. Approved payrolls keep the rule they were paid under. */
+function PayrollSettingsCard() {
+  const business = useBusiness();
+  const saved = overtimeRulesOf(business).dailyAfterHours;
+  const [text, setText] = useState<string | null>(null);
+  const value = text ?? String(saved);
+  const hours = Number(value.trim());
+  const error = !value.trim()
+    ? 'Enter a number of hours, e.g. 8'
+    : !Number.isFinite(hours) || hours < 0.5 || hours > 24
+      ? 'Enter between 0.5 and 24 hours.'
+      : (hours * 2) % 1 !== 0
+        ? 'Use whole or half hours, e.g. 7.5'
+        : null;
+
+  return (
+    <Card title="Payroll Settings" icon={{ ios: 'gearshape.fill', android: 'settings', web: 'settings' }}>
+      <FormField label="Overtime starts after (hours in a day)" error={error ?? undefined}>
+        <View style={styles.settingRow}>
+          <TextField
+            value={value}
+            onChangeText={(t) => {
+              setText(t);
+              const h = Number(t.trim());
+              if (t.trim() && Number.isFinite(h) && h >= 0.5 && h <= 24 && (h * 2) % 1 === 0) {
+                updateBusiness({ overtimeRules: { ...overtimeRulesOf(business), dailyAfterHours: h } });
+              }
+            }}
+            onBlur={() => setText(null)}
+            keyboardType="decimal-pad"
+            accessibilityLabel="Overtime starts after hours"
+            style={styles.settingInput}
+          />
+          <Text style={styles.settingUnit}>hours</Text>
+        </View>
+      </FormField>
+      <Text style={ownerStyles.mutedText}>
+        Hours worked past this in a single day are paid at the employee&apos;s overtime rate.
+      </Text>
+    </Card>
   );
 }
 
@@ -408,5 +461,17 @@ const styles = StyleSheet.create({
     flex: 1,
     color: C.warning,
     fontSize: 13,
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  settingInput: {
+    width: 96,
+  },
+  settingUnit: {
+    color: C.textSecondary,
+    fontSize: 15,
   },
 });

@@ -34,7 +34,24 @@ export type BusinessProfile = {
   /** Code employees will use to join this business. */
   inviteCode: string;
   createdAt: string;
+  /** When overtime starts (owner only). Missing until loaded; see overtimeRulesOf(). */
+  overtimeRules?: OvertimeRules;
 };
+
+/**
+ * The business's overtime rules. Daily only for now; weekly, double-time or
+ * weekend rules can be added here later.
+ */
+export type OvertimeRules = {
+  /** Hours worked past this in a single day are overtime. */
+  dailyAfterHours: number;
+};
+
+export const DEFAULT_OVERTIME_RULES: OvertimeRules = { dailyAfterHours: 8 };
+
+export function overtimeRulesOf(profile: BusinessProfile | null): OvertimeRules {
+  return profile?.overtimeRules ?? DEFAULT_OVERTIME_RULES;
+}
 
 type BusinessRow = {
   id: string;
@@ -56,6 +73,7 @@ type BusinessRow = {
   track_gst_in_reports: boolean;
   invite_code: string;
   created_at: string;
+  overtime_rules?: { daily_after_hours?: number | string } | null;
 };
 
 export function fromRow(row: BusinessRow): BusinessProfile {
@@ -83,6 +101,9 @@ export function fromRow(row: BusinessRow): BusinessProfile {
     accountingSoftware: null,
     inviteCode: row.invite_code,
     createdAt: row.created_at,
+    overtimeRules: {
+      dailyAfterHours: Number(row.overtime_rules?.daily_after_hours ?? DEFAULT_OVERTIME_RULES.dailyAfterHours),
+    },
   };
 }
 
@@ -105,6 +126,7 @@ function toColumns(p: Partial<BusinessProfile>) {
   if (p.gstRegistered !== undefined) cols.gst_registered = p.gstRegistered;
   if (p.currency !== undefined) cols.currency = p.currency;
   if (p.trackGstInReports !== undefined) cols.track_gst_in_reports = p.trackGstInReports;
+  if (p.overtimeRules !== undefined) cols.overtime_rules = { daily_after_hours: p.overtimeRules.dailyAfterHours };
   return cols;
 }
 

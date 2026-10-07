@@ -55,6 +55,8 @@ export type Employee = {
   /** Hourly rate, or yearly salary when payType is 'salary'. Set by the owner; null until set. */
   payRate: number | null;
   payType: PayType;
+  /** Custom overtime rate per hour set by the owner; null = Auto (1.5x the pay rate). See overtimeRateOf(). */
+  overtimeRate: number | null;
   status: EmployeeStatus;
   /** "YYYY-MM-DD" */
   startDate: string | null;
@@ -84,6 +86,7 @@ type EmployeeRow = {
   availability: WeeklyAvailability | null;
   status: EmployeeStatus | null;
   pay_type: PayType | null;
+  overtime_rate?: number | string | null;
   start_date: string | null;
   photo_path: string | null;
   employee_private?: { account_last4: string | null; has_tfn: boolean } | null;
@@ -113,6 +116,7 @@ export function fromRow(row: EmployeeRow, businessName = '', photoUrl: string | 
     emergencyContactPhone: row.emergency_contact_phone ?? '',
     payRate: row.pay_rate === null ? null : Number(row.pay_rate),
     payType: row.pay_type ?? 'hourly',
+    overtimeRate: row.overtime_rate === null || row.overtime_rate === undefined ? null : Number(row.overtime_rate),
     status: row.status ?? 'active',
     startDate: row.start_date ?? null,
     photoPath: row.photo_path ?? null,
@@ -164,7 +168,7 @@ async function photoLinks(paths: (string | null)[]): Promise<Record<string, stri
   return links;
 }
 
-type EditableFields = 'payRate' | 'payType' | 'role' | 'phone' | 'employmentType' | 'status' | 'startDate';
+type EditableFields = 'payRate' | 'payType' | 'overtimeRate' | 'role' | 'phone' | 'employmentType' | 'status' | 'startDate';
 
 /** Owner or employee edits: shows straight away, then saves to the database. */
 export async function updateEmployee(id: string, changes: Partial<Pick<Employee, EditableFields>>) {
@@ -176,6 +180,7 @@ export async function updateEmployee(id: string, changes: Partial<Pick<Employee,
   if (changes.phone !== undefined) cols.phone = changes.phone;
   if (changes.employmentType !== undefined) cols.employment_type = changes.employmentType;
   if (changes.payType !== undefined) cols.pay_type = changes.payType;
+  if (changes.overtimeRate !== undefined) cols.overtime_rate = changes.overtimeRate;
   if (changes.status !== undefined) cols.status = changes.status;
   if (changes.startDate !== undefined) cols.start_date = changes.startDate;
   const { error } = await supabase.from('employees').update(cols).eq('id', id);
@@ -235,6 +240,20 @@ export async function loadPayRateHistory(employeeId: string): Promise<PayRateCha
     newPayType: r.new_pay_type,
     changedAt: r.changed_at,
   }));
+}
+
+/** Overtime is paid at 1.5x the normal hourly rate unless the owner sets a custom rate. */
+export const AUTO_OVERTIME_MULTIPLIER = 1.5;
+
+/** The automatic overtime rate for an hourly rate (1.5x, to the cent). */
+export function autoOvertimeRate(payRate: number | null) {
+  return payRate === null ? null : Math.round(payRate * AUTO_OVERTIME_MULTIPLIER * 100) / 100;
+}
+
+/** The overtime rate payroll uses: the owner's custom rate, or Auto (1.5x). Salaried staff don't get overtime. */
+export function overtimeRateOf(employee: Pick<Employee, 'payRate' | 'payType' | 'overtimeRate'>) {
+  if (employee.payType === 'salary') return null;
+  return employee.overtimeRate ?? autoOvertimeRate(employee.payRate);
 }
 
 /** e.g. "$28.00/hr" or "$75,000/yr". */

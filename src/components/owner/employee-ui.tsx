@@ -14,7 +14,14 @@ import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { regenerateInviteCode, useBusiness } from '@/data/business';
 import { formatShortDate } from '@/data/employee-roster';
 import { inviteByEmail, inviteBySms, shareInvite, type EmployeeInvite } from '@/data/employee-invites';
-import { EMPLOYEE_STATUS_LABEL, employeeInitialsOf, type EmployeeStatus, type PayType } from '@/data/employees';
+import {
+  AUTO_OVERTIME_MULTIPLIER,
+  autoOvertimeRate,
+  EMPLOYEE_STATUS_LABEL,
+  employeeInitialsOf,
+  type EmployeeStatus,
+  type PayType,
+} from '@/data/employees';
 import { fromDateKey, toDateKey } from '@/data/shifts';
 
 export type ListStatus = EmployeeStatus | 'invited';
@@ -124,7 +131,17 @@ export type EmploymentDraft = {
   payType: PayType;
   employmentType: string;
   startDate: string | null;
+  /** Custom overtime rate text; '' = Auto (1.5x). Leave out to hide the overtime field. */
+  overtimeRate?: string;
 };
+
+/** Checks the overtime rate text. '' means Auto. Returns the custom rate (or null for Auto), or an error. */
+export function parseOvertimeRate(text: string): { rate: number | null } | { error: string } {
+  if (!text.trim()) return { rate: null };
+  const rate = Number(text.replace(/[$,\s]/g, ''));
+  if (!Number.isFinite(rate) || rate <= 0 || rate > 2000) return { error: 'Enter an hourly overtime rate, e.g. 42.00' };
+  return { rate: Math.round(rate * 100) / 100 };
+}
 
 /** Checks the pay rate text. Returns the rate (or null if blank), or an error message. */
 export function parsePayRate(text: string, payType: PayType): { rate: number | null } | { error: string } {
@@ -203,6 +220,14 @@ export function EmploymentFields({
         </View>
       </FormField>
 
+      {draft.overtimeRate !== undefined && draft.payType === 'hourly' && (
+        <OvertimeRateField
+          value={draft.overtimeRate}
+          payRate={'rate' in parsed ? parsed.rate : null}
+          onChange={(overtimeRate) => onChange({ overtimeRate })}
+        />
+      )}
+
       <FormField label="Employment type">
         <SelectBox
           label="Employment type"
@@ -216,6 +241,54 @@ export function EmploymentFields({
         <OptionalDateField label="Start date" value={draft.startDate} onChange={(startDate) => onChange({ startDate })} />
       </FormField>
     </>
+  );
+}
+
+/**
+ * Overtime rate per hour. Shows the automatic 1.5x rate (following the pay rate)
+ * until the owner types their own amount, which makes it Custom.
+ */
+function OvertimeRateField({
+  value,
+  payRate,
+  onChange,
+}: {
+  value: string;
+  payRate: number | null;
+  onChange: (value: string) => void;
+}) {
+  const custom = value.trim() !== '';
+  const auto = autoOvertimeRate(payRate);
+  const parsed = parseOvertimeRate(value);
+  return (
+    <FormField label="Overtime rate (per hour)" error={'error' in parsed ? parsed.error : undefined}>
+      <View style={styles.payRow}>
+        <View style={styles.dollar}>
+          <Text style={styles.dollarText}>$</Text>
+        </View>
+        <TextField
+          // Auto shows the 1.5x amount; typing replaces it with a custom rate.
+          value={custom ? value : auto === null ? '' : auto.toFixed(2)}
+          onChangeText={onChange}
+          placeholder={auto === null ? 'Set a pay rate first' : auto.toFixed(2)}
+          keyboardType="decimal-pad"
+          accessibilityLabel="Overtime rate"
+          style={styles.flex}
+        />
+        <View style={[styles.otTag, custom && styles.otTagCustom]}>
+          <Text style={[styles.otTagText, custom && styles.otTagTextCustom]}>
+            {custom ? 'Custom' : `Auto (${AUTO_OVERTIME_MULTIPLIER}×)`}
+          </Text>
+        </View>
+      </View>
+      {custom && (
+        <Pressable onPress={() => onChange('')} accessibilityRole="button" hitSlop={6}>
+          <Text style={styles.otReset}>
+            Reset to auto{auto === null ? '' : ` (${AUTO_OVERTIME_MULTIPLIER}× = $${auto.toFixed(2)})`}
+          </Text>
+        </Pressable>
+      )}
+    </FormField>
   );
 }
 
@@ -398,6 +471,30 @@ const styles = StyleSheet.create({
   },
   payType: {
     width: 130,
+  },
+  otTag: {
+    width: 130,
+    alignItems: 'center',
+    paddingVertical: Spacing.two + 2,
+    borderRadius: Radius.medium - 2,
+    backgroundColor: 'rgba(79, 140, 255, 0.14)',
+  },
+  otTagCustom: {
+    backgroundColor: 'rgba(245, 158, 11, 0.14)',
+  },
+  otTagText: {
+    color: C.accent,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  otTagTextCustom: {
+    color: C.warning,
+  },
+  otReset: {
+    color: C.accent,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: Spacing.one,
   },
   codeRow: {
     alignItems: 'center',

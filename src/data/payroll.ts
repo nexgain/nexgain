@@ -1,8 +1,10 @@
 // Payroll calculations. Everything is derived from the shared employees store
-// (pay rate, bank details) and clock records (hours) - nothing is stored twice.
-import { businessStore } from '@/data/business';
+// (pay rate, overtime rate, bank details), clock records (hours) and the
+// business's overtime rule - nothing is stored twice. Approved weeks use what
+// was saved on their payslips, so later changes never alter them.
+import { businessStore, overtimeRulesOf, type OvertimeRules } from '@/data/business';
 import { clockStore, type ClockSession } from '@/data/clock-records';
-import { employeesStore, type Employee } from '@/data/employees';
+import { employeesStore, overtimeRateOf, type Employee, type PayType } from '@/data/employees';
 import { createStore } from '@/data/store';
 import { newId, warnSaveFailed } from '@/lib/ids';
 import { supabase } from '@/lib/supabase';
@@ -24,17 +26,28 @@ export type PayStatus = 'Pending' | 'Paid';
 
 export type PayLine = {
   employee: Employee;
+  /** All hours worked (normal + overtime). */
   hours: number;
+  ordinaryHours: number;
+  overtimeHours: number;
+  /** Normal rate: per hour, or yearly salary for salaried staff. */
   rate: number | null;
+  /** Per hour; null for salaried staff (no overtime). */
+  overtimeRate: number | null;
+  ordinaryPay: number | null;
+  overtimePay: number | null;
   gross: number | null;
   tax: number | null;
   net: number | null;
+  /** Paid by the employer on top of gross, on normal (ordinary-time) pay only. */
   super: number | null;
   status: PayStatus;
 };
 
 export type PayTotals = {
   hours: number;
+  ordinaryHours: number;
+  overtimeHours: number;
   gross: number;
   tax: number;
   net: number;
@@ -42,6 +55,9 @@ export type PayTotals = {
 };
 
 const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+/** Days are counted in Brisbane time (UTC+10, no daylight saving). */
+const BUSINESS_UTC_OFFSET_MS = 10 * HOUR_MS;
 
 function roundCents(amount: number) {
   return Math.round(amount * 100) / 100;
@@ -96,71 +112,165 @@ export function hoursInPeriod(
   return ms / HOUR_MS;
 }
 
+export type HoursSplit = { total: number; ordinary: number; overtime: number };
+
 /**
- * One employee's pay for a period. Hourly staff: hours x rate. Salary staff:
- * yearly salary / 52 per week, whatever hours they clocked. The rate always
- * comes from the employee's profile, so a changed rate applies straight away.
+ * Splits an employee's clocked hours into normal and overtime hours, day by day
+ * (Brisbane days): hours up to the daily limit are normal, the rest overtime.
+ * Time between clocking out and back in (e.g. an unpaid break) isn't counted.
+ * A shift that crosses midnight is split between the two days.
  */
-export function calculatePayLine(employee: Employee, hours: number, status: PayStatus, weeks = 1): PayLine {
-  const rate = employee.payRate;
-  if (rate === null) {
-    return { employee, hours, rate, gross: null, tax: null, net: null, super: null, status };
+export function splitHours(
+  sessions: ClockSession[],
+  employeeId: string | null,
+  period: Pick<Period, 'start' | 'end'>,
+  rules: OvertimeRules,
+  now = new Date(),
+): HoursSplit {
+  const msPerDay = new Map<number, number>();
+  for (const s of sessions) {
+    if (s.employeeId !== employeeId) continue;
+    let from = Math.max(s.start.getTime(), period.start.getTime());
+    const to = Math.min((s.end ?? now).getTime(), period.end.getTime());
+    while (from < to) {
+      const day = Math.floor((from + BUSINESS_UTC_OFFSET_MS) / DAY_MS);
+      const dayEnd = (day + 1) * DAY_MS - BUSINESS_UTC_OFFSET_MS;
+      const chunk = Math.min(to, dayEnd) - from;
+      msPerDay.set(day, (msPerDay.get(day) ?? 0) + chunk);
+      from += chunk;
+    }
   }
-  const gross = roundCents(employee.payType === 'salary' ? (rate / 52) * weeks : hours * rate);
+  const limit = rules.dailyAfterHours;
+  let ordinary = 0;
+  let overtime = 0;
+  for (const ms of msPerDay.values()) {
+    const hours = ms / HOUR_MS;
+    ordinary += Math.min(hours, limit);
+    overtime += Math.max(0, hours - limit);
+  }
+  return { total: ordinary + overtime, ordinary, overtime };
+}
+
+/**
+ * One employee's pay for a period.
+ * - Hourly staff: (normal hours x pay rate) + (overtime hours x overtime rate).
+ * - Salaried staff: yearly salary / 52 per week, whatever hours they clocked; no overtime.
+ * Tax is the flat placeholder on gross. Super is on normal (ordinary-time) pay only.
+ * Rates always come from the employee's profile, so a changed rate applies straight away.
+ */
+export function calculatePayLine(employee: Employee, split: HoursSplit, status: PayStatus, weeks = 1): PayLine {
+  const rate = employee.payRate;
+  const salaried = employee.payType === 'salary';
+  const hours = split.total;
+  const ordinaryHours = salaried ? split.total : split.ordinary;
+  const overtimeHours = salaried ? 0 : split.overtime;
+  if (rate === null) {
+    return {
+      employee, hours, ordinaryHours, overtimeHours, rate, overtimeRate: null,
+      ordinaryPay: null, overtimePay: null, gross: null, tax: null, net: null, super: null, status,
+    };
+  }
+  const overtimeRate = salaried ? null : overtimeRateOf(employee);
+  const ordinaryPay = roundCents(salaried ? (rate / 52) * weeks : ordinaryHours * rate);
+  const overtimePay = roundCents(overtimeHours * (overtimeRate ?? 0));
+  const gross = roundCents(ordinaryPay + overtimePay);
   const tax = roundCents(gross * TAX_RATE_PLACEHOLDER);
   return {
     employee,
     hours,
+    ordinaryHours,
+    overtimeHours,
     rate,
+    overtimeRate,
+    ordinaryPay,
+    overtimePay,
     gross,
     tax,
     net: roundCents(gross - tax),
-    super: roundCents(gross * SUPER_GUARANTEE_RATE),
+    super: roundCents(ordinaryPay * SUPER_GUARANTEE_RATE),
     status,
+  };
+}
+
+/** An approved week, exactly as it was saved on the payslip. */
+function lineFromPayslip(employee: Employee, p: PayslipRecord): PayLine {
+  return {
+    employee,
+    hours: p.hours,
+    ordinaryHours: p.ordinaryHours,
+    overtimeHours: p.overtimeHours,
+    rate: p.ordinaryRate,
+    overtimeRate: p.payType === 'salary' ? null : p.overtimeRate,
+    ordinaryPay: p.ordinaryPay,
+    overtimePay: p.overtimePay,
+    gross: p.gross,
+    tax: p.tax,
+    net: p.net,
+    super: p.super,
+    status: 'Paid',
   };
 }
 
 const WEEK_MS = 7 * 24 * HOUR_MS;
 
-/** Inactive employees only appear in payroll if they worked during the period. */
+/**
+ * Inactive employees only appear in payroll if they worked during the period.
+ * Employees already paid for the period show what their payslip saved.
+ */
 function payableLines(
   employees: Employee[],
   sessions: ClockSession[],
   range: Pick<Period, 'start' | 'end'>,
   statuses: Record<string, PayStatus>,
   now: Date,
+  paid: PayslipRecord[] = [],
 ) {
   const weeks = (range.end.getTime() - range.start.getTime()) / WEEK_MS;
+  const rules = overtimeRulesOf(businessStore.get());
+  const periodId = toDateId(range.start);
   return employees
-    .map((employee) =>
-      calculatePayLine(employee, hoursInPeriod(sessions, employee.id, range, now), statuses[employee.id] ?? 'Pending', weeks),
-    )
+    .map((employee) => {
+      const payslip = paid.find((p) => p.employeeId === employee.id && p.periodStart === periodId);
+      if (payslip) return lineFromPayslip(employee, payslip);
+      return calculatePayLine(
+        employee,
+        splitHours(sessions, employee.id, range, rules, now),
+        statuses[employee.id] ?? 'Pending',
+        weeks,
+      );
+    })
     .filter((l) => l.employee.status !== 'inactive' || l.hours > 0 || l.status === 'Paid');
 }
 
+/** Pay for every employee in a period. Pass the payslips so approved weeks show what was paid. */
 export function calculatePayLines(
   employees: Employee[],
   sessions: ClockSession[],
   period: Period,
   statuses: Record<string, PayStatus> = {},
   now = new Date(),
+  paid: PayslipRecord[] = [],
 ): PayLine[] {
-  return payableLines(employees, sessions, period, statuses, now);
+  return payableLines(employees, sessions, period, statuses, now, paid);
 }
 
 export function payTotals(lines: PayLine[]): PayTotals {
   const totals = lines.reduce(
     (t, l) => ({
       hours: t.hours + l.hours,
+      ordinaryHours: t.ordinaryHours + l.ordinaryHours,
+      overtimeHours: t.overtimeHours + l.overtimeHours,
       gross: t.gross + (l.gross ?? 0),
       tax: t.tax + (l.tax ?? 0),
       net: t.net + (l.net ?? 0),
       super: t.super + (l.super ?? 0),
     }),
-    { hours: 0, gross: 0, tax: 0, net: 0, super: 0 },
+    { hours: 0, ordinaryHours: 0, overtimeHours: 0, gross: 0, tax: 0, net: 0, super: 0 },
   );
   return {
     hours: totals.hours,
+    ordinaryHours: totals.ordinaryHours,
+    overtimeHours: totals.overtimeHours,
     gross: roundCents(totals.gross),
     tax: roundCents(totals.tax),
     net: roundCents(totals.net),
@@ -189,8 +299,19 @@ export type PayslipRecord = {
   periodStart: string;
   /** Last day of the period, "YYYY-MM-DD". */
   periodEnd: string;
+  /** All hours (normal + overtime). */
   hours: number;
+  /** Normal rate (per hour, or yearly salary). Same as ordinaryRate. */
   rate: number;
+  payType: PayType;
+  ordinaryHours: number;
+  overtimeHours: number;
+  ordinaryRate: number;
+  overtimeRate: number;
+  ordinaryPay: number;
+  overtimePay: number;
+  /** The daily overtime limit used (null on payslips from before overtime existed). */
+  overtimeAfterHours: number | null;
   gross: number;
   tax: number;
   net: number;
@@ -216,7 +337,17 @@ type PayslipRow = {
   net: number | string;
   super: number | string;
   paid_at: string;
+  pay_type?: PayType | null;
+  ordinary_hours?: number | string | null;
+  overtime_hours?: number | string | null;
+  ordinary_rate?: number | string | null;
+  overtime_rate?: number | string | null;
+  ordinary_pay?: number | string | null;
+  overtime_pay?: number | string | null;
+  overtime_after_hours?: number | string | null;
 };
+
+const num = (v: number | string | null | undefined, fallback: number) => (v === null || v === undefined ? fallback : Number(v));
 
 export async function loadPayslips() {
   const { data, error } = await supabase.from('payslips').select('*').order('period_start', { ascending: false });
@@ -229,6 +360,14 @@ export async function loadPayslips() {
       periodEnd: row.period_end,
       hours: Number(row.hours),
       rate: Number(row.rate),
+      payType: row.pay_type ?? 'hourly',
+      ordinaryHours: num(row.ordinary_hours, Number(row.hours)),
+      overtimeHours: num(row.overtime_hours, 0),
+      ordinaryRate: num(row.ordinary_rate, Number(row.rate)),
+      overtimeRate: num(row.overtime_rate, 0),
+      ordinaryPay: num(row.ordinary_pay, Number(row.gross)),
+      overtimePay: num(row.overtime_pay, 0),
+      overtimeAfterHours: row.overtime_after_hours === null || row.overtime_after_hours === undefined ? null : Number(row.overtime_after_hours),
       gross: Number(row.gross),
       tax: Number(row.tax),
       net: Number(row.net),
@@ -257,20 +396,31 @@ export function approvePayments(periodId: string, employeeIds: string[]) {
   const lastDay = toDateId(new Date(y, m - 1, d + 6));
   const alreadyPaid = new Set(payslipsStore.get().filter((p) => p.periodStart === periodId).map((p) => p.employeeId));
   const sessions = clockStore.get();
+  const rules = overtimeRulesOf(businessStore.get());
+  const hrs = (h: number) => Math.round(h * 100) / 100;
 
   const created: PayslipRecord[] = employeesStore
     .get()
     .filter((e) => employeeIds.includes(e.id) && !alreadyPaid.has(e.id))
-    // Each employee's current rate from their profile; the payslip keeps it, so later changes don't affect it.
-    .map((e) => calculatePayLine(e, hoursInPeriod(sessions, e.id, period), 'Pending'))
+    // Each employee's current rates and the current overtime rule; the payslip
+    // keeps them, so later changes don't affect it.
+    .map((e) => calculatePayLine(e, splitHours(sessions, e.id, period, rules), 'Pending'))
     .filter((l) => l.rate !== null && l.gross !== null)
     .map((l) => ({
       id: newId(),
       employeeId: l.employee.id,
       periodStart: periodId,
       periodEnd: lastDay,
-      hours: Math.round(l.hours * 100) / 100,
+      hours: hrs(hrs(l.ordinaryHours) + hrs(l.overtimeHours)),
       rate: l.rate!,
+      payType: l.employee.payType,
+      ordinaryHours: hrs(l.ordinaryHours),
+      overtimeHours: hrs(l.overtimeHours),
+      ordinaryRate: l.rate!,
+      overtimeRate: l.overtimeRate ?? 0,
+      ordinaryPay: l.ordinaryPay!,
+      overtimePay: l.overtimePay!,
+      overtimeAfterHours: rules.dailyAfterHours,
       gross: l.gross!,
       tax: l.tax!,
       net: l.net!,
@@ -291,6 +441,14 @@ export function approvePayments(periodId: string, employeeIds: string[]) {
         period_end: p.periodEnd,
         hours: p.hours,
         rate: p.rate,
+        pay_type: p.payType,
+        ordinary_hours: p.ordinaryHours,
+        overtime_hours: p.overtimeHours,
+        ordinary_rate: p.ordinaryRate,
+        overtime_rate: p.overtimeRate,
+        ordinary_pay: p.ordinaryPay,
+        overtime_pay: p.overtimePay,
+        overtime_after_hours: p.overtimeAfterHours,
         gross: p.gross,
         tax: p.tax,
         net: p.net,

@@ -11,6 +11,7 @@ import {
   Avatar,
   EmploymentFields,
   OptionalDateField,
+  parseOvertimeRate,
   parsePayRate,
   SelectBox,
   StatusBadge,
@@ -30,6 +31,7 @@ import {
   formatPayRate,
   loadEmployeeDocuments,
   loadPayRateHistory,
+  overtimeRateOf,
   PAY_TYPE_LABEL,
   revealPrivateDetails,
   setEmployeePhoto,
@@ -192,6 +194,8 @@ function toDraft(e: Employee): EmploymentDraft & { status: EmployeeStatus } {
     employmentType: e.employmentType,
     startDate: e.startDate,
     status: e.status,
+    // '' = Auto (1.5x the pay rate).
+    overtimeRate: e.overtimeRate === null ? '' : e.overtimeRate.toFixed(2),
   };
 }
 
@@ -205,23 +209,26 @@ function EmploymentCard({ employee }: { employee: Employee }) {
   const saved = toDraft(employee);
   const changed = (Object.keys(saved) as (keyof typeof saved)[]).some((k) => draft[k] !== saved[k]);
   const pay = parsePayRate(draft.payRate, draft.payType);
+  // Salaried staff don't get overtime, so their overtime rate is left as Auto.
+  const overtime = draft.payType === 'salary' ? { rate: null } : parseOvertimeRate(draft.overtimeRate ?? '');
+  const invalid = 'error' in pay || 'error' in overtime;
 
   async function save() {
-    if ('error' in pay || saving) return;
+    if ('error' in pay || 'error' in overtime || saving) return;
     setSaving(true);
     setMessage('Saving…');
-    const ok = await updateEmployee(employee.id, {
+    const changes = {
       role: draft.role.trim(),
       payRate: pay.rate,
       payType: draft.payType,
+      overtimeRate: overtime.rate,
       employmentType: draft.employmentType,
       startDate: draft.startDate,
       status: draft.status,
-    });
+    };
+    const ok = await updateEmployee(employee.id, changes);
     setSaving(false);
-    if (ok) {
-      setDraft(toDraft({ ...employee, role: draft.role.trim(), payRate: pay.rate, payType: draft.payType, employmentType: draft.employmentType, startDate: draft.startDate, status: draft.status }));
-    }
+    if (ok) setDraft(toDraft({ ...employee, ...changes }));
     setMessage(ok ? 'Changes saved. Payroll will use the new pay rate from now on.' : 'Couldn’t save. Check your internet connection and try again.');
   }
 
@@ -247,7 +254,7 @@ function EmploymentCard({ employee }: { employee: Employee }) {
           }}
         />
       </FormField>
-      <Button label={saving ? 'Saving…' : 'Save Changes'} icon={OwnerIcons.check} disabled={!changed || saving || 'error' in pay} onPress={save} />
+      <Button label={saving ? 'Saving…' : 'Save Changes'} icon={OwnerIcons.check} disabled={!changed || saving || invalid} onPress={save} />
       {message ? <Text style={styles.muted}>{message}</Text> : null}
     </Card>
   );
@@ -291,6 +298,14 @@ function PayTab({ employee }: { employee: Employee }) {
           rows={[
             ['Pay rate', formatPayRate(employee.payRate, employee.payType)],
             ['Pay type', PAY_TYPE_LABEL[employee.payType]],
+            [
+              'Overtime rate',
+              employee.payType === 'salary'
+                ? 'No overtime (salaried)'
+                : overtimeRateOf(employee) === null
+                  ? 'Not set'
+                  : `${formatPayRate(overtimeRateOf(employee), 'hourly')} · ${employee.overtimeRate === null ? 'Auto (1.5×)' : 'Custom'}`,
+            ],
             ['Employment type', employee.employmentType || '—'],
           ]}
         />
