@@ -37,7 +37,12 @@ export default function EmployeeNotificationDetail() {
 
   const actions: DetailAction[] = typeInfo(n).actions.map((label) => ({
     label,
-    onPress: ACTION_ROUTES[label] ? () => router.navigate(ACTION_ROUTES[label]) : undefined,
+    onPress:
+      label === 'Open invoice' && n.relatedId
+        ? () => router.push({ pathname: '/contractor-invoice/[id]', params: { id: n.relatedId! } })
+        : ACTION_ROUTES[label]
+          ? () => router.navigate(ACTION_ROUTES[label])
+          : undefined,
   }));
 
   return (

@@ -42,7 +42,11 @@ export type Employee = {
   employeeId: string;
   /** Position / job role shown on the roster, e.g. "Cleaner". */
   role: string;
+  /** Chosen at sign-up: Full-time, Part-time, Casual or Contractor. Decides the contractor features (see isContractor). */
   employmentType: string;
+  /** Contractors only: their ABN (11 digits) and whether they charge GST. */
+  abn: string;
+  gstRegistered: boolean;
   /** Business name (where they work). */
   site: string;
   email: string;
@@ -79,6 +83,8 @@ type EmployeeRow = {
   address: string | null;
   position: string | null;
   employment_type: string | null;
+  abn?: string | null;
+  gst_registered?: boolean | null;
   pay_rate: number | string | null;
   super_fund: string | null;
   emergency_contact_name: string | null;
@@ -106,6 +112,8 @@ export function fromRow(row: EmployeeRow, businessName = '', photoUrl: string | 
     employeeId: `NG-${row.id.replace(/-/g, '').slice(0, 6).toUpperCase()}`,
     role: row.position ?? '',
     employmentType: row.employment_type ?? '',
+    abn: row.abn ?? '',
+    gstRegistered: row.gst_registered ?? false,
     site: businessName,
     email: row.email,
     phone: row.phone ?? '',
@@ -168,7 +176,17 @@ async function photoLinks(paths: (string | null)[]): Promise<Record<string, stri
   return links;
 }
 
-type EditableFields = 'payRate' | 'payType' | 'overtimeRate' | 'role' | 'phone' | 'employmentType' | 'status' | 'startDate';
+type EditableFields =
+  | 'payRate'
+  | 'payType'
+  | 'overtimeRate'
+  | 'role'
+  | 'phone'
+  | 'employmentType'
+  | 'status'
+  | 'startDate'
+  | 'abn'
+  | 'gstRegistered';
 
 /** Owner or employee edits: shows straight away, then saves to the database. */
 export async function updateEmployee(id: string, changes: Partial<Pick<Employee, EditableFields>>) {
@@ -181,6 +199,8 @@ export async function updateEmployee(id: string, changes: Partial<Pick<Employee,
   if (changes.employmentType !== undefined) cols.employment_type = changes.employmentType;
   if (changes.payType !== undefined) cols.pay_type = changes.payType;
   if (changes.overtimeRate !== undefined) cols.overtime_rate = changes.overtimeRate;
+  if (changes.abn !== undefined) cols.abn = changes.abn.replace(/\D/g, '') || null;
+  if (changes.gstRegistered !== undefined) cols.gst_registered = changes.gstRegistered;
   if (changes.status !== undefined) cols.status = changes.status;
   if (changes.startDate !== undefined) cols.start_date = changes.startDate;
   const { error } = await supabase.from('employees').update(cols).eq('id', id);
@@ -240,6 +260,41 @@ export async function loadPayRateHistory(employeeId: string): Promise<PayRateCha
     newPayType: r.new_pay_type,
     changedAt: r.changed_at,
   }));
+}
+
+/**
+ * The signed-in worker updates their own bank account (stored encrypted by the
+ * database; the app only keeps the last 4 digits). Their TFN is left as it is.
+ */
+export async function updateMyBankDetails(
+  employeeId: string,
+  bank: { accountName: string; bsb: string; accountNumber: string },
+) {
+  const digits = bank.accountNumber.replace(/\D/g, '');
+  const { error } = await supabase.rpc('update_my_private_details', {
+    p: { account_name: bank.accountName.trim(), bsb: bank.bsb.trim(), account_number: digits },
+  });
+  if (error) {
+    console.warn('Could not save bank details:', error.message);
+    return false;
+  }
+  const bankAccount = { accountName: 'On file', bsb: '', accountNumber: digits.slice(-4) };
+  currentEmployeeStore.set((me) => (me?.id === employeeId ? { ...me, bankAccount } : me));
+  return true;
+}
+
+/** The one value that decides whether someone gets the contractor features. */
+export const CONTRACTOR = 'Contractor';
+
+/** Contractors invoice the business instead of getting payslips. */
+export function isContractor(employee: Pick<Employee, 'employmentType'> | null | undefined) {
+  return employee?.employmentType === CONTRACTOR;
+}
+
+/** "51824753556" -> "51 824 753 556" */
+export function formatAbn(abn: string) {
+  const d = abn.replace(/\D/g, '');
+  return d.length === 11 ? `${d.slice(0, 2)} ${d.slice(2, 5)} ${d.slice(5, 8)} ${d.slice(8)}` : abn;
 }
 
 /** Overtime is paid at 1.5x the normal hourly rate unless the owner sets a custom rate. */

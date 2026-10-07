@@ -23,6 +23,12 @@ export function StepReview({
     { label: 'Phone', value: data.phone, step: 2 },
     { label: 'Position', value: data.position, step: 2 },
     { label: 'Employment type', value: data.employmentType ?? '—', step: 2 },
+    ...(data.employmentType === 'Contractor'
+      ? [
+          { label: 'ABN', value: data.abn, step: 2 },
+          { label: 'Registered for GST', value: data.gstRegistered ? 'Yes' : 'No', step: 2 },
+        ]
+      : []),
     { label: 'Bank account', value: maskLast4(data.accountNumber), step: 3 },
     { label: 'Superannuation', value: superFund || 'Not provided', step: 4 },
     {

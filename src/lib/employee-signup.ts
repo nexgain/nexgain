@@ -36,6 +36,9 @@ export async function completeEmployeeSignup(data: EmployeeSignupData) {
       address: data.address.trim(),
       position: data.position.trim(),
       employment_type: data.employmentType,
+      // Contractors only (the database ignores them for other worker types).
+      abn: data.employmentType === 'Contractor' ? data.abn.replace(/\D/g, '') : '',
+      gst_registered: data.employmentType === 'Contractor' && data.gstRegistered === true,
       super_fund: superFund,
       emergency_contact_name: data.emergencyName.trim(),
       emergency_contact_phone: data.emergencyPhone.trim(),

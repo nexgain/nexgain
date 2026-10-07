@@ -4,6 +4,7 @@ import type { ColorValue } from 'react-native';
 
 import { EmployeeColors as C } from '@/constants/employee-theme';
 import { useCurrentEmployee } from '@/data/current-employee';
+import { isContractor } from '@/data/employees';
 import { employeeNotifications, useNotifications } from '@/data/notifications';
 
 type TabIconProps = {
@@ -19,6 +20,8 @@ function TabIcon({ name, color, size }: TabIconProps) {
 export default function EmployeeTabsLayout() {
   const currentEmployee = useCurrentEmployee();
   const unread = employeeNotifications(useNotifications(), currentEmployee?.id ?? null).filter((n) => !n.read).length;
+  // Decided only by their employment type (set at sign-up, changeable by the owner).
+  const contractor = isContractor(currentEmployee);
 
   return (
     <Tabs
@@ -52,15 +55,39 @@ export default function EmployeeTabsLayout() {
           ),
         }}
       />
+      {/* Contractors only: their invoices. ("my-invoices" so it doesn't clash with the owner's /invoices.) */}
+      <Tabs.Screen
+        name="my-invoices"
+        options={{
+          title: 'Invoices',
+          href: contractor ? undefined : null,
+          tabBarIcon: (props) => (
+            <TabIcon name={{ ios: 'doc.plaintext.fill', android: 'request_quote', web: 'request_quote' }} {...props} />
+          ),
+        }}
+      />
+      {/* Everyone except contractors: payslips (unchanged). */}
       <Tabs.Screen
         name="payslips"
         options={{
           title: 'Payslips',
+          href: contractor ? null : undefined,
           tabBarIcon: (props) => (
             <TabIcon
               name={{ ios: 'doc.text.fill', android: 'receipt_long', web: 'receipt_long' }}
               {...props}
             />
+          ),
+        }}
+      />
+      {/* Contractors only: paid invoices, in the Payslips position. */}
+      <Tabs.Screen
+        name="paid"
+        options={{
+          title: 'Paid',
+          href: contractor ? undefined : null,
+          tabBarIcon: (props) => (
+            <TabIcon name={{ ios: 'checkmark.seal.fill', android: 'paid', web: 'paid' }} {...props} />
           ),
         }}
       />

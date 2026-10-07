@@ -27,6 +27,12 @@ export type SignupQualification = {
 
 export const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Casual', 'Contractor'] as const;
 
+/** "51824753556" -> "51 824 753 556" while typing. */
+export function formatAbnInput(text: string) {
+  const d = text.replace(/\D/g, '').slice(0, 11);
+  return [d.slice(0, 2), d.slice(2, 5), d.slice(5, 8), d.slice(8, 11)].filter(Boolean).join(' ');
+}
+
 export type EmployeeSignupData = {
   // Step 1
   fullName: string;
@@ -47,6 +53,9 @@ export type EmployeeSignupData = {
   address: string;
   position: string;
   employmentType: (typeof EMPLOYMENT_TYPES)[number] | null;
+  /** Contractors only. */
+  abn: string;
+  gstRegistered: boolean | null;
   // Step 4
   accountName: string;
   bsb: string;
@@ -75,6 +84,8 @@ export const EMPTY_EMPLOYEE_SIGNUP: EmployeeSignupData = {
   address: '',
   position: '',
   employmentType: null,
+  abn: '',
+  gstRegistered: null,
   accountName: '',
   bsb: '',
   accountNumber: '',

@@ -4,13 +4,14 @@ import { availabilityStore } from '@/data/availability';
 import { businessStore, clearBusiness, loadMyBusiness } from '@/data/business';
 import { eventsStore, loadEvents } from '@/data/calendar';
 import { clientsStore, loadClients } from '@/data/clients';
+import { clearContractorInvoices, loadContractorInvoices } from '@/data/contractor-invoices';
 import { jobsStore, loadJobs, loadMyAssignedJobs } from '@/data/jobs';
 import { clockStore, loadClockSessions } from '@/data/clock-records';
 import { currentEmployeeStore } from '@/data/current-employee';
 import { invitesStore, loadInvites } from '@/data/employee-invites';
 import { expensesStore, loadExpenses } from '@/data/finance';
 import { clearDocs, loadDocs } from '@/data/invoices';
-import { employeesStore, loadOwnProfile, loadTeam } from '@/data/employees';
+import { employeesStore, isContractor, loadOwnProfile, loadTeam } from '@/data/employees';
 import { jobReportsStore } from '@/data/job-reports';
 import { clearNotifications, loadNotifications, subscribeToNotifications } from '@/data/notifications';
 import { loadPayslips, payslipsStore } from '@/data/payroll';
@@ -66,6 +67,7 @@ async function load(userId: string) {
       loadClients().catch(() => {}),
       loadJobs().catch(() => {}),
       loadEvents().catch(() => {}),
+      loadContractorInvoices().catch(() => {}),
     ]);
     stopListening.push(subscribeToNotifications(userId, null));
 
@@ -81,6 +83,7 @@ async function load(userId: string) {
       // Jobs change when shifts are linked to them (Assigned) and when they're booked or moved.
       .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs', filter }, refresh(loadJobs))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_events', filter }, refresh(loadEvents))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contractor_invoices', filter }, refresh(loadContractorInvoices))
       .subscribe();
     stopListening.push(() => {
       supabase.removeChannel(live);
@@ -94,6 +97,8 @@ async function load(userId: string) {
       loadClockSessions().catch(() => {}),
       loadPayslips().catch(() => {}),
       loadMyAssignedJobs().catch(() => {}),
+      // Only contractors can see any (the database returns none for other workers).
+      isContractor(me) ? loadContractorInvoices().catch(() => {}) : Promise.resolve(),
     ]);
 
     // A new roster or pay notification means there's something new to show.
@@ -104,6 +109,7 @@ async function load(userId: string) {
           refresh(loadMyAssignedJobs)();
         }
         if (n.type === 'payslip_available') refresh(loadPayslips)();
+        if (n.type === 'invoice_status') refresh(loadContractorInvoices)();
       }),
     );
 
@@ -113,7 +119,13 @@ async function load(userId: string) {
         .channel(`employee-${me.id}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'employees', filter: `id=eq.${me.id}` }, async () => {
           const updated = await loadOwnProfile(userId, businessStore.get()?.businessName ?? businessName).catch(() => null);
-          if (updated) currentEmployeeStore.set(updated);
+          if (updated) {
+            // Switched to or from Contractor: the invoice tabs appear or disappear to match.
+            const wasContractor = isContractor(currentEmployeeStore.get());
+            currentEmployeeStore.set(updated);
+            if (isContractor(updated) && !wasContractor) refresh(loadContractorInvoices)();
+            if (!isContractor(updated)) clearContractorInvoices();
+          }
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'shifts', filter: `business_id=eq.${me.businessId}` }, () => {
           refresh(loadShifts)();
@@ -147,6 +159,7 @@ export function endSession() {
   availabilityStore.set({});
   jobReportsStore.set([]);
   clientsStore.set([]);
+  clearContractorInvoices();
   jobsStore.set([]);
   eventsStore.set([]);
 }

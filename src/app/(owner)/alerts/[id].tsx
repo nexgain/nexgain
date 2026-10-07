@@ -37,14 +37,21 @@ export default function OwnerNotificationDetail() {
   const openRoster = () =>
     router.navigate({ pathname: '/roster', params: { from: 'notification', date: n.relatedShift?.date ?? '' } });
 
+  // Contractor invoices open the invoice the notification is about.
+  const openInvoice = n.relatedId
+    ? () => router.navigate({ pathname: '/team-invoice/[id]', params: { id: n.relatedId! } })
+    : undefined;
+
   const actions: DetailAction[] = typeInfo(n).actions.map((label) => ({
     label,
     onPress:
-      ACTION_ROUTES[label] === '/roster'
-        ? openRoster
-        : ACTION_ROUTES[label]
-          ? () => router.navigate(ACTION_ROUTES[label])
-          : undefined,
+      label === 'Review contractor invoice'
+        ? openInvoice
+        : ACTION_ROUTES[label] === '/roster'
+          ? openRoster
+          : ACTION_ROUTES[label]
+            ? () => router.navigate(ACTION_ROUTES[label])
+            : undefined,
   }));
 
   return (

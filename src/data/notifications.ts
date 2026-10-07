@@ -52,6 +52,7 @@ export const OWNER_TYPES = {
   employee_added: { category: 'Employees', icon: ICONS.personAdd, tone: 'blue', actions: ['View employee'] },
   document_uploaded: { category: 'Employees', icon: ICONS.document, tone: 'purple', actions: ['View document'] },
   invoice_paid: { category: 'Finance', icon: ICONS.dollar, tone: 'green', actions: ['View invoice'] },
+  contractor_invoice: { category: 'Finance', icon: ICONS.document, tone: 'blue', actions: ['Review contractor invoice'] },
   payment_overdue: { category: 'Finance', icon: ICONS.dollar, tone: 'red', actions: ['View invoice', 'Send reminder'] },
   roster_published: { category: 'System', icon: ICONS.calendar, tone: 'blue', actions: ['Open roster'] },
   stock_low: { category: 'System', icon: ICONS.box, tone: 'amber', actions: ['Reorder stock'] },
@@ -63,6 +64,7 @@ export const EMPLOYEE_TYPES = {
   shift_changed: { category: 'Roster', icon: ICONS.warning, tone: 'amber', actions: ['Open Roster', 'View Upcoming Jobs'] },
   job_completed: { category: 'Roster', icon: ICONS.check, tone: 'green', actions: ['View Upcoming Jobs'] },
   payslip_available: { category: 'Pay', icon: ICONS.dollar, tone: 'green', actions: ['Open Payslips'] },
+  invoice_status: { category: 'Pay', icon: ICONS.document, tone: 'blue', actions: ['Open invoice'] },
   team_meeting: { category: 'Team', icon: ICONS.team, tone: 'purple', actions: ['Open Roster'] },
   announcement: { category: 'Team', icon: ICONS.megaphone, tone: 'blue', actions: [] },
   document_added: { category: 'Team', icon: ICONS.document, tone: 'purple', actions: ['Open Qualifications'] },
@@ -72,7 +74,14 @@ export const EMPLOYEE_TYPES = {
 export type OwnerNotificationType = keyof typeof OWNER_TYPES;
 export type EmployeeNotificationType = keyof typeof EMPLOYEE_TYPES;
 
-export const OWNER_FILTERS = ['All', 'Jobs', 'Employees', 'Incidents', 'Finance', 'System'] as const;
+export const OWNER_FILTERS = ['All', 'To Do', 'Jobs', 'Employees', 'Incidents', 'Finance', 'System'] as const;
+
+/**
+ * Owner to-do statuses: things waiting on the owner. Contractor invoices are
+ * "To review" when sent and "To pay" once approved; the database moves them
+ * on to "Paid" / "Declined", which takes them off the to-do list.
+ */
+export const TO_DO_STATUSES = ['To review', 'To pay'];
 export const EMPLOYEE_FILTERS = ['All', 'Unread', 'Roster', 'Pay', 'Team'] as const;
 
 export type Attachment = { name: string; sizeBytes: number; uri?: string };
@@ -93,6 +102,8 @@ type Base = {
   attachments?: Attachment[];
   /** Shift this notification is about. */
   relatedShift?: { date: string; title: string; subtitle?: string };
+  /** The record it's about, e.g. a contractor invoice id. */
+  relatedId?: string;
 };
 
 export type OwnerNotification = Base & { audience: 'owner'; type: OwnerNotificationType };
@@ -162,6 +173,7 @@ type NotificationRow = {
   photos: string[] | null;
   attachments: Attachment[] | null;
   related_shift: { date: string; title: string; subtitle?: string } | null;
+  related_id?: string | null;
   read: boolean;
   created_at: string;
 };
@@ -181,6 +193,7 @@ function fromRow(row: NotificationRow, employeeId: string | null): AppNotificati
     relatedShift: row.related_shift
       ? { date: row.related_shift.date, title: row.related_shift.title, subtitle: row.related_shift.subtitle ?? undefined }
       : undefined,
+    relatedId: row.related_id ?? undefined,
   };
   return row.audience === 'owner'
     ? { ...base, audience: 'owner', type: row.type as OwnerNotificationType }
@@ -252,6 +265,7 @@ export function employeeNotifications(all: AppNotification[], employeeId: string
 export function matchesFilter(n: AppNotification, filter: string) {
   if (filter === 'All') return true;
   if (filter === 'Unread') return !n.read;
+  if (filter === 'To Do') return !!n.status && TO_DO_STATUSES.includes(n.status);
   return typeInfo(n).category === filter;
 }
 

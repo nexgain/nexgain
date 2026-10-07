@@ -8,7 +8,8 @@ import { EmployeeColors as C } from '@/constants/employee-theme';
 import { Radius, Spacing } from '@/constants/theme';
 import { useCurrentEmployee } from '@/data/current-employee';
 import { formatShortDate } from '@/data/employee-roster';
-import { employeeFullName, updateEmployee } from '@/data/employees';
+import { formatAbnInput, formatBsb } from '@/components/employee-signup/types';
+import { employeeFullName, isContractor, updateEmployee, updateMyBankDetails } from '@/data/employees';
 import { fromDateKey } from '@/data/shifts';
 
 // The employee's own profile. Phone and position can be updated here; the
@@ -18,6 +19,9 @@ export default function MyProfileScreen() {
   const insets = useSafeAreaInsets();
   const [phone, setPhone] = useState<string | null>(null);
   const [position, setPosition] = useState<string | null>(null);
+  const [abn, setAbn] = useState<string | null>(null);
+  const [gst, setGst] = useState<boolean | null>(null);
+  const [bank, setBank] = useState({ accountName: '', bsb: '', accountNumber: '' });
   const [status, setStatus] = useState<'idle' | 'saving' | 'error'>('idle');
 
   if (!me) {
@@ -28,16 +32,41 @@ export default function MyProfileScreen() {
     );
   }
 
+  const contractor = isContractor(me);
   const phoneValue = phone ?? me.phone;
   const positionValue = position ?? me.role;
-  const changed = phoneValue.trim() !== me.phone || positionValue.trim() !== me.role;
+  const abnValue = abn ?? formatAbnInput(me.abn);
+  const gstValue = gst ?? me.gstRegistered;
+  const bankChanged = !!(bank.accountName.trim() || bank.bsb.trim() || bank.accountNumber.trim());
+  const changed =
+    phoneValue.trim() !== me.phone ||
+    positionValue.trim() !== me.role ||
+    (contractor && (abnValue.replace(/\D/g, '') !== me.abn || gstValue !== me.gstRegistered || bankChanged));
   const phoneError = phoneValue.replace(/\D/g, '').length < 8 ? 'Enter a valid phone number.' : null;
   const positionError = positionValue.trim() ? null : 'Enter your position.';
+  // Contractors: ABN shown on invoices, and the bank account invoices are paid into.
+  const abnError = contractor && abnValue.replace(/\D/g, '').length !== 11 ? 'Enter your 11-digit ABN.' : null;
+  const bankError =
+    contractor && bankChanged
+      ? !bank.accountName.trim()
+        ? 'Enter the account name.'
+        : bank.bsb.replace(/\D/g, '').length !== 6
+          ? 'Enter a 6-digit BSB.'
+          : bank.accountNumber.replace(/\D/g, '').length < 5
+            ? 'Enter your account number.'
+            : null
+      : null;
+  const invalid = !!(phoneError || positionError || abnError || bankError);
 
   async function save() {
-    if (!me || phoneError || positionError) return;
+    if (!me || invalid) return;
     setStatus('saving');
-    const ok = await updateEmployee(me.id, { phone: phoneValue.trim(), role: positionValue.trim() });
+    let ok = await updateEmployee(me.id, {
+      phone: phoneValue.trim(),
+      role: positionValue.trim(),
+      ...(contractor ? { abn: abnValue.replace(/\D/g, ''), gstRegistered: gstValue } : {}),
+    });
+    if (ok && contractor && bankChanged) ok = await updateMyBankDetails(me.id, bank);
     if (!ok) {
       setStatus('error');
       return;
@@ -95,6 +124,77 @@ export default function MyProfileScreen() {
             {positionError ? <Text style={styles.error}>{positionError}</Text> : null}
           </View>
         </Card>
+
+        {contractor && (
+          <>
+            <Text style={styles.sectionTitle}>Invoicing details</Text>
+            <Card style={styles.form}>
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>ABN</Text>
+                <TextInput
+                  value={abnValue}
+                  onChangeText={(t) => setAbn(formatAbnInput(t))}
+                  keyboardType="number-pad"
+                  placeholder="12 345 678 901"
+                  placeholderTextColor={C.textMuted}
+                  accessibilityLabel="ABN"
+                  style={[styles.input, abnError && styles.inputError]}
+                />
+                {abnError ? <Text style={styles.error}>{abnError}</Text> : null}
+              </View>
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Registered for GST?</Text>
+                <View style={styles.choiceRow}>
+                  {([true, false] as const).map((v) => (
+                    <Pressable
+                      key={String(v)}
+                      onPress={() => setGst(v)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: gstValue === v }}
+                      accessibilityLabel={`Registered for GST: ${v ? 'Yes' : 'No'}`}
+                      style={[styles.choice, gstValue === v && styles.choiceSelected]}>
+                      <Text style={[styles.choiceText, gstValue === v && styles.choiceTextSelected]}>{v ? 'Yes' : 'No'}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Bank account for payments</Text>
+                <Text style={styles.hint}>
+                  {me.bankAccount ? `Account ending ${me.bankAccount.accountNumber} is saved.` : 'No bank account saved yet.'} Fill in
+                  all three below only if you want to change it.
+                </Text>
+                <TextInput
+                  value={bank.accountName}
+                  onChangeText={(accountName) => setBank((b) => ({ ...b, accountName }))}
+                  placeholder="Account name"
+                  placeholderTextColor={C.textMuted}
+                  accessibilityLabel="Account name"
+                  style={styles.input}
+                />
+                <TextInput
+                  value={bank.bsb}
+                  onChangeText={(bsb) => setBank((b) => ({ ...b, bsb: formatBsb(bsb) }))}
+                  placeholder="BSB (e.g. 062-000)"
+                  keyboardType="number-pad"
+                  placeholderTextColor={C.textMuted}
+                  accessibilityLabel="BSB"
+                  style={styles.input}
+                />
+                <TextInput
+                  value={bank.accountNumber}
+                  onChangeText={(accountNumber) => setBank((b) => ({ ...b, accountNumber: accountNumber.replace(/\D/g, '') }))}
+                  placeholder="Account number"
+                  keyboardType="number-pad"
+                  placeholderTextColor={C.textMuted}
+                  accessibilityLabel="Account number"
+                  style={styles.input}
+                />
+                {bankError ? <Text style={styles.error}>{bankError}</Text> : null}
+              </View>
+            </Card>
+          </>
+        )}
         {status === 'error' && (
           <Text style={styles.error}>Couldn&apos;t save your changes. Check your internet connection and try again.</Text>
         )}
@@ -103,11 +203,11 @@ export default function MyProfileScreen() {
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.three }]}>
         <Pressable
           onPress={save}
-          disabled={!changed || !!phoneError || !!positionError || status === 'saving'}
+          disabled={!changed || invalid || status === 'saving'}
           accessibilityRole="button"
           style={({ pressed }) => [
             styles.saveButton,
-            (!changed || phoneError || positionError || status === 'saving') && styles.saveDisabled,
+            (!changed || invalid || status === 'saving') && styles.saveDisabled,
             pressed && styles.pressed,
           ]}>
           <Text style={styles.saveText}>{status === 'saving' ? 'Saving…' : 'Save Changes'}</Text>
@@ -186,6 +286,36 @@ const styles = StyleSheet.create({
   },
   inputError: {
     borderColor: C.danger,
+  },
+  hint: {
+    color: C.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  choiceRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  choice: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: Spacing.three - 4,
+    borderRadius: Radius.medium - 2,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    backgroundColor: C.card,
+  },
+  choiceSelected: {
+    borderColor: C.primary,
+    backgroundColor: C.primarySoft,
+  },
+  choiceText: {
+    color: C.textSecondary,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  choiceTextSelected: {
+    color: C.primary,
   },
   error: {
     color: C.danger,

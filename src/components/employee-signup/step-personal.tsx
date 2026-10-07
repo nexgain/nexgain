@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { suggestRoles } from '@/components/employee-signup/roles';
-import { EMPLOYMENT_TYPES, type EmployeeStepProps } from '@/components/employee-signup/types';
+import { EMPLOYMENT_TYPES, formatAbnInput, type EmployeeStepProps } from '@/components/employee-signup/types';
 import { useNativePicker } from '@/components/pickers/use-native-picker';
 import { Button, Field, Icon, Input, SignupColors as C } from '@/components/signup/fields';
 import { formatShortDate } from '@/data/employee-roster';
@@ -30,12 +30,16 @@ export function StepPersonal({ data, update, onNext, nextLabel }: EmployeeStepPr
   });
 
   const phoneDigits = data.phone.replace(/\D/g, '');
+  const contractor = data.employmentType === 'Contractor';
   const errors = {
     fullName: !data.fullName.trim() && 'Enter your full name.',
     phone: phoneDigits.length < 8 && 'Enter a valid phone number.',
     dateOfBirth: !data.dateOfBirth && 'Choose your date of birth.',
     position: !data.position.trim() && 'Choose or type your position.',
     employmentType: !data.employmentType && 'Choose your employment type.',
+    // Only asked of contractors.
+    abn: contractor && data.abn.replace(/\D/g, '').length !== 11 && 'Enter your 11-digit ABN.',
+    gstRegistered: contractor && data.gstRegistered === null && 'Tell us if you’re registered for GST.',
   };
 
   return (
@@ -130,6 +134,40 @@ export function StepPersonal({ data, update, onNext, nextLabel }: EmployeeStepPr
           })}
         </View>
       </Field>
+
+      {contractor && (
+        <>
+          <Field label="ABN" error={tried && errors.abn} hint="Your Australian Business Number, shown on your invoices.">
+            <Input
+              value={data.abn}
+              onChangeText={(abn) => update({ abn: formatAbnInput(abn) })}
+              placeholder="12 345 678 901"
+              keyboardType="number-pad"
+              accessibilityLabel="ABN"
+              icon={{ ios: 'number', android: 'tag', web: 'tag' }}
+              hasError={tried && !!errors.abn}
+            />
+          </Field>
+          <Field label="Registered for GST?" error={tried && errors.gstRegistered} hint="If yes, 10% GST is added to your invoices.">
+            <View style={styles.types} accessibilityRole="radiogroup">
+              {([true, false] as const).map((value) => {
+                const selected = data.gstRegistered === value;
+                return (
+                  <Pressable
+                    key={String(value)}
+                    onPress={() => update({ gstRegistered: value })}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`Registered for GST: ${value ? 'Yes' : 'No'}`}
+                    style={[styles.type, selected && styles.typeSelected]}>
+                    <Text style={[styles.typeText, selected && styles.typeTextSelected]}>{value ? 'Yes' : 'No'}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </Field>
+        </>
+      )}
 
       <Button
         label={nextLabel}

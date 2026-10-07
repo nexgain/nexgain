@@ -4,7 +4,7 @@
 // was saved on their payslips, so later changes never alter them.
 import { businessStore, overtimeRulesOf, type OvertimeRules } from '@/data/business';
 import { clockStore, type ClockSession } from '@/data/clock-records';
-import { employeesStore, overtimeRateOf, type Employee, type PayType } from '@/data/employees';
+import { employeesStore, isContractor, overtimeRateOf, type Employee, type PayType } from '@/data/employees';
 import { createStore } from '@/data/store';
 import { newId, warnSaveFailed } from '@/lib/ids';
 import { supabase } from '@/lib/supabase';
@@ -239,7 +239,9 @@ function payableLines(
         weeks,
       );
     })
-    .filter((l) => l.employee.status !== 'inactive' || l.hours > 0 || l.status === 'Paid');
+    .filter((l) => l.employee.status !== 'inactive' || l.hours > 0 || l.status === 'Paid')
+    // Contractors are paid through their invoices, not payroll (no double payments).
+    .filter((l) => !isContractor(l.employee) || l.status === 'Paid');
 }
 
 /** Pay for every employee in a period. Pass the payslips so approved weeks show what was paid. */
@@ -401,7 +403,8 @@ export function approvePayments(periodId: string, employeeIds: string[]) {
 
   const created: PayslipRecord[] = employeesStore
     .get()
-    .filter((e) => employeeIds.includes(e.id) && !alreadyPaid.has(e.id))
+    // Contractors are never paid through payroll (they invoice instead).
+    .filter((e) => employeeIds.includes(e.id) && !alreadyPaid.has(e.id) && !isContractor(e))
     // Each employee's current rates and the current overtime rule; the payslip
     // keeps them, so later changes don't affect it.
     .map((e) => calculatePayLine(e, splitHours(sessions, e.id, period, rules), 'Pending'))

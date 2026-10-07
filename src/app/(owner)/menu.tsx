@@ -3,12 +3,14 @@ import { View } from 'react-native';
 
 import { InviteCodeCard } from '@/components/owner/employee-ui';
 import { ActionRow, Card, OwnerScreen, PageHeader } from '@/components/owner/ui';
+import { useContractorInvoices } from '@/data/contractor-invoices';
 import { ownerNotifications, useNotifications } from '@/data/notifications';
 import { logOut } from '@/lib/auth';
 
 // Owner screens that don't fit in the tab bar.
 export default function OwnerMoreScreen() {
   const unread = ownerNotifications(useNotifications()).filter((n) => !n.read).length;
+  const toReview = useContractorInvoices().filter((i) => i.status === 'sent').length;
 
   return (
     <OwnerScreen>
@@ -44,6 +46,12 @@ export default function OwnerMoreScreen() {
             icon={{ ios: 'person.2.fill', android: 'group', web: 'group' }}
             label="Employees"
             onPress={() => router.navigate('/employees' as Href)}
+            showDivider
+          />
+          <ActionRow
+            icon={{ ios: 'doc.plaintext.fill', android: 'request_quote', web: 'request_quote' }}
+            label={toReview > 0 ? `Contractor Invoices (${toReview} to review)` : 'Contractor Invoices'}
+            onPress={() => router.navigate('/contractor-invoices')}
             showDivider
           />
           <ActionRow

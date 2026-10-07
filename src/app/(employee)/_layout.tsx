@@ -37,6 +37,7 @@ export default function EmployeeLayout() {
         <Stack.Screen name="availability" options={{ title: 'My Availability' }} />
         <Stack.Screen name="profile" options={{ title: 'My Profile' }} />
         <Stack.Screen name="payslip/[id]" options={{ title: 'Payslip' }} />
+        <Stack.Screen name="contractor-invoice/[id]" options={{ title: 'Invoice' }} />
         <Stack.Screen name="qualifications" options={{ title: 'Qualifications' }} />
         <Stack.Screen name="add-qualification" options={{ title: 'Add Qualification' }} />
         <Stack.Screen name="job-report" options={{ title: 'Job report form' }} />
