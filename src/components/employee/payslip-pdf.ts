@@ -57,11 +57,11 @@ export function buildPayslipHtml(v: PayslipView, business: BusinessProfile | nul
     .net .label { font-size: 14px; font-weight: 600; }
     .net .value { font-size: 26px; font-weight: 800; }
   </style></head><body>
-    <div class="top"><h1>Payslip</h1><div class="muted">Paid ${esc(formatShortDate(v.paidAt))}</div></div>
+    <div class="top"><h1>Payslip</h1><div class="muted">${v.paid ? 'Paid' : 'Pay date'} ${esc(formatShortDate(v.paidAt))}${v.payrollLabel ? ` · ${esc(v.payrollLabel)}` : ''}</div></div>
 
     <div class="card period">
-      <div><div class="period-range">${esc(v.rangeLabel)}</div><div class="muted">${esc(v.frequency)} pay period</div></div>
-      <div style="text-align:right"><span class="badge">Paid</span><div class="muted" style="margin-top:4px">Paid on ${esc(formatShortDate(v.paidAt))}</div></div>
+      <div><div class="period-range">${esc(v.rangeLabel)}</div><div class="muted">${esc(v.frequency)} pay period${v.payrollLabel ? ` · ${esc(v.payrollLabel)}` : ''}</div></div>
+      <div style="text-align:right"><span class="badge">${v.paid ? 'Paid' : 'Processing'}</span><div class="muted" style="margin-top:4px">${v.paid ? 'Paid on' : 'Pay date'} ${esc(formatShortDate(v.paidAt))}</div></div>
     </div>
 
     <div class="card parties">

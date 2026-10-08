@@ -29,7 +29,7 @@ export function StepReview({
           { label: 'Registered for GST', value: data.gstRegistered ? 'Yes' : 'No', step: 2 },
         ]
       : []),
-    { label: 'Bank account', value: maskLast4(data.accountNumber), step: 3 },
+    { label: 'Bank account', value: maskLast4(data.iban.replace(/\D/g, '').slice(-4) || data.accountNumber), step: 3 },
     { label: 'Superannuation', value: superFund || 'Not provided', step: 4 },
     {
       label: 'Qualifications',

@@ -28,6 +28,8 @@ export type BusinessProfile = {
   financialYearStartMonth: number;
   gstRegistered: boolean;
   currency: string;
+  /** Country chosen at sign-up, e.g. "AU" (null for older businesses not yet set). Decides the bank payment file. */
+  country: string | null;
   trackGstInReports: boolean;
   bankConnected: boolean;
   accountingSoftware: string | null;
@@ -82,6 +84,7 @@ type BusinessRow = {
   financial_year_start_month: number;
   gst_registered: boolean;
   currency: string;
+  country?: string | null;
   track_gst_in_reports: boolean;
   email_app?: EmailApp;
   business_email?: string;
@@ -109,6 +112,7 @@ export function fromRow(row: BusinessRow): BusinessProfile {
     financialYearStartMonth: row.financial_year_start_month,
     gstRegistered: row.gst_registered,
     currency: row.currency,
+    country: row.country ?? null,
     trackGstInReports: row.track_gst_in_reports,
     // Not connected yet (no bank / accounting integrations exist).
     bankConnected: false,
@@ -141,6 +145,7 @@ function toColumns(p: Partial<BusinessProfile>) {
   if (p.financialYearStartMonth !== undefined) cols.financial_year_start_month = p.financialYearStartMonth;
   if (p.gstRegistered !== undefined) cols.gst_registered = p.gstRegistered;
   if (p.currency !== undefined) cols.currency = p.currency;
+  if (p.country !== undefined) cols.country = p.country;
   if (p.trackGstInReports !== undefined) cols.track_gst_in_reports = p.trackGstInReports;
   if (p.overtimeRules !== undefined) cols.overtime_rules = { daily_after_hours: p.overtimeRules.dailyAfterHours };
   if (p.emailApp !== undefined) cols.email_app = p.emailApp;
@@ -182,13 +187,13 @@ export async function createBusinessOnline(profile: Omit<BusinessProfile, 'id' |
   });
   if (error) throw error;
   const created = fromRow(data as BusinessRow);
-  // The email settings aren't part of create_business, so save them straight after.
+  // The email settings and country aren't part of create_business, so save them straight after.
   const { error: emailError } = await supabase
     .from('businesses')
-    .update({ email_app: profile.emailApp, business_email: profile.businessEmail })
+    .update({ email_app: profile.emailApp, business_email: profile.businessEmail, country: profile.country })
     .eq('id', created.id);
   if (emailError) console.warn('Could not save email settings:', emailError.message);
-  const saved = { ...created, emailApp: profile.emailApp, businessEmail: profile.businessEmail };
+  const saved = { ...created, emailApp: profile.emailApp, businessEmail: profile.businessEmail, country: profile.country };
   businessStore.set(saved);
   return saved;
 }

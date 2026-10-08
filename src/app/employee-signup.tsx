@@ -116,7 +116,7 @@ export default function EmployeeSignupScreen() {
       setFailedUploads(failed);
       setJoinedBusiness(data.business?.name ?? 'your employer');
       // Don't keep sensitive details in memory once they're saved.
-      setData((d) => ({ ...d, password: '', bsb: '', accountNumber: '', tfn: '' }));
+      setData((d) => ({ ...d, password: '', bsb: '', accountNumber: '', iban: '', bic: '', tfn: '' }));
       setStep(SUCCESS);
     } catch (e) {
       const message = e instanceof Error ? e.message : '';

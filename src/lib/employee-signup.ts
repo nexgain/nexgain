@@ -1,15 +1,40 @@
 // Employee sign-up: find the business by invite code, then create the employee
 // profile in that business. Bank details and TFN are sent once, over HTTPS, and
 // stored encrypted by the database; they're never logged or kept in the app.
-import type { EmployeeSignupData, FoundBusiness, SignupQualification } from '@/components/employee-signup/types';
+import {
+  signupBankForm,
+  type EmployeeSignupData,
+  type FoundBusiness,
+  type SignupQualification,
+} from '@/components/employee-signup/types';
 import { addQualification } from '@/data/qualifications';
+import { bankFormToColumns } from '@/lib/payment-files/bank-details';
+import { bankFieldSetFor } from '@/lib/payment-files/countries';
 import { supabase } from '@/lib/supabase';
+
+type FoundRow = {
+  id: string;
+  name: string;
+  logo: string | null;
+  industry: string | null;
+  industry_category: string | null;
+  country?: string | null;
+};
 
 export async function findBusinessByCode(code: string): Promise<FoundBusiness | null> {
   const { data, error } = await supabase.rpc('find_business_by_code', { p_code: code.trim().toUpperCase() });
   if (error) throw error;
-  const row = (data as { id: string; name: string; logo: string | null; industry: string | null; industry_category: string | null }[])[0];
-  return row ? { id: row.id, name: row.name, logo: row.logo, industry: row.industry, industryCategory: row.industry_category } : null;
+  const row = (data as FoundRow[])[0];
+  return row
+    ? {
+        id: row.id,
+        name: row.name,
+        logo: row.logo,
+        industry: row.industry,
+        industryCategory: row.industry_category,
+        country: row.country ?? null,
+      }
+    : null;
 }
 
 /** Name / email / phone the owner entered, for a personal invite link. null if it's not valid. */
@@ -42,9 +67,8 @@ export async function completeEmployeeSignup(data: EmployeeSignupData) {
       super_fund: superFund,
       emergency_contact_name: data.emergencyName.trim(),
       emergency_contact_phone: data.emergencyPhone.trim(),
-      account_name: data.accountName.trim(),
-      bsb: data.bsb,
-      account_number: data.accountNumber,
+      // Only the boxes for the business's country (see bank-details.ts).
+      ...bankFormToColumns(bankFieldSetFor(data.business?.country), signupBankForm(data)),
       tfn: data.tfn,
       invite_id: data.inviteId ?? '',
     },

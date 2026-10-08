@@ -3,19 +3,21 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 
-/** Centered "are you sure?" pop-up with Cancel and a red destructive action. */
+/** Centered "are you sure?" pop-up with Cancel and a red destructive action (or a blue one when `destructive` is false). */
 export function ConfirmDialog({
   visible,
   message,
   confirmLabel,
   onConfirm,
   onCancel,
+  destructive = true,
 }: {
   visible: boolean;
   message: string;
   confirmLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
+  destructive?: boolean;
 }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
@@ -29,7 +31,7 @@ export function ConfirmDialog({
             <Pressable
               onPress={onConfirm}
               accessibilityRole="button"
-              style={({ pressed }) => [styles.flex, styles.destructive, pressed && styles.pressed]}>
+              style={({ pressed }) => [styles.flex, styles.destructive, !destructive && styles.confirm, pressed && styles.pressed]}>
               <Text style={styles.destructiveText}>{confirmLabel}</Text>
             </Pressable>
           </View>
@@ -75,6 +77,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.danger,
     backgroundColor: C.danger,
+  },
+  confirm: {
+    borderColor: C.accent,
+    backgroundColor: C.accent,
   },
   destructiveText: {
     color: '#FFFFFF',

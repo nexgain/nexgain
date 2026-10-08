@@ -89,11 +89,13 @@ export default function PayslipScreen() {
         <IconBadge name={Icons.calendar} />
         <View style={styles.flex}>
           <Text style={styles.periodRange}>{payslip.rangeLabel}</Text>
-          <Text style={styles.muted}>{payslip.frequency} pay period</Text>
+          <Text style={styles.muted}>
+            {payslip.frequency} pay period{payslip.payrollLabel ? ` · ${payslip.payrollLabel}` : ''}
+          </Text>
         </View>
         <View style={styles.paidCol}>
-          <View style={styles.paidBadge}>
-            <Text style={styles.paidText}>Paid</Text>
+          <View style={[styles.paidBadge, !payslip.paid && { backgroundColor: C.primarySoft }]}>
+            <Text style={[styles.paidText, !payslip.paid && { color: C.primary }]}>{payslip.paid ? 'Paid' : 'Processing'}</Text>
           </View>
           <Text style={styles.smallMuted}>{formatShortDate(payslip.paidAt)}</Text>
         </View>

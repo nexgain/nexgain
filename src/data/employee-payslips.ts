@@ -5,6 +5,7 @@
 import { formatShortDate } from '@/data/employee-roster';
 import { usePayslipRecords, type PayslipRecord } from '@/data/payroll';
 import { fromDateKey } from '@/data/shifts';
+import { payrollLabel } from '@/lib/payment-files/types';
 
 /** Pay periods are Monday to Sunday. */
 export const PAY_FREQUENCY = 'Weekly';
@@ -25,7 +26,12 @@ export type PayslipView = {
   rangeLabel: string;
   /** e.g. "Payslip_29-Sep-2026_to_05-Oct-2026.pdf" */
   fileName: string;
+  /** False while the pay run is approved but not yet marked as paid by the owner. */
+  paid: boolean;
+  /** When it was paid, or the expected pay date while it's still processing. */
   paidAt: Date;
+  /** e.g. "Payroll 004" (null on very old payslips). */
+  payrollLabel: string | null;
   salaried: boolean;
   ordinaryHours: number;
   overtimeHours: number;
@@ -67,7 +73,9 @@ export function payslipView(p: PayslipRecord): PayslipView {
     frequency: PAY_FREQUENCY,
     rangeLabel: `${formatShortDate(fromDateKey(p.periodStart), false)} – ${formatShortDate(fromDateKey(p.periodEnd))}`,
     fileName: `Payslip_${fileDate(p.periodStart)}_to_${fileDate(p.periodEnd)}.pdf`,
-    paidAt: new Date(p.paidAt),
+    paid: p.status === 'paid',
+    paidAt: p.paidAt ? new Date(p.paidAt) : fromDateKey(p.payDate ?? p.periodEnd),
+    payrollLabel: p.payrollNumber ? payrollLabel(p.payrollNumber) : null,
     salaried: p.payType === 'salary',
     ordinaryHours: p.ordinaryHours,
     overtimeHours: p.overtimeHours,
@@ -90,7 +98,7 @@ export function payslipView(p: PayslipRecord): PayslipView {
 /** The employee's payslips, newest first. */
 export function usePayslipViews(): PayslipView[] {
   return [...usePayslipRecords()]
-    .sort((a, b) => b.periodStart.localeCompare(a.periodStart) || b.paidAt.localeCompare(a.paidAt))
+    .sort((a, b) => b.periodStart.localeCompare(a.periodStart) || (b.payrollNumber ?? 0) - (a.payrollNumber ?? 0))
     .map(payslipView);
 }
 

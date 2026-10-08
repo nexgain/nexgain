@@ -363,8 +363,28 @@ function PayTab({ employee }: { employee: Employee }) {
             <Rows
               rows={[
                 ['Account name', details.account_name || '—'],
-                ['BSB', details.bsb || '—'],
-                ['Account number', details.account_number || '—'],
+                // Labels match the country the details were entered for.
+                ...((details.bank_country === 'EU'
+                  ? [
+                      ['IBAN', details.iban || '—'],
+                      ['BIC', details.bic || '—'],
+                    ]
+                  : [
+                      [
+                        details.bank_country === 'US'
+                          ? 'Routing number'
+                          : details.bank_country === 'GB'
+                            ? 'Sort code'
+                            : details.bank_country === 'OTHER'
+                              ? 'Bank / branch code'
+                              : 'BSB',
+                        details.bsb || '—',
+                      ],
+                      ['Account number', details.account_number || '—'],
+                      ...(details.bank_country === 'US'
+                        ? [['Account type', details.account_type === 'savings' ? 'Savings' : 'Checking']]
+                        : []),
+                    ]) as [string, string][]),
                 ['Tax file number', details.tfn || 'Not provided'],
               ]}
             />

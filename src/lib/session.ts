@@ -14,6 +14,7 @@ import { applyRemoteDoc, clearBusinessPayment, clearDocs, loadBusinessPayment, l
 import { employeesStore, isContractor, loadOwnProfile, loadTeam } from '@/data/employees';
 import { jobReportsStore } from '@/data/job-reports';
 import { clearNotifications, loadNotifications, subscribeToNotifications } from '@/data/notifications';
+import { loadPayRuns, payRunsStore } from '@/data/pay-runs';
 import { loadPayslips, payslipsStore } from '@/data/payroll';
 import { qualificationsStore } from '@/data/qualifications';
 import { loadShifts, shiftsStore } from '@/data/shifts';
@@ -65,6 +66,7 @@ async function load(userId: string) {
       loadShifts().catch(() => {}),
       loadClockSessions().catch(() => {}),
       loadPayslips().catch(() => {}),
+      loadPayRuns().catch(() => {}),
       loadClients().catch(() => {}),
       loadJobs().catch(() => {}),
       loadEvents().catch(() => {}),
@@ -81,6 +83,7 @@ async function load(userId: string) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clock_sessions', filter }, refresh(loadClockSessions))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'shifts', filter }, refresh(loadShifts))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payslips', filter }, refresh(loadPayslips))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pay_runs', filter }, refresh(loadPayRuns))
       // Jobs change when shifts are linked to them (Assigned) and when they're booked or moved.
       .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs', filter }, refresh(loadJobs))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_events', filter }, refresh(loadEvents))
@@ -162,6 +165,7 @@ export function endSession() {
   shiftsStore.set([]);
   clockStore.set([]);
   payslipsStore.set([]);
+  payRunsStore.set([]);
   availabilityStore.set({});
   jobReportsStore.set([]);
   clientsStore.set([]);

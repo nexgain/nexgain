@@ -52,6 +52,7 @@ function toProfile(data: SignupData): Omit<BusinessProfile, 'id' | 'inviteCode' 
     financialYearStartMonth: data.financialYearStartMonth,
     gstRegistered: data.gstRegistered,
     currency: data.currency,
+    country: data.country,
     trackGstInReports: data.trackGstInReports,
     bankConnected: false,
     accountingSoftware: null,

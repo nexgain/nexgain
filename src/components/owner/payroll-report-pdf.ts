@@ -25,7 +25,7 @@ export function buildPayrollReportHtml(period: Period, frequency: string, busine
     .map((l, i) => {
       const name = employeeFullName(l.employee);
       const salaried = l.employee.payType === 'salary';
-      const pending = l.status !== 'Paid';
+      const pending = l.status === 'Pending';
       return `<tr>
         <td class="idx">${i + 1}</td>
         <td><div class="emp"><span class="initials">${esc(employeeInitialsOf(name))}</span><span>${esc(name)}${

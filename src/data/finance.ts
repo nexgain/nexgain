@@ -113,7 +113,7 @@ export function expenseEntries(expenses: Expense[], payslips: PayslipRecord[], e
   const names = new Map(employees.map((e) => [e.id, employeeFullName(e)]));
   const wages: MoneyEntry[] = payslips.map((p) => ({
     id: `payslip-${p.id}`,
-    date: new Date(p.paidAt),
+    date: p.paidAt ? new Date(p.paidAt) : fromDateKey(p.payDate ?? p.periodEnd),
     amount: Math.round((p.gross + p.super) * 100) / 100,
     title: `Wages – ${names.get(p.employeeId) ?? 'Former employee'}`,
     subtitle: `Pay period from ${fromDateKey(p.periodStart).toLocaleDateString([], { day: 'numeric', month: 'short' })} · incl. super`,

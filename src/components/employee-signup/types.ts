@@ -1,6 +1,7 @@
 // Everything typed during employee sign-up. Held in memory while moving between
 // steps; sent to the database when "Create Account" is pressed. The password
 // goes to Supabase's login system; bank details and TFN are stored encrypted.
+import type { BankForm } from '@/lib/payment-files/bank-details';
 
 export type FoundBusiness = {
   id: string;
@@ -8,6 +9,8 @@ export type FoundBusiness = {
   logo: string | null;
   industry: string | null;
   industryCategory: string | null;
+  /** e.g. "AU": decides which bank details are asked for. null for older businesses (treated as Australian). */
+  country: string | null;
 };
 
 export type PickedDocument = {
@@ -56,10 +59,16 @@ export type EmployeeSignupData = {
   /** Contractors only. */
   abn: string;
   gstRegistered: boolean | null;
-  // Step 4
+  // Step 4 (which of these are used depends on the business's country)
   accountName: string;
+  /** BSB (AU), routing number (US) or sort code (UK). */
   bsb: string;
   accountNumber: string;
+  /** US only. */
+  accountType: 'checking' | 'savings' | '';
+  /** Eurozone only. */
+  iban: string;
+  bic: string;
   // Step 5
   tfn: string;
   superFund: string | null;
@@ -89,6 +98,9 @@ export const EMPTY_EMPLOYEE_SIGNUP: EmployeeSignupData = {
   accountName: '',
   bsb: '',
   accountNumber: '',
+  accountType: '',
+  iban: '',
+  bic: '',
   tfn: '',
   superFund: null,
   superFundOther: '',
@@ -136,6 +148,18 @@ export function codeFromLink(link: string) {
   const text = link.trim();
   const match = text.match(/join\/([A-Za-z0-9-]+)/i) ?? text.match(/[?&]code=([A-Za-z0-9-]+)/i);
   return match ? match[1].toUpperCase() : null;
+}
+
+/** The bank boxes in the shape the shared bank checks use. */
+export function signupBankForm(data: EmployeeSignupData): BankForm {
+  return {
+    accountName: data.accountName,
+    branchCode: data.bsb,
+    accountNumber: data.accountNumber,
+    accountType: data.accountType,
+    iban: data.iban,
+    bic: data.bic,
+  };
 }
 
 /** "123456" -> "123-456" */

@@ -36,6 +36,8 @@ export type SignupData = {
   financialYearStartMonth: number;
   gstRegistered: boolean;
   currency: string;
+  /** e.g. "AU" (see COUNTRIES). */
+  country: string;
   trackGstInReports: boolean;
   // Step 7
   emailApp: EmailApp;
@@ -65,6 +67,7 @@ export const EMPTY_SIGNUP: SignupData = {
   financialYearStartMonth: 7,
   gstRegistered: true,
   currency: 'AUD – Australian Dollar',
+  country: 'AU',
   trackGstInReports: true,
   emailApp: 'gmail',
   businessEmail: '',

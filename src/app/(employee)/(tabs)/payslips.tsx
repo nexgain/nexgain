@@ -58,9 +58,10 @@ export default function PayslipsScreen() {
               <View style={styles.flex}>
                 <Text style={styles.range}>{p.rangeLabel}</Text>
                 <View style={styles.metaRow}>
-                  <Text style={styles.meta}>{p.frequency}</Text>
-                  <View style={styles.paidBadge}>
-                    <Text style={styles.paidText}>Paid</Text>
+                  <Text style={styles.meta}>{p.payrollLabel ? `${p.frequency} · ${p.payrollLabel}` : p.frequency}</Text>
+                  {/* Approved but not yet marked as paid by the owner. */}
+                  <View style={[styles.paidBadge, !p.paid && styles.processingBadge]}>
+                    <Text style={[styles.paidText, !p.paid && styles.processingText]}>{p.paid ? 'Paid' : 'Processing'}</Text>
                   </View>
                 </View>
               </View>
@@ -80,7 +81,13 @@ export default function PayslipsScreen() {
               <View style={styles.flex}>
                 <Text style={styles.range}>{formatShortDate(p.paidAt)}</Text>
                 <Text style={styles.meta}>
-                  {me?.bankAccount ? `Paid to account ***${me.bankAccount.accountNumber}` : 'Paid'} · {p.rangeLabel}
+                  {!p.paid
+                    ? 'Processing'
+                    : me?.bankAccount
+                      ? `Paid to account ***${me.bankAccount.accountNumber}`
+                      : 'Paid'}{' '}
+                  · {p.rangeLabel}
+                  {p.payrollLabel ? ` · ${p.payrollLabel}` : ''}
                 </Text>
               </View>
               <Text style={styles.amount}>{formatCurrency(p.net)}</Text>
@@ -177,6 +184,12 @@ const styles = StyleSheet.create({
     color: C.success,
     fontSize: 12,
     fontWeight: '700',
+  },
+  processingBadge: {
+    backgroundColor: C.primarySoft,
+  },
+  processingText: {
+    color: C.primary,
   },
   historyRow: {
     flexDirection: 'row',

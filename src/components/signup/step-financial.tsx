@@ -1,6 +1,7 @@
 import { SelectField } from '@/components/employee/form-fields';
 import { Button, Field, YesNo } from '@/components/signup/fields';
 import type { StepProps } from '@/components/signup/types';
+import { COUNTRIES, isEurozone } from '@/lib/payment-files/countries';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -17,9 +18,31 @@ export const CURRENCIES = [
   'CAD – Canadian Dollar',
 ] as const;
 
+const COUNTRY_NAMES = COUNTRIES.map((c) => c.name);
+
+/** The usual currency for a country, so picking the country fills it in. */
+function currencyFor(code: string): (typeof CURRENCIES)[number] | null {
+  if (isEurozone(code)) return 'EUR – Euro';
+  const prefix = ({ AU: 'AUD', NZ: 'NZD', US: 'USD', GB: 'GBP', CA: 'CAD' } as Record<string, string>)[code];
+  return CURRENCIES.find((c) => c.startsWith(`${prefix} `)) ?? null;
+}
+
 export function StepFinancial({ data, update, onNext }: StepProps) {
   return (
     <>
+      <Field label="Country" hint="Where your business pays its staff. This decides the bank payment file payroll makes.">
+        <SelectField
+          title="Country"
+          value={COUNTRIES.find((c) => c.code === data.country)?.name ?? null}
+          options={COUNTRY_NAMES}
+          placeholder="Select country"
+          onChange={(name) => {
+            const code = COUNTRIES.find((c) => c.name === name)?.code ?? 'OTHER';
+            update({ country: code, currency: currencyFor(code) ?? data.currency });
+          }}
+        />
+      </Field>
+
       <Field label="Financial year start date">
         <SelectField
           title="Financial year start date"

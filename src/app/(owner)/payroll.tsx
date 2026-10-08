@@ -1,10 +1,13 @@
 import { useRef, useState } from 'react';
+import { router } from 'expo-router';
 import { ActivityIndicator, StyleSheet, Text, View, type ScrollView } from 'react-native';
 
+import { ConfirmDialog } from '@/components/owner/confirm-dialog';
 import { FormField, TextField } from '@/components/owner/form';
 import { downloadPayrollReport } from '@/components/owner/payroll-report-pdf';
 import { Table, type Column } from '@/components/owner/table';
 import {
+  ActionRow,
   Badge,
   Button,
   Card,
@@ -39,6 +42,9 @@ import {
   type PayLine,
   type Period,
 } from '@/data/payroll';
+import { downloadPaymentFile, markPayRunPaid, todayKey, usePayRuns, type PayRun } from '@/data/pay-runs';
+import { fromDateKey } from '@/data/shifts';
+import { countryName, paymentFileTypeFor, payrollLabel, payrollReference } from '@/lib/payment-files';
 
 const TABS = ['Employees', 'Summary', 'Tax & Super', 'Bank Accounts'] as const;
 type Tab = (typeof TABS)[number];
@@ -87,6 +93,21 @@ export default function PayrollScreen() {
     calculatePayLines(employees, sessions, previousPeriod, {}, now, payslips),
   );
 
+  const [approveBusy, setApproveBusy] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+
+  async function approve() {
+    setApproveBusy(true);
+    setApproveError(null);
+    try {
+      await approvePayments(period.id, payable.map((l) => l.employee.id), todayKey());
+    } catch (e) {
+      setApproveError(`Couldn’t approve payroll: ${e instanceof Error ? e.message : 'please try again.'}`);
+    } finally {
+      setApproveBusy(false);
+    }
+  }
+
   async function downloadReport() {
     setReportBusy(true);
     setReportError(null);
@@ -103,7 +124,9 @@ export default function PayrollScreen() {
   const missingRate = lines.filter((l) => l.rate === null);
   const missingBank = lines.filter((l) => !l.employee.bankAccount);
   const paidCount = lines.filter((l) => l.status === 'Paid').length;
-  const allPaid = lines.length > 0 && paidCount === lines.length;
+  // Approved (in a pay run) or already paid.
+  const approvedCount = lines.filter((l) => l.status !== 'Pending').length;
+  const allPaid = lines.length > 0 && approvedCount === lines.length;
 
   const nameColumn: Column<PayLine> = {
     key: 'name',
@@ -144,7 +167,9 @@ export default function PayrollScreen() {
       key: 'status',
       label: 'Status',
       width: 90,
-      render: (l) => <Badge label={l.status} tone={l.status === 'Paid' ? 'success' : 'warning'} />,
+      render: (l) => (
+        <Badge label={l.status} tone={l.status === 'Paid' ? 'success' : l.status === 'Approved' ? 'info' : 'warning'} />
+      ),
     },
   ];
 
@@ -267,6 +292,7 @@ export default function PayrollScreen() {
               [`Tax withheld (${TAX_PERCENT} placeholder)`, formatMoney(totals.tax)],
               ['Total net pay', formatMoney(totals.net)],
               [`Employer super (${SUPER_PERCENT})`, formatMoney(totals.super)],
+              ['Approved', `${approvedCount} of ${lines.length}`],
               ['Paid', `${paidCount} of ${lines.length}`],
             ].map(([label, value], i) => (
               <View key={label} style={[styles.summaryRow, i > 0 && styles.summaryDivider]}>
@@ -320,7 +346,7 @@ export default function PayrollScreen() {
               : allPaid
                 ? `All payments for ${period.label.toLowerCase()} have been approved.`
                 : payable.length === 0
-                  ? `${paidCount} of ${lines.length} payments approved.`
+                  ? `${approvedCount} of ${lines.length} payments approved.`
                   : `${payable.length} of ${lines.length} payments ready · ${formatMoney(
                       payable.reduce((sum, l) => sum + (l.net ?? 0), 0),
                     )} net`}
@@ -335,10 +361,10 @@ export default function PayrollScreen() {
 
           <View style={styles.approveButtons}>
             <Button
-              label="Approve All Payments"
+              label={approveBusy ? 'Approving…' : 'Approve All Payments'}
               icon={OwnerIcons.check}
-              disabled={payable.length === 0}
-              onPress={() => approvePayments(period.id, payable.map((l) => l.employee.id))}
+              disabled={payable.length === 0 || approveBusy}
+              onPress={approve}
             />
             <Button
               label={reportBusy ? 'Making PDF…' : 'Download Report (PDF)'}
@@ -348,15 +374,18 @@ export default function PayrollScreen() {
               onPress={downloadReport}
             />
           </View>
-          {reportBusy && <ActivityIndicator color={C.accent} />}
+          {(reportBusy || approveBusy) && <ActivityIndicator color={C.accent} />}
           {reportError && <Warning text={reportError} />}
+          {approveError && <Warning text={approveError} />}
 
           <Text style={ownerStyles.mutedText}>
-            Approving marks payments as Paid in NexGain. No money is transferred until a payment
-            provider is connected.
+            Approving makes a pay run with its own payroll number. Download its payment file, upload it to
+            your bank, then mark it as paid. NexGain never moves money itself.
           </Text>
         </Card>
       </View>
+
+      <PayRunsCard />
 
       <PayrollSettingsCard />
     </OwnerScreen>
@@ -402,6 +431,162 @@ function PayrollSettingsCard() {
       <Text style={ownerStyles.mutedText}>
         Hours worked past this in a single day are paid at the employee&apos;s overtime rate.
       </Text>
+      <View style={styles.divider} />
+      <ActionRow
+        icon={OwnerIcons.bank}
+        label={`Payroll bank details · ${countryName(business?.country)}`}
+        onPress={() => router.navigate({ pathname: '/payroll-bank', params: { from: 'payroll' } })}
+      />
+    </Card>
+  );
+}
+
+const SHOWN_RUNS = 5;
+
+/**
+ * Pay run history. Each approval is one pay run with a payroll number. For an
+ * approved run: download the bank file, then mark it as paid once it's been
+ * uploaded to the bank.
+ */
+function PayRunsCard() {
+  const runs = usePayRuns();
+  const business = useBusiness();
+  const [showAll, setShowAll] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ runId: string; tone: 'ok' | 'warn'; text: string; names?: string[] } | null>(null);
+  const [confirm, setConfirm] = useState<PayRun | null>(null);
+  const fileType = paymentFileTypeFor(business?.country);
+
+  async function download(run: PayRun) {
+    setBusyId(run.id);
+    setMessage(null);
+    const result = await downloadPaymentFile(run);
+    setBusyId(null);
+    if (result.ok) {
+      setMessage({
+        runId: run.id,
+        tone: 'ok',
+        text: `${result.fileName} is ready. Upload it to your bank's bulk payments page, then come back and press Mark as paid.`,
+      });
+    } else if (result.reason === 'setup') {
+      // Can't make a file without the business's own bank details: go and set them up.
+      router.navigate({ pathname: '/payroll-bank', params: { from: 'payroll' } });
+    } else if (result.reason === 'unsupported') {
+      setMessage({
+        runId: run.id,
+        tone: 'warn',
+        text: result.country
+          ? `Bank payment files aren't available for ${countryName(result.country)} yet. Pay your team through your bank, then press Mark as paid.`
+          : 'Choose your country in Payroll bank details so NexGain knows which bank file to make.',
+      });
+    } else if (result.reason === 'employees') {
+      setMessage({
+        runId: run.id,
+        tone: 'warn',
+        text: 'The file can’t be made yet. These people need to add or fix their bank details in their NexGain profile:',
+        names: result.problems.map((p) => `${p.name}: ${p.problem}`),
+      });
+    } else {
+      setMessage({ runId: run.id, tone: 'warn', text: result.message });
+    }
+  }
+
+  async function markPaid(run: PayRun) {
+    setConfirm(null);
+    setBusyId(run.id);
+    setMessage(null);
+    try {
+      await markPayRunPaid(run.id);
+      setMessage({ runId: run.id, tone: 'ok', text: `${payrollLabel(run.payrollNumber)} is marked as paid. Your team has been told.` });
+    } catch {
+      setMessage({ runId: run.id, tone: 'warn', text: 'Couldn’t mark it as paid. Check your internet connection and try again.' });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const shown = showAll ? runs : runs.slice(0, SHOWN_RUNS);
+
+  return (
+    <Card title="Pay Runs" icon={OwnerIcons.receipt}>
+      {runs.length === 0 ? (
+        <Text style={ownerStyles.mutedText}>No pay runs yet. Approving payroll makes your first one (Payroll 001).</Text>
+      ) : (
+        shown.map((run, i) => (
+          <View key={run.id} style={[styles.run, i > 0 && styles.runDivider]}>
+            <View style={styles.runTop}>
+              <View style={styles.flex}>
+                <Text style={styles.runTitle}>{payrollLabel(run.payrollNumber)}</Text>
+                <Text style={styles.runMeta}>
+                  {formatShortDate(fromDateKey(run.periodStart), false)} – {formatShortDate(fromDateKey(run.periodEnd))} ·{' '}
+                  {run.employeeCount} {run.employeeCount === 1 ? 'person' : 'people'} · {formatMoney(run.totalNet)} net
+                </Text>
+                <Text style={styles.runMeta}>
+                  {run.status === 'paid' && run.paidAt
+                    ? `Paid ${formatShortDate(new Date(run.paidAt))}`
+                    : `Pay date ${formatShortDate(fromDateKey(run.payDate))}`}
+                  {run.fileDownloadedAt ? ' · File downloaded' : ''}
+                </Text>
+              </View>
+              <Badge label={run.status === 'paid' ? 'Paid' : 'Approved'} tone={run.status === 'paid' ? 'success' : 'info'} />
+            </View>
+
+            {run.status === 'approved' && (
+              <View style={styles.approveButtons}>
+                {fileType && (
+                  <Button
+                    label={busyId === run.id ? 'Working…' : 'Download payment file'}
+                    icon={OwnerIcons.download}
+                    disabled={busyId !== null}
+                    onPress={() => download(run)}
+                  />
+                )}
+                <Button
+                  label="Mark as paid"
+                  icon={OwnerIcons.check}
+                  variant="secondary"
+                  disabled={busyId !== null}
+                  onPress={() => setConfirm(run)}
+                />
+              </View>
+            )}
+
+            {message?.runId === run.id && (
+              <View style={styles.message}>
+                <Text style={[styles.messageText, message.tone === 'warn' && styles.warningText]}>{message.text}</Text>
+                {message.names?.map((n) => (
+                  <Text key={n} style={styles.warningText}>
+                    • {n}
+                  </Text>
+                ))}
+              </View>
+            )}
+          </View>
+        ))
+      )}
+      {runs.length > SHOWN_RUNS && (
+        <Button label={showAll ? 'Show fewer' : `See all ${runs.length} pay runs`} variant="secondary" onPress={() => setShowAll(!showAll)} />
+      )}
+      {!fileType && runs.some((r) => r.status === 'approved') && (
+        <Text style={ownerStyles.mutedText}>
+          {business?.country
+            ? `Bank payment files aren't available for ${countryName(business.country)} yet, so pay your team through your bank and then mark the pay run as paid.`
+            : 'Set your country in Payroll bank details to download bank payment files.'}
+        </Text>
+      )}
+
+      <ConfirmDialog
+        visible={confirm !== null}
+        destructive={false}
+        message={
+          confirm?.fileDownloadedAt
+            ? `Have you uploaded the ${confirm ? payrollReference(confirm.payrollNumber, true) : ''} file to your bank? Marking it as paid tells each employee they've been paid.`
+            : `You haven't downloaded the payment file for ${confirm ? payrollLabel(confirm.payrollNumber) : ''}. Mark it as paid anyway (for example, if you paid your team another way)? Each employee will be told they've been paid.`
+        }
+        confirmLabel="Yes, mark as paid"
+        onConfirm={() => confirm && markPaid(confirm)}
+        onCancel={() => setConfirm(null)}
+      />
     </Card>
   );
 }
@@ -469,6 +654,43 @@ const styles = StyleSheet.create({
   },
   settingInput: {
     width: 96,
+  },
+  flex: {
+    flex: 1,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: C.border,
+  },
+  run: {
+    gap: Spacing.two,
+    paddingVertical: Spacing.two,
+  },
+  runDivider: {
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+  },
+  runTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.two,
+  },
+  runTitle: {
+    color: C.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  runMeta: {
+    color: C.textSecondary,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  message: {
+    gap: 4,
+  },
+  messageText: {
+    color: C.success,
+    fontSize: 13,
   },
   settingUnit: {
     color: C.textSecondary,

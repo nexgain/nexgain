@@ -5,6 +5,8 @@
 import { setLoadedAvailability, type WeeklyAvailability } from '@/data/availability';
 import { currentEmployeeStore } from '@/data/current-employee';
 import { createStore } from '@/data/store';
+import { bankFormToColumns, type BankForm, type SavedBankRow } from '@/lib/payment-files/bank-details';
+import type { BankFieldSet } from '@/lib/payment-files/countries';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -69,6 +71,8 @@ export type Employee = {
   /** Short-lived link for showing the photo. */
   photoUrl: string | null;
   bankAccount: BankAccount | null;
+  /** Which country's format the saved bank details are in ('AU', 'US', 'GB', 'EU', 'OTHER'); null = saved before countries existed (Australian). */
+  bankCountry: string | null;
   hasTfn: boolean;
 };
 
@@ -95,10 +99,10 @@ type EmployeeRow = {
   overtime_rate?: number | string | null;
   start_date: string | null;
   photo_path: string | null;
-  employee_private?: { account_last4: string | null; has_tfn: boolean } | null;
+  employee_private?: { account_last4: string | null; has_tfn: boolean; bank_country?: string | null } | null;
 };
 
-const SELECT = '*, employee_private(account_last4, has_tfn)';
+const SELECT = '*, employee_private(account_last4, has_tfn, bank_country)';
 
 export function fromRow(row: EmployeeRow, businessName = '', photoUrl: string | null = null): Employee {
   const parts = row.full_name.trim().split(/\s+/);
@@ -130,6 +134,7 @@ export function fromRow(row: EmployeeRow, businessName = '', photoUrl: string | 
     photoPath: row.photo_path ?? null,
     photoUrl,
     bankAccount: last4 ? { accountName: 'On file', bsb: '', accountNumber: last4 } : null,
+    bankCountry: row.employee_private?.bank_country ?? null,
     hasTfn: row.employee_private?.has_tfn ?? false,
   };
 }
@@ -263,23 +268,20 @@ export async function loadPayRateHistory(employeeId: string): Promise<PayRateCha
 }
 
 /**
- * The signed-in worker updates their own bank account (stored encrypted by the
- * database; the app only keeps the last 4 digits). Their TFN is left as it is.
+ * The signed-in worker updates their own bank account, in the format for their
+ * business's country (stored encrypted by the database; the app only keeps the
+ * last 4 characters). Their TFN is left as it is.
  */
-export async function updateMyBankDetails(
-  employeeId: string,
-  bank: { accountName: string; bsb: string; accountNumber: string },
-) {
-  const digits = bank.accountNumber.replace(/\D/g, '');
-  const { error } = await supabase.rpc('update_my_private_details', {
-    p: { account_name: bank.accountName.trim(), bsb: bank.bsb.trim(), account_number: digits },
-  });
+export async function updateMyBankDetails(employeeId: string, set: BankFieldSet, form: BankForm) {
+  const p = bankFormToColumns(set, form);
+  const { error } = await supabase.rpc('update_my_private_details', { p });
   if (error) {
+    // Only the error message, never the details themselves.
     console.warn('Could not save bank details:', error.message);
     return false;
   }
-  const bankAccount = { accountName: 'On file', bsb: '', accountNumber: digits.slice(-4) };
-  currentEmployeeStore.set((me) => (me?.id === employeeId ? { ...me, bankAccount } : me));
+  const bankAccount = { accountName: 'On file', bsb: '', accountNumber: (p.iban || p.account_number).slice(-4) };
+  currentEmployeeStore.set((me) => (me?.id === employeeId ? { ...me, bankAccount, bankCountry: set } : me));
   return true;
 }
 
@@ -352,7 +354,7 @@ export async function documentLink(storagePath: string) {
 export async function revealPrivateDetails(employeeId: string) {
   const { data, error } = await supabase.rpc('get_employee_private', { p_employee_id: employeeId });
   if (error) throw error;
-  const row = (data as { account_name: string | null; bsb: string | null; account_number: string | null; tfn: string | null }[])[0];
+  const row = (data as (SavedBankRow & { tfn: string | null })[])[0];
   return row ?? null;
 }
 

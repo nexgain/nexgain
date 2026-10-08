@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 
-type IconName = SymbolViewProps['name'];
+export type IconName = SymbolViewProps['name'];
 
 export const SignupColors = {
   sidebar: '#0B0D12',

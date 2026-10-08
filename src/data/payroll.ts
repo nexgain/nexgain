@@ -22,7 +22,8 @@ export type Period = {
   end: Date;
 };
 
-export type PayStatus = 'Pending' | 'Paid';
+/** Pending: not approved yet. Approved: in a pay run, waiting for the bank. Paid: the owner marked the pay run as paid. */
+export type PayStatus = 'Pending' | 'Approved' | 'Paid';
 
 export type PayLine = {
   employee: Employee;
@@ -207,7 +208,7 @@ function lineFromPayslip(employee: Employee, p: PayslipRecord): PayLine {
     tax: p.tax,
     net: p.net,
     super: p.super,
-    status: 'Paid',
+    status: p.status === 'paid' ? 'Paid' : 'Approved',
   };
 }
 
@@ -239,9 +240,9 @@ function payableLines(
         weeks,
       );
     })
-    .filter((l) => l.employee.status !== 'inactive' || l.hours > 0 || l.status === 'Paid')
+    .filter((l) => l.employee.status !== 'inactive' || l.hours > 0 || l.status !== 'Pending')
     // Contractors are paid through their invoices, not payroll (no double payments).
-    .filter((l) => !isContractor(l.employee) || l.status === 'Paid');
+    .filter((l) => !isContractor(l.employee) || l.status !== 'Pending');
 }
 
 /** Pay for every employee in a period. Pass the payslips so approved weeks show what was paid. */
@@ -291,9 +292,9 @@ export function labourCost(
 }
 
 // Payslips: one per employee per pay period, created when the owner approves
-// payments. Stored online ("payslips" table). An employee is "Paid" for a
-// period once they have a payslip for it. The owner sees every payslip in
-// their business; an employee sees only their own.
+// payments (as part of a numbered pay run, see pay-runs.ts). Stored online
+// ("payslips" table). They're "approved" until the owner marks the pay run as
+// paid. The owner sees every payslip in their business; an employee sees only their own.
 export type PayslipRecord = {
   id: string;
   employeeId: string;
@@ -318,7 +319,14 @@ export type PayslipRecord = {
   tax: number;
   net: number;
   super: number;
-  paidAt: string;
+  /** When the pay run was marked as paid; null while it's only approved. */
+  paidAt: string | null;
+  status: 'approved' | 'paid';
+  payRunId: string | null;
+  /** e.g. 1 = "Payroll 001" (shared by everyone in the same pay run). */
+  payrollNumber: number | null;
+  /** "YYYY-MM-DD" */
+  payDate: string | null;
 };
 
 export const payslipsStore = createStore<PayslipRecord[]>([]);
@@ -338,7 +346,11 @@ type PayslipRow = {
   tax: number | string;
   net: number | string;
   super: number | string;
-  paid_at: string;
+  paid_at: string | null;
+  status?: 'approved' | 'paid' | null;
+  pay_run_id?: string | null;
+  payroll_number?: number | null;
+  pay_date?: string | null;
   pay_type?: PayType | null;
   ordinary_hours?: number | string | null;
   overtime_hours?: number | string | null;
@@ -375,6 +387,10 @@ export async function loadPayslips() {
       net: Number(row.net),
       super: Number(row.super),
       paidAt: row.paid_at,
+      status: row.status ?? 'paid',
+      payRunId: row.pay_run_id ?? null,
+      payrollNumber: row.payroll_number ?? null,
+      payDate: row.pay_date ?? null,
     })),
   );
 }
@@ -382,16 +398,19 @@ export async function loadPayslips() {
 export function usePayStatuses(periodId: string): Record<string, PayStatus> {
   const payslips = payslipsStore.use();
   return Object.fromEntries(
-    payslips.filter((p) => p.periodStart === periodId).map((p) => [p.employeeId, 'Paid' as const]),
+    payslips
+      .filter((p) => p.periodStart === periodId)
+      .map((p) => [p.employeeId, p.status === 'paid' ? ('Paid' as const) : ('Approved' as const)]),
   );
 }
 
 /**
- * Marks employees as Paid for a period by creating their payslips (the
- * database then tells each employee "You've been paid!"). No money moves until
- * a payment processor or banking API is connected.
+ * Approves payments for a period: the database makes one pay run with the
+ * business's next payroll number, plus a payslip for each employee (status
+ * approved). Nobody is told they've been paid until the owner marks the pay
+ * run as paid. Returns the new pay run's id, or throws with a plain message.
  */
-export function approvePayments(periodId: string, employeeIds: string[]) {
+export async function approvePayments(periodId: string, employeeIds: string[], payDate: string) {
   const businessId = businessStore.get()?.id;
   const [y, m, d] = periodId.split('-').map(Number);
   const period = { start: new Date(y, m - 1, d), end: new Date(y, m - 1, d + 7) };
@@ -428,43 +447,47 @@ export function approvePayments(periodId: string, employeeIds: string[]) {
       tax: l.tax!,
       net: l.net!,
       super: l.super!,
-      paidAt: new Date().toISOString(),
+      paidAt: null,
+      status: 'approved' as const,
+      payRunId: null,
+      payrollNumber: null,
+      payDate,
     }));
-  if (created.length === 0 || !businessId) return;
+  if (created.length === 0 || !businessId) throw new Error('There is no one to pay.');
 
-  payslipsStore.set((all) => [...created, ...all]);
-  supabase
-    .from('payslips')
-    .insert(
-      created.map((p) => ({
-        id: p.id,
-        business_id: businessId,
-        employee_id: p.employeeId,
-        period_start: p.periodStart,
-        period_end: p.periodEnd,
-        hours: p.hours,
-        rate: p.rate,
-        pay_type: p.payType,
-        ordinary_hours: p.ordinaryHours,
-        overtime_hours: p.overtimeHours,
-        ordinary_rate: p.ordinaryRate,
-        overtime_rate: p.overtimeRate,
-        ordinary_pay: p.ordinaryPay,
-        overtime_pay: p.overtimePay,
-        overtime_after_hours: p.overtimeAfterHours,
-        gross: p.gross,
-        tax: p.tax,
-        net: p.net,
-        super: p.super,
-      })),
-    )
-    .then(({ error }) => {
-      if (!error) return;
-      warnSaveFailed('payslips', error);
-      // Show them as Pending again so the owner can retry.
-      const ids = new Set(created.map((p) => p.id));
-      payslipsStore.set((all) => all.filter((p) => !ids.has(p.id)));
-    });
+  const { data, error } = await supabase.rpc('approve_pay_run', {
+    p_period_start: periodId,
+    p_period_end: lastDay,
+    p_pay_date: payDate,
+    p_payslips: created.map((p) => ({
+      id: p.id,
+      employee_id: p.employeeId,
+      hours: p.hours,
+      rate: p.rate,
+      pay_type: p.payType,
+      ordinary_hours: p.ordinaryHours,
+      overtime_hours: p.overtimeHours,
+      ordinary_rate: p.ordinaryRate,
+      overtime_rate: p.overtimeRate,
+      ordinary_pay: p.ordinaryPay,
+      overtime_pay: p.overtimePay,
+      overtime_after_hours: p.overtimeAfterHours,
+      gross: p.gross,
+      tax: p.tax,
+      net: p.net,
+      super: p.super,
+    })),
+  });
+  if (error) {
+    warnSaveFailed('payslips', error);
+    throw new Error(error.message);
+  }
+  const run = data as { id: string; payroll_number: number; pay_date: string };
+  payslipsStore.set((all) => [
+    ...created.map((p) => ({ ...p, payRunId: run.id, payrollNumber: run.payroll_number, payDate: run.pay_date })),
+    ...all,
+  ]);
+  return run.id;
 }
 
 export function formatMoney(amount: number, { cents = true } = {}) {
