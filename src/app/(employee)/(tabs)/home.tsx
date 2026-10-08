@@ -69,10 +69,13 @@ export default function HomeScreen() {
   const sessions = allSessions.filter((s) => s.employeeId === employeeId);
 
   const isClockedIn = sessions.at(-1)?.end === null;
-  const workedMs = sessions.reduce(
-    (total, s) => total + ((s.end ?? now).getTime() - s.start.getTime()),
-    0,
-  );
+
+  // Today only (from midnight): sessions that started today, or are still running
+  // from last night. Older days stay in payroll and timesheets but aren't shown here.
+  const today = { start: new Date(now.getFullYear(), now.getMonth(), now.getDate()), end: now };
+  const todaysSessions = sessions.filter((s) => (s.end ?? now) > today.start);
+  // Time worked today; a shift that started before midnight only counts from midnight.
+  const workedMs = hoursInPeriod(sessions, employeeId, today, now) * 60 * 60 * 1000;
 
   function toggleClock() {
     const time = new Date();
@@ -198,11 +201,11 @@ export default function HomeScreen() {
         </View>
       </Card>
 
-      {/* Today's clock-in history (existing feature) */}
-      {sessions.length > 0 && (
+      {/* Today's clock-in history */}
+      {todaysSessions.length > 0 && (
         <Card style={styles.activityCard}>
           <Text style={employeeStyles.sectionLabel}>Today&apos;s activity</Text>
-          {sessions.map((s, i) => (
+          {todaysSessions.map((s, i) => (
             <View key={i} style={styles.sessionRow}>
               <Text style={styles.sessionText}>
                 {formatClockTime(s.start)} – {s.end ? formatClockTime(s.end) : 'now'}
