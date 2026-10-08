@@ -20,6 +20,8 @@ export default function InvoicesLayout() {
       }}>
       {/* The list must be declared first: the first screen listed is where the tab opens. */}
       <Stack.Screen name="index" />
+      {/* Every quote or invoice behind a box (or "See more"), e.g. all Sent quotes. */}
+      <Stack.Screen name="list" />
       {/* The create form steps back one page at a time itself, so the iOS
           swipe-back (which would leave the whole form) is turned off. */}
       <Stack.Screen name="new" options={{ gestureEnabled: false }} />

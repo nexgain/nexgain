@@ -308,6 +308,33 @@ export function displayStatus(doc: Pick<SalesDoc, 'kind' | 'status' | 'dueDate'>
   return doc.status;
 }
 
+/** The lists behind the boxes on Invoices & Quotes ("all" = the Total box). */
+export const LIST_FILTERS = {
+  quote: ['all', 'Sent', 'Accepted', 'Declined'],
+  invoice: ['all', 'Pending', 'Paid', 'Overdue'],
+} as const;
+export type ListFilter = (typeof LIST_FILTERS)[DocKind][number];
+
+export function isListFilter(kind: DocKind, value: string): value is ListFilter {
+  return (LIST_FILTERS[kind] as readonly string[]).includes(value);
+}
+
+/**
+ * The documents a box counts and its list page shows, newest first. Both use this,
+ * so the box number always matches the page. Accepted quotes include Booked ones;
+ * Drafts only appear under "all".
+ */
+export function docsForList(docs: SalesDoc[], kind: DocKind, filter: ListFilter) {
+  return docs
+    .filter((d) => {
+      if (d.kind !== kind) return false;
+      if (filter === 'all') return true;
+      const status = displayStatus(d);
+      return status === filter || (filter === 'Accepted' && status === 'Booked');
+    })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
 /**
  * A sent quote whose "valid until" date has passed. It stays under Sent (shown with
  * an "Expired" tag) and the customer can still accept it; the owner decides.

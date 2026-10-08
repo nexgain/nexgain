@@ -11,6 +11,7 @@ import {
   isQuoteExpired,
   type DocKind,
   type DocStatus,
+  type ListFilter,
   type ReceiptStatus,
   type SalesDoc,
 } from '@/data/invoices';
@@ -30,6 +31,32 @@ export const ToneColors = {
   grey: { text: C.textSecondary, background: C.surfaceRaised },
 } as const;
 export type Tone = keyof typeof ToneColors;
+
+/** The four boxes on Invoices & Quotes; each opens its own list page. */
+export const SUMMARY: Record<DocKind, readonly { filter: ListFilter; label: string; tone: Tone }[]> = {
+  quote: [
+    { filter: 'all', label: 'Total Quotes', tone: 'blue' },
+    { filter: 'Sent', label: 'Sent', tone: 'amber' },
+    { filter: 'Accepted', label: 'Accepted', tone: 'green' },
+    { filter: 'Declined', label: 'Declined', tone: 'red' },
+  ],
+  invoice: [
+    { filter: 'all', label: 'Total Invoices', tone: 'blue' },
+    { filter: 'Pending', label: 'Pending', tone: 'amber' },
+    { filter: 'Paid', label: 'Paid', tone: 'green' },
+    { filter: 'Overdue', label: 'Overdue', tone: 'red' },
+  ],
+};
+
+/** "Total Quotes", "Sent Quotes", "Overdue Invoices"... */
+export function listTitle(kind: DocKind, filter: ListFilter) {
+  return `${filter === 'all' ? 'Total' : filter} ${KIND_LABEL[kind].many}`;
+}
+
+/** Spoken label for a box, e.g. "Sent quotes". */
+export function boxLabel(kind: DocKind, filter: ListFilter) {
+  return `${filter === 'all' ? 'Total' : filter} ${KIND_LABEL[kind].many.toLowerCase()}`;
+}
 
 const STATUS_TONE: Record<DocStatus, Tone> = {
   Draft: 'grey',
@@ -191,15 +218,37 @@ export function Segmented<T extends string>({
   );
 }
 
-export function SummaryTile({ label, value, tone }: { label: string; value: number; tone: Tone }) {
+export function SummaryTile({
+  label,
+  value,
+  tone,
+  spokenLabel = label,
+  onPress,
+}: {
+  label: string;
+  value: number;
+  tone: Tone;
+  /** What screen readers say before the number, e.g. "Sent quotes". */
+  spokenLabel?: string;
+  onPress?: () => void;
+}) {
   const colors = ToneColors[tone];
   return (
-    <View style={[styles.tile, { backgroundColor: colors.background, borderColor: colors.text + '33' }]}>
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${spokenLabel}, ${value}.${onPress ? ' Open list.' : ''}`}
+      style={({ pressed }) => [
+        styles.tile,
+        { backgroundColor: colors.background, borderColor: colors.text + '33' },
+        pressed && styles.pressed,
+      ]}>
       <Text style={[styles.tileValue, { color: colors.text }]}>{value}</Text>
       <Text style={styles.tileLabel} numberOfLines={2}>
         {label}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 
