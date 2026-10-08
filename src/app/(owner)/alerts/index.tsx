@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 
 import {
   FilterPills,
@@ -21,6 +21,8 @@ import {
 } from '@/data/notifications';
 
 export default function OwnerNotificationsScreen() {
+  // Opened from the Dashboard's "See more" (from=dashboard) or the More tab (from=menu).
+  const { from } = useLocalSearchParams<{ from?: string }>();
   const all = ownerNotifications(useNotifications());
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<string>('All');
@@ -31,7 +33,7 @@ export default function OwnerNotificationsScreen() {
 
   return (
     <OwnerScreen>
-      <ScreenHeader title="Notifications" />
+      <ScreenHeader title="Notifications" onBack={() => router.navigate(from === 'dashboard' ? '/dashboard' : '/menu')} />
       <SearchBar value={query} onChange={setQuery} palette={OWNER_PALETTE} placeholder="Search notifications..." />
       <FilterPills filters={OWNER_FILTERS} counts={counts} active={filter} onChange={setFilter} palette={OWNER_PALETTE} />
 

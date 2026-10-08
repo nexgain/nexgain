@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
-import { router, useLocalSearchParams, type Href } from 'expo-router';
+import { useCallback, useEffect } from 'react';
+import { router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
+import { BackHandler } from 'react-native';
 
 import { NotificationDetail, OWNER_PALETTE, type DetailAction } from '@/components/notifications/notification-views';
 import { ScreenHeader } from '@/components/owner/invoices-ui';
@@ -15,17 +16,31 @@ const ACTION_ROUTES: Record<string, Href> = {
 };
 
 export default function OwnerNotificationDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // from=dashboard: opened straight from the Dashboard, so back returns there.
+  const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
+  const goBackFromHere = () => (from === 'dashboard' ? router.navigate('/dashboard') : router.back());
   const n = useNotifications().find((x) => x.id === id && x.audience === 'owner');
 
   useEffect(() => {
     if (id) markRead(id);
   }, [id]);
 
+  // Android's back button does the same as the back arrow.
+  useFocusEffect(
+    useCallback(() => {
+      if (from !== 'dashboard') return;
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        router.navigate('/dashboard');
+        return true;
+      });
+      return () => sub.remove();
+    }, [from]),
+  );
+
   if (!n) {
     return (
       <OwnerScreen>
-        <ScreenHeader title="Notification" onBack={() => router.back()} />
+        <ScreenHeader title="Notification" onBack={goBackFromHere} />
         <Card>
           <EmptyState icon={OwnerIcons.bell} message="This notification is no longer available." />
         </Card>
@@ -58,7 +73,7 @@ export default function OwnerNotificationDetail() {
 
   return (
     <OwnerScreen>
-      <ScreenHeader title="Notification" onBack={() => router.back()} />
+      <ScreenHeader title="Notification" onBack={goBackFromHere} />
       <NotificationDetail
         n={n}
         palette={OWNER_PALETTE}

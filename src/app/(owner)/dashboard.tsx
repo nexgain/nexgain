@@ -14,6 +14,7 @@ import {
   StatCard,
   StatGrid,
 } from '@/components/owner/ui';
+import { NotificationsSection } from '@/components/owner/notifications-section';
 import { UpcomingSection } from '@/components/owner/upcoming';
 import { Colors as C } from '@/constants/theme';
 import { ownerFirstName, useBusiness } from '@/data/business';
@@ -106,6 +107,8 @@ export default function OwnerDashboardScreen() {
       </StatGrid>
 
       <UpcomingSection />
+
+      <NotificationsSection />
 
       <ResponsiveRow weights={[1.6, 1]}>
         <Card title="AI Insights & Recommendations" icon={OwnerIcons.sparkles}>

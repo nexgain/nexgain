@@ -21,8 +21,9 @@ export default function OwnerMoreScreen() {
           <ActionRow
             icon={{ ios: 'bell.fill', android: 'notifications', web: 'notifications' }}
             label={unread > 0 ? `Notifications (${unread} new)` : 'Notifications'}
-            // Typed routes only list '/alerts/index' for a folder index screen.
-            onPress={() => router.navigate('/alerts' as Href)}
+            // Typed routes only list '/alerts/index' for a folder index screen. Always
+            // from=menu, so a "from=dashboard" left from an earlier visit is replaced.
+            onPress={() => router.navigate({ pathname: '/alerts', params: { from: 'menu' } } as Href)}
           />
           <ActionRow
             icon={{ ios: 'briefcase.fill', android: 'work', web: 'work' }}
