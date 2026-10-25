@@ -2,7 +2,9 @@
 // load their data from the database and listen for live changes. Cleared on log out.
 import { availabilityStore } from '@/data/availability';
 import { businessStore, clearBusiness, loadMyBusiness } from '@/data/business';
+import { clearBusinessApps, loadBusinessApps } from '@/data/business-apps';
 import { eventsStore, loadEvents } from '@/data/calendar';
+import { clearConnectedAccounts, loadConnectedAccounts } from '@/data/connected-accounts';
 import { clientsStore, loadClients } from '@/data/clients';
 import { clearContractorInvoices, loadContractorInvoices } from '@/data/contractor-invoices';
 import { jobsStore, loadJobs, loadMyAssignedJobs } from '@/data/jobs';
@@ -61,6 +63,8 @@ async function load(userId: string) {
       loadInvites().catch(() => {}),
       loadDocs().catch(() => {}),
       loadBusinessPayment().catch(() => {}),
+      loadBusinessApps().catch(() => {}),
+      loadConnectedAccounts().catch(() => {}),
       loadExpenses().catch(() => {}),
       loadNotifications(null),
       loadShifts().catch(() => {}),
@@ -158,6 +162,8 @@ export function endSession() {
   invitesStore.set([]);
   clearDocs();
   clearBusinessPayment();
+  clearBusinessApps();
+  clearConnectedAccounts();
   expensesStore.set([]);
   qualificationsStore.set({});
   currentEmployeeStore.set(null);

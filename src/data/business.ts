@@ -1,6 +1,8 @@
 // The owner's business profile, created during owner sign-up and read by the
 // Dashboard, Quotes & Invoices, Business Profile and employee sign-up.
 // Stored online (Supabase "businesses" table) and loaded after logging in.
+import { Platform } from 'react-native';
+
 import { createStore } from '@/data/store';
 import { supabase } from '@/lib/supabase';
 
@@ -59,13 +61,23 @@ export function overtimeRulesOf(profile: BusinessProfile | null): OvertimeRules 
   return profile?.overtimeRules ?? DEFAULT_OVERTIME_RULES;
 }
 
-export type EmailApp = 'gmail' | 'outlook' | 'other';
+/** "mail" is the Apple Mail app (iPhone only); "other" uses the phone's own email screen. */
+export type EmailApp = 'gmail' | 'outlook' | 'mail' | 'other';
 
 export const EMAIL_APPS: { value: EmailApp; label: string }[] = [
   { value: 'gmail', label: 'Gmail' },
   { value: 'outlook', label: 'Outlook' },
+  { value: 'mail', label: 'Mail' },
   { value: 'other', label: 'Other' },
 ];
+
+/** The email apps to offer on this phone: Mail is only on iPhone. */
+export const EMAIL_APP_CHOICES = EMAIL_APPS.filter((a) => a.value !== 'mail' || Platform.OS === 'ios');
+
+/** The choice to show as selected: off iPhone, "Mail" works like "Other". */
+export function shownEmailApp(app: EmailApp): EmailApp {
+  return app === 'mail' && Platform.OS !== 'ios' ? 'other' : app;
+}
 
 type BusinessRow = {
   id: string;

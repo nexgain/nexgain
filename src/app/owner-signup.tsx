@@ -13,7 +13,8 @@ import { StepSubscription } from '@/components/signup/step-subscription';
 import { StepTeam } from '@/components/signup/step-team';
 import { StepType } from '@/components/signup/step-type';
 import { EMPTY_SIGNUP, STEP_NAMES, type SignupData } from '@/components/signup/types';
-import { createBusinessOnline, updateBusiness, type BusinessProfile } from '@/data/business';
+import { businessStore, createBusinessOnline, updateBusiness, type BusinessProfile } from '@/data/business';
+import { saveSignupApps } from '@/data/business-apps';
 import { saveBusinessPayment, updateBusinessPayment } from '@/data/invoices';
 import { DEFAULT_SELECTED_COUNT, findIndustry, industryDefaults } from '@/data/industries';
 import { signUp } from '@/lib/auth';
@@ -115,6 +116,7 @@ export default function OwnerSignupScreen() {
         account: data.bankAccountNumber,
       });
       await saveBusinessPayment().catch((e) => console.warn('Could not save bank details:', e.message));
+      if (business.id) await saveSignupApps(business.id, data.apps);
       // Start loading the new owner's data and live notifications.
       await reloadSession();
       setInviteCode(business.inviteCode);
@@ -158,6 +160,8 @@ export default function OwnerSignupScreen() {
     const { email: _email, ...editable } = toProfile(data);
     updateBusiness(editable);
     updateBusinessPayment({ accountName: data.bankAccountName, bsb: data.bankBsb, account: data.bankAccountNumber });
+    const businessId = businessStore.get()?.id;
+    if (businessId) saveSignupApps(businessId, data.apps).catch(() => {});
     router.replace('/dashboard');
   }
 
@@ -188,7 +192,7 @@ export default function OwnerSignupScreen() {
       {step === 3 && <StepServices {...stepProps} />}
       {step === 4 && <StepSubscription {...stepProps} />}
       {step === 5 && <StepFinancial {...stepProps} />}
-      {step === 6 && <StepConnect {...stepProps} />}
+      {step === 6 && <StepConnect {...stepProps} ensureAccount={async () => accountCreated || createAccount()} />}
       {step === 6 && busy && (
         <View style={styles.busy}>
           <ActivityIndicator color={C.primary} />

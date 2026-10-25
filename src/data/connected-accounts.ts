@@ -1,0 +1,112 @@
+// The owner's connected accounts (Gmail and Outlook so far). Connecting opens the
+// Google or Microsoft login inside the app; the Edge Functions in supabase/functions
+// do the rest and keep the login tokens encrypted on the server. The app never
+// sees a token: it only reads the "my_connected_accounts" view (provider, email
+// address, when it was connected), so "Connected" only shows for a real connection.
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
+import { FunctionsFetchError, FunctionsHttpError } from '@supabase/supabase-js';
+
+import type { EmailApp } from '@/data/business';
+import { createStore } from '@/data/store';
+import { supabase } from '@/lib/supabase';
+
+/** Providers the server knows (supabase/functions/_shared/connections.ts). */
+export type Provider = 'google' | 'microsoft';
+
+export type ConnectedAccount = {
+  provider: Provider;
+  email: string;
+  connectedAt: string;
+};
+
+type AccountRow = { provider: Provider; account_email: string; connected_at: string };
+
+/** The email app each provider sends as. */
+export const EMAIL_PROVIDER: Partial<Record<EmailApp, Provider>> = { gmail: 'google', outlook: 'microsoft' };
+
+export const PROVIDER_NAME: Record<Provider, string> = { google: 'Google', microsoft: 'Microsoft' };
+
+export const connectedAccountsStore = createStore<ConnectedAccount[]>([]);
+
+export function useConnectedAccounts() {
+  return connectedAccountsStore.use();
+}
+
+export function findAccount(accounts: ConnectedAccount[], provider: Provider | undefined) {
+  return provider ? accounts.find((a) => a.provider === provider) : undefined;
+}
+
+/** The connected account emails are sent from: the one for the owner's chosen email app, if connected. */
+export function sendingAccount(app: EmailApp) {
+  return findAccount(connectedAccountsStore.get(), EMAIL_PROVIDER[app]);
+}
+
+export async function loadConnectedAccounts() {
+  const { data, error } = await supabase.from('my_connected_accounts').select('*');
+  if (error) throw error;
+  connectedAccountsStore.set(
+    (data as AccountRow[]).map((r) => ({ provider: r.provider, email: r.account_email, connectedAt: r.connected_at })),
+  );
+}
+
+export function clearConnectedAccounts() {
+  connectedAccountsStore.set([]);
+}
+
+/** The server's message from a failed Edge Function call, or a friendly fallback. */
+export async function functionError(error: unknown, fallback: string): Promise<{ code?: string; message: string }> {
+  if (error instanceof FunctionsHttpError) {
+    // Our functions reply { error, message } (or just { error: "A sentence." }).
+    const body = await error.context.json().catch(() => null);
+    if (body) return { code: body.error, message: body.message ?? body.error ?? fallback };
+  }
+  if (error instanceof FunctionsFetchError) {
+    return { message: 'No internet connection. Check your connection and try again.' };
+  }
+  return { message: fallback };
+}
+
+export type ConnectResult =
+  | { status: 'connected'; email: string }
+  | { status: 'cancelled' }
+  | { status: 'error'; message: string };
+
+/**
+ * Opens the Google or Microsoft login inside the app. The owner logs in and taps
+ * Allow, and the account is connected. Works in Expo Go and in real builds.
+ */
+export async function connectAccount(provider: Provider): Promise<ConnectResult> {
+  const name = PROVIDER_NAME[provider];
+  // e.g. nexgain://oauth-return (real builds) or exp://192.168.1.5:8081/--/oauth-return (Expo Go).
+  const redirect = Linking.createURL('oauth-return');
+  const { data, error } = await supabase.functions.invoke<{ url: string }>('oauth-start', { body: { provider, redirect } });
+  if (error || !data?.url) {
+    return { status: 'error', ...(await functionError(error, `Couldn't open the ${name} login. Please try again.`)) };
+  }
+
+  const result = await WebBrowser.openAuthSessionAsync(data.url, redirect);
+  if (result.type !== 'success') return { status: 'cancelled' };
+
+  const { queryParams } = Linking.parse(result.url);
+  const param = (key: string) => (typeof queryParams?.[key] === 'string' ? (queryParams[key] as string) : '');
+  if (param('status') === 'cancelled') return { status: 'cancelled' };
+  if (param('status') !== 'connected') {
+    return { status: 'error', message: param('message') || `Couldn't connect your ${name} account. Please try again.` };
+  }
+
+  // Only trust what's really saved on the server.
+  await loadConnectedAccounts().catch(() => {});
+  const account = findAccount(connectedAccountsStore.get(), provider);
+  return account
+    ? { status: 'connected', email: account.email }
+    : { status: 'error', message: `Couldn't confirm the ${name} connection. Check your internet connection and try again.` };
+}
+
+/** Disconnects the account (and cancels NexGain's access with Google). Returns an error message if it failed. */
+export async function disconnectAccount(provider: Provider): Promise<string | null> {
+  const { error } = await supabase.functions.invoke('oauth-disconnect', { body: { provider } });
+  if (error) return (await functionError(error, "Couldn't disconnect. Please try again.")).message;
+  connectedAccountsStore.set((all) => all.filter((a) => a.provider !== provider));
+  return null;
+}

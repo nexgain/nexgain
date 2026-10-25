@@ -7,8 +7,9 @@ import { FormField, TextField } from '@/components/owner/form';
 import { ScreenHeader, Segmented } from '@/components/owner/invoices-ui';
 import { Button, Card, OwnerIcons, OwnerScreen } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
-import { EMAIL_APPS, updateBusiness, useBusiness } from '@/data/business';
+import { EMAIL_APP_CHOICES, shownEmailApp, updateBusiness, useBusiness } from '@/data/business';
 import { formatBsb } from '@/components/employee-signup/types';
+import { EMAIL_PROVIDER, findAccount, useConnectedAccounts } from '@/data/connected-accounts';
 import { updateBusinessPayment, useBusinessPayment } from '@/data/invoices';
 import { emailAppHint } from '@/lib/email';
 
@@ -17,6 +18,8 @@ import { emailAppHint } from '@/lib/email';
 export default function BusinessProfileScreen() {
   const business = useBusiness();
   const payment = useBusinessPayment();
+  const accounts = useConnectedAccounts();
+  const sendingFrom = business ? findAccount(accounts, EMAIL_PROVIDER[shownEmailApp(business.emailApp)]) : undefined;
 
   async function pickLogo() {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -79,12 +82,13 @@ export default function BusinessProfileScreen() {
       {business && (
         <Card title="Sending Quotes & Invoices" icon={{ ios: 'envelope.fill', android: 'mail', web: 'mail' }}>
           <Text style={styles.muted}>
-            Quotes, invoices and receipts open in your email app, written and with the PDF attached. You just press Send.
+            Quotes, invoices and receipts go from your own email address with the PDF attached. Connect Gmail or Outlook in
+            More › Integrations to send them straight from the app.
           </Text>
           <FormField label="Email App">
-            <Segmented options={EMAIL_APPS} value={business.emailApp} onChange={(emailApp) => updateBusiness({ emailApp })} />
+            <Segmented options={EMAIL_APP_CHOICES} value={shownEmailApp(business.emailApp)} onChange={(emailApp) => updateBusiness({ emailApp })} />
           </FormField>
-          <Text style={styles.muted}>{emailAppHint(business.emailApp)}</Text>
+          <Text style={styles.muted}>{emailAppHint(business.emailApp, sendingFrom?.email)}</Text>
           <FormField label="Business Email">
             <TextField
               value={business.businessEmail}
