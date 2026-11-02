@@ -13,6 +13,7 @@ import { EVENT_TYPE_INFO, EVENT_TYPES, useCalendarEvents, type CalendarEvent, ty
 import { useClients } from '@/data/clients';
 import { useCurrentEmployee } from '@/data/current-employee';
 import { formatShortDate, formatWeekday } from '@/data/employee-roster';
+import { useDocs } from '@/data/invoices';
 import { useJobs, type Job } from '@/data/jobs';
 import { fromDateKey } from '@/data/shifts';
 
@@ -51,6 +52,7 @@ export default function CalendarScreen() {
   const events = useCalendarEvents();
   const jobs = useJobs();
   const clients = useClients();
+  const docs = useDocs();
   const today = todayKey();
   const [view, setView] = useState<View_>('Month');
   const [selected, setSelected] = useState(today);
@@ -63,7 +65,7 @@ export default function CalendarScreen() {
   if (params.event && params.event !== openedParam) {
     setOpenedParam(params.event);
     const e = events.find((x) => x.id === params.event);
-    if (e && e.type !== 'job') {
+    if (e && e.type !== 'job' && e.type !== 'quote') {
       setSelected(e.date);
       setDraft(draftFrom(e));
     }
@@ -80,7 +82,9 @@ export default function CalendarScreen() {
 
   function open(e: CalendarEvent) {
     if (e.type === 'job' && e.jobId) router.push({ pathname: '/job/[id]', params: { id: e.jobId } });
-    else setDraft(draftFrom(e));
+    // Quote entries follow their quote: open it to change the date or time.
+    else if (e.type === 'quote' && e.quoteId) router.navigate({ pathname: '/invoices/[id]', params: { id: e.quoteId } });
+    else if (e.type !== 'quote') setDraft(draftFrom(e));
   }
 
   function addNew() {
@@ -101,6 +105,7 @@ export default function CalendarScreen() {
   function subtitle(e: CalendarEvent) {
     if (e.type === 'job') return clientName(e.clientId) || e.address;
     if (e.type === 'delivery') return e.supplier || e.address;
+    if (e.type === 'quote') return docs.find((d) => d.id === e.quoteId)?.client.name || e.address;
     return e.address;
   }
 

@@ -61,6 +61,17 @@ export default function BusinessProfileScreen() {
             />
           </FormField>
 
+          <FormField label="Business Phone">
+            <TextField
+              value={business.phone}
+              onChangeText={(phone) => updateBusiness({ phone })}
+              placeholder="e.g. 0412 345 678"
+              keyboardType="phone-pad"
+              accessibilityLabel="Business Phone"
+            />
+            <Text style={styles.muted}>Included in the job reminders your clients get.</Text>
+          </FormField>
+
           <FormField label="Logo">
             {business.logo ? (
               <View style={styles.logoRow}>

@@ -2,6 +2,7 @@
 // saved online in the background ("sales_docs" table, business owner only).
 // Paid invoices are the business's Revenue.
 import { businessStore, GST_RATE } from '@/data/business';
+import { format12h } from '@/data/employee-roster';
 import { createStore } from '@/data/store';
 import { newId, warnSaveFailed } from '@/lib/ids';
 import { supabase } from '@/lib/supabase';
@@ -41,6 +42,9 @@ export type SalesDoc = {
   client: Client;
   jobType: string | null;
   jobDate: string | null; // "YYYY-MM-DD"
+  /** Quotes: job start time and estimated finish, "HH:MM" business time (both optional). */
+  jobStart?: string | null;
+  jobEnd?: string | null;
   description: string;
   items: LineItem[];
   /** Invoice due date or quote "valid until" date. */
@@ -150,6 +154,8 @@ type SalesDocRow = {
   client: Client;
   job_type: string | null;
   job_date: string | null;
+  job_start?: string | null;
+  job_end?: string | null;
   description: string;
   items: LineItem[];
   due_date: string | null;
@@ -175,6 +181,8 @@ function fromRow(row: SalesDocServerRow): SalesDoc {
     client: { ...NO_CLIENT, ...row.client },
     jobType: row.job_type,
     jobDate: row.job_date,
+    jobStart: row.job_start ?? null,
+    jobEnd: row.job_end ?? null,
     description: row.description,
     items: row.items ?? [],
     dueDate: row.due_date,
@@ -198,6 +206,8 @@ function toRow(doc: SalesDoc, businessId: string): SalesDocRow {
     client: doc.client,
     job_type: doc.jobType,
     job_date: doc.jobDate,
+    job_start: doc.jobStart ?? null,
+    job_end: doc.jobEnd ?? null,
     description: doc.description,
     items: doc.items,
     due_date: doc.dueDate,
@@ -341,6 +351,12 @@ export function docsForList(docs: SalesDoc[], kind: DocKind, filter: ListFilter)
  */
 export function isQuoteExpired(doc: Pick<SalesDoc, 'kind' | 'status' | 'dueDate'>, today = new Date()) {
   return doc.kind === 'quote' && doc.status === 'Sent' && !!doc.dueDate && doc.dueDate < dayKey(today);
+}
+
+/** A quote's job time: "8:00 AM – 12:00 PM", "8:00 AM", or "" if none was picked. */
+export function jobTimeText(doc: Pick<SalesDoc, 'jobStart' | 'jobEnd'>) {
+  if (!doc.jobStart) return '';
+  return doc.jobEnd ? `${format12h(doc.jobStart)} – ${format12h(doc.jobEnd)}` : format12h(doc.jobStart);
 }
 
 /** "Q-0001" -> "#0001", as printed on quotes and in email subjects. */

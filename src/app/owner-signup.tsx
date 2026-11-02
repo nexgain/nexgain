@@ -13,7 +13,13 @@ import { StepSubscription } from '@/components/signup/step-subscription';
 import { StepTeam } from '@/components/signup/step-team';
 import { StepType } from '@/components/signup/step-type';
 import { EMPTY_SIGNUP, STEP_NAMES, type SignupData } from '@/components/signup/types';
-import { businessStore, createBusinessOnline, updateBusiness, type BusinessProfile } from '@/data/business';
+import {
+  businessStore,
+  createBusinessOnline,
+  DEFAULT_REMINDER_SETTINGS,
+  updateBusiness,
+  type BusinessProfile,
+} from '@/data/business';
 import { saveSignupApps } from '@/data/business-apps';
 import { saveBusinessPayment, updateBusinessPayment } from '@/data/invoices';
 import { DEFAULT_SELECTED_COUNT, findIndustry, industryDefaults } from '@/data/industries';
@@ -59,6 +65,8 @@ function toProfile(data: SignupData): Omit<BusinessProfile, 'id' | 'inviteCode' 
     accountingSoftware: null,
     emailApp: data.emailApp,
     businessEmail: data.businessEmail.trim(),
+    phone: '',
+    reminders: DEFAULT_REMINDER_SETTINGS,
   };
 }
 

@@ -39,6 +39,12 @@ export type BusinessProfile = {
   emailApp: EmailApp;
   /** Address customers see and reply to (falls back to the login email). */
   businessEmail: string;
+  /** Business phone, shown in job reminders. */
+  phone: string;
+  /** Automatic job reminders for clients (see src/data/reminders.ts). */
+  reminders: ReminderSettings;
+  /** The owner ticked "Don't show this again" on the quote "no time selected" pop-up. */
+  hideNoTimeWarning?: boolean;
   /** Code employees will use to join this business. */
   inviteCode: string;
   createdAt: string;
@@ -53,6 +59,30 @@ export type BusinessProfile = {
 export type OvertimeRules = {
   /** Hours worked past this in a single day are overtime. */
   dailyAfterHours: number;
+};
+
+/**
+ * Reminder emails sent to clients at 9:00 am business time, a week before and the
+ * day before each job, by the server (send-reminders Edge Function). Blank subject
+ * or message = the default wording.
+ */
+export type ReminderSettings = {
+  enabled: boolean;
+  weekBefore: boolean;
+  dayBefore: boolean;
+  subject: string;
+  message: string;
+  /** Which connected account sends them when both are connected (null = automatic). */
+  provider: 'google' | 'microsoft' | null;
+};
+
+export const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
+  enabled: false,
+  weekBefore: true,
+  dayBefore: true,
+  subject: '',
+  message: '',
+  provider: null,
 };
 
 export const DEFAULT_OVERTIME_RULES: OvertimeRules = { dailyAfterHours: 8 };
@@ -100,6 +130,14 @@ type BusinessRow = {
   track_gst_in_reports: boolean;
   email_app?: EmailApp;
   business_email?: string;
+  phone?: string;
+  reminders_enabled?: boolean;
+  reminder_week_before?: boolean;
+  reminder_day_before?: boolean;
+  reminder_subject?: string;
+  reminder_message?: string;
+  reminder_provider?: 'google' | 'microsoft' | null;
+  hide_no_time_warning?: boolean;
   invite_code: string;
   created_at: string;
   overtime_rules?: { daily_after_hours?: number | string } | null;
@@ -131,6 +169,16 @@ export function fromRow(row: BusinessRow): BusinessProfile {
     accountingSoftware: null,
     emailApp: row.email_app ?? 'other',
     businessEmail: row.business_email ?? '',
+    phone: row.phone ?? '',
+    reminders: {
+      enabled: row.reminders_enabled ?? DEFAULT_REMINDER_SETTINGS.enabled,
+      weekBefore: row.reminder_week_before ?? DEFAULT_REMINDER_SETTINGS.weekBefore,
+      dayBefore: row.reminder_day_before ?? DEFAULT_REMINDER_SETTINGS.dayBefore,
+      subject: row.reminder_subject ?? '',
+      message: row.reminder_message ?? '',
+      provider: row.reminder_provider ?? null,
+    },
+    hideNoTimeWarning: row.hide_no_time_warning ?? false,
     inviteCode: row.invite_code,
     createdAt: row.created_at,
     overtimeRules: {
@@ -162,6 +210,16 @@ function toColumns(p: Partial<BusinessProfile>) {
   if (p.overtimeRules !== undefined) cols.overtime_rules = { daily_after_hours: p.overtimeRules.dailyAfterHours };
   if (p.emailApp !== undefined) cols.email_app = p.emailApp;
   if (p.businessEmail !== undefined) cols.business_email = p.businessEmail;
+  if (p.phone !== undefined) cols.phone = p.phone;
+  if (p.hideNoTimeWarning !== undefined) cols.hide_no_time_warning = p.hideNoTimeWarning;
+  if (p.reminders !== undefined) {
+    cols.reminders_enabled = p.reminders.enabled;
+    cols.reminder_week_before = p.reminders.weekBefore;
+    cols.reminder_day_before = p.reminders.dayBefore;
+    cols.reminder_subject = p.reminders.subject;
+    cols.reminder_message = p.reminders.message;
+    cols.reminder_provider = p.reminders.provider;
+  }
   return cols;
 }
 

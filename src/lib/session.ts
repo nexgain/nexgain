@@ -19,6 +19,7 @@ import { clearNotifications, loadNotifications, subscribeToNotifications } from 
 import { loadPayRuns, payRunsStore } from '@/data/pay-runs';
 import { loadPayslips, payslipsStore } from '@/data/payroll';
 import { qualificationsStore } from '@/data/qualifications';
+import { clearReminders, loadReminders } from '@/data/reminders';
 import { loadShifts, shiftsStore } from '@/data/shifts';
 import { supabase } from '@/lib/supabase';
 
@@ -73,6 +74,7 @@ async function load(userId: string) {
       loadPayRuns().catch(() => {}),
       loadClients().catch(() => {}),
       loadJobs().catch(() => {}),
+      loadReminders().catch(() => {}),
       loadEvents().catch(() => {}),
       loadContractorInvoices().catch(() => {}),
     ]);
@@ -90,6 +92,8 @@ async function load(userId: string) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pay_runs', filter }, refresh(loadPayRuns))
       // Jobs change when shifts are linked to them (Assigned) and when they're booked or moved.
       .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs', filter }, refresh(loadJobs))
+      // Reminders sent by the server (Scheduled -> Sent / Couldn't send).
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'job_reminders', filter }, refresh(loadReminders))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_events', filter }, refresh(loadEvents))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'contractor_invoices', filter }, refresh(loadContractorInvoices))
       // Customers accepting or declining quotes online, and quotes being booked as jobs.
@@ -177,5 +181,6 @@ export function endSession() {
   clientsStore.set([]);
   clearContractorInvoices();
   jobsStore.set([]);
+  clearReminders();
   eventsStore.set([]);
 }

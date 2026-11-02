@@ -1,5 +1,5 @@
 // Shared by the account-connection Edge Functions (oauth-start, oauth-callback,
-// send-email, oauth-disconnect).
+// send-email, send-reminders, oauth-disconnect).
 //
 // To add another app later (Xero, Stripe, Google Calendar...): add one entry to
 // PROVIDERS below, add its id to the provider check in the connected_accounts
@@ -8,7 +8,8 @@
 // Secrets (Supabase > Edge Functions > Secrets), never in the app or in git:
 //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
 //   MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET,
-//   TOKEN_ENCRYPTION_KEY (32 random bytes, base64; see the setup steps).
+//   TOKEN_ENCRYPTION_KEY (32 random bytes, base64; see the setup steps),
+//   REMINDERS_CRON_SECRET (send-reminders only: the password the reminders timer sends).
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase automatically.
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 

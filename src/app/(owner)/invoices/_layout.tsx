@@ -8,7 +8,7 @@ import { Colors } from '@/constants/theme';
 // Keep the Invoices list underneath even when a quote is opened directly
 // (e.g. from a notification), so leaving it always has somewhere to go.
 export const unstable_settings = {
-  initialRouteName: 'index',
+  anchor: 'index',
 };
 
 export default function InvoicesLayout() {

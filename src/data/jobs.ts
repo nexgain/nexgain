@@ -39,6 +39,8 @@ export type Job = {
   assignedEmployeeIds: string[];
   completedAt: string | null;
   notes: string;
+  /** Off = no reminder emails for this job (see src/data/reminders.ts). */
+  remindersEnabled: boolean;
   createdAt: string;
 };
 
@@ -55,6 +57,7 @@ type JobRow = {
   assigned_employee_ids?: string[];
   completed_at?: string | null;
   notes?: string;
+  reminders_enabled?: boolean;
   created_at?: string;
 };
 
@@ -77,6 +80,7 @@ function fromRow(row: JobRow): Job {
     assignedEmployeeIds: row.assigned_employee_ids ?? [],
     completedAt: row.completed_at ?? null,
     notes: row.notes ?? '',
+    remindersEnabled: row.reminders_enabled ?? true,
     createdAt: row.created_at ?? row.scheduled_start,
   };
 }
@@ -129,6 +133,11 @@ export function setJobStatus(id: string, status: JobStatus) {
 
 export function updateJobNotes(id: string, notes: string) {
   return patch(id, { notes }, { notes });
+}
+
+/** Turns the automatic reminder emails on or off for this one job. */
+export function setJobReminders(id: string, remindersEnabled: boolean) {
+  return patch(id, { remindersEnabled }, { reminders_enabled: remindersEnabled });
 }
 
 export type ConfirmJobInput = {

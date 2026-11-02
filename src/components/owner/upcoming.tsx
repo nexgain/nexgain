@@ -15,6 +15,7 @@ const TYPE_ICONS: Record<UpcomingItemType, IconName> = {
   delivery: { ios: 'truck.box.fill', android: 'local_shipping', web: 'local_shipping' },
   materials: { ios: 'shippingbox.fill', android: 'inventory_2', web: 'inventory_2' },
   job: { ios: 'wrench.and.screwdriver.fill', android: 'build', web: 'build' },
+  quote: { ios: 'doc.text.fill', android: 'request_quote', web: 'request_quote' },
   inspection: { ios: 'doc.text.fill', android: 'description', web: 'description' },
   other: { ios: 'note.text', android: 'sticky_note_2', web: 'sticky_note_2' },
 };
@@ -71,6 +72,8 @@ function UpcomingCard({ item }: { item: UpcomingItem }) {
   function open() {
     if (item.event.type === 'job' && item.event.jobId) {
       router.navigate({ pathname: '/job/[id]', params: { id: item.event.jobId } });
+    } else if (item.event.type === 'quote' && item.event.quoteId) {
+      router.navigate({ pathname: '/invoices/[id]', params: { id: item.event.quoteId } });
     } else {
       router.navigate({ pathname: '/calendar', params: { event: item.event.id } });
     }

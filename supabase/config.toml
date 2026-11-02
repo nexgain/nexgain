@@ -11,6 +11,11 @@ verify_jwt = false
 [functions.oauth-callback]
 verify_jwt = false
 
+# Called by the reminders timer (pg_cron), which has no NexGain login; the
+# REMINDERS_CRON_SECRET password (or, for a test, the owner's login) is checked instead.
+[functions.send-reminders]
+verify_jwt = false
+
 # These need the owner's NexGain login.
 [functions.oauth-start]
 verify_jwt = true

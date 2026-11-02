@@ -5,7 +5,7 @@ import { useClients } from '@/data/clients';
 import { format12h } from '@/data/employee-roster';
 import { fromDateKey } from '@/data/shifts';
 
-export type UpcomingItemType = 'delivery' | 'materials' | 'job' | 'inspection' | 'other';
+export type UpcomingItemType = 'delivery' | 'materials' | 'job' | 'quote' | 'inspection' | 'other';
 
 export type UpcomingItem = {
   id: string;
@@ -15,7 +15,7 @@ export type UpcomingItem = {
   source: string;
   location: string;
   date: Date;
-  /** 24h "HH:MM". */
+  /** 24h "HH:MM", or "" for an all-day entry. */
   time: string;
   /** The calendar event it came from. */
   event: CalendarEvent;
@@ -38,10 +38,12 @@ export function useUpcomingItems(limit = 5): UpcomingItem[] {
           ? (clients.find((c) => c.id === e.clientId)?.name ?? '')
           : e.type === 'delivery'
             ? e.supplier
-            : 'Reminder',
+            : e.type === 'quote'
+              ? 'Quote sent'
+              : 'Reminder',
       location: e.address,
       date: fromDateKey(e.date),
-      time: e.start,
+      time: e.allDay ? '' : e.start,
       event: e,
     }));
 }
@@ -56,7 +58,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export function upcomingTiming(item: Pick<UpcomingItem, 'date' | 'time'>, now = new Date()) {
   const start = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const days = Math.round((start(item.date) - start(now)) / DAY_MS);
-  const time = format12h(item.time);
+  const time = item.time ? format12h(item.time) : 'All day';
 
   if (days === 0) return { tone: 'today' as const, label: `Today · ${time}` };
   if (days === 1) return { tone: 'tomorrow' as const, label: `Tomorrow · ${time}` };

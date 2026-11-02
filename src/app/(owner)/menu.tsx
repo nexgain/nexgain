@@ -4,6 +4,8 @@ import { View } from 'react-native';
 import { InviteCodeCard } from '@/components/owner/employee-ui';
 import { ActionRow, Card, OwnerScreen, PageHeader } from '@/components/owner/ui';
 import { useContractorInvoices } from '@/data/contractor-invoices';
+import { useJobs } from '@/data/jobs';
+import { reminderProblems, useReminders } from '@/data/reminders';
 import { ownerNotifications, useNotifications } from '@/data/notifications';
 import { logOut } from '@/lib/auth';
 
@@ -11,6 +13,7 @@ import { logOut } from '@/lib/auth';
 export default function OwnerMoreScreen() {
   const unread = ownerNotifications(useNotifications()).filter((n) => !n.read).length;
   const toReview = useContractorInvoices().filter((i) => i.status === 'sent').length;
+  const cantSend = reminderProblems(useJobs(), useReminders()).length;
 
   return (
     <OwnerScreen>
@@ -29,6 +32,12 @@ export default function OwnerMoreScreen() {
             icon={{ ios: 'briefcase.fill', android: 'work', web: 'work' }}
             label="Jobs"
             onPress={() => router.navigate('/jobs')}
+            showDivider
+          />
+          <ActionRow
+            icon={{ ios: 'bell.badge.fill', android: 'notifications_active', web: 'notifications_active' }}
+            label={cantSend > 0 ? `Reminders (${cantSend} couldn't send)` : 'Reminders'}
+            onPress={() => router.navigate('/reminders')}
             showDivider
           />
           <ActionRow

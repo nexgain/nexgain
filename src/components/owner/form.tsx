@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, type TextInputProps } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, OwnerIcons, type IconName } from '@/components/owner/ui';
@@ -123,6 +123,39 @@ export function TextField(props: TextInputProps) {
   );
 }
 
+/** A setting with an on/off switch on the right. */
+export function SwitchRow({
+  label,
+  hint,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  hint?: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <View style={styles.switchRow}>
+      <View style={styles.switchText}>
+        <Text style={[styles.switchLabel, disabled && styles.placeholder]}>{label}</Text>
+        {hint ? <Text style={styles.switchHint}>{hint}</Text> : null}
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onChange}
+        disabled={disabled}
+        trackColor={{ true: C.accent, false: C.border }}
+        thumbColor="#FFFFFF"
+        ios_backgroundColor={C.border}
+        accessibilityLabel={label}
+      />
+    </View>
+  );
+}
+
 export function Checkbox({ checked }: { checked: boolean }) {
   return (
     <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
@@ -241,6 +274,25 @@ const styles = StyleSheet.create({
     minHeight: 88,
     paddingTop: Spacing.three - 4,
     textAlignVertical: 'top',
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three - 4,
+    minHeight: 44,
+  },
+  switchText: {
+    flex: 1,
+    gap: 2,
+  },
+  switchLabel: {
+    color: C.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  switchHint: {
+    color: C.textSecondary,
+    fontSize: 13,
   },
   checkbox: {
     width: 22,

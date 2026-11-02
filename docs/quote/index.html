@@ -120,6 +120,7 @@
           <div><span class="label">Prepared for</span><span id="customer" class="value"></span></div>
           <div><span class="label">Date</span><span id="date" class="value"></span></div>
           <div id="valid-wrap"><span class="label">Valid until</span><span id="valid" class="value"></span></div>
+          <div id="job-wrap" hidden><span class="label">Job date</span><span id="job" class="value"></span></div>
         </div>
         <p id="desc" class="desc muted" hidden></p>
       </section>
@@ -173,6 +174,16 @@
       var parts = String(value).slice(0, 10).split('-').map(Number);
       return parts[2] + ' ' + MONTHS[parts[1] - 1] + ' ' + parts[0];
     }
+    // "14:30" -> "2:30 PM"
+    function time12(value) {
+      var parts = String(value).split(':').map(Number);
+      return (parts[0] % 12 || 12) + ':' + String(parts[1]).padStart(2, '0') + ' ' + (parts[0] >= 12 ? 'PM' : 'AM');
+    }
+    function jobWhen(q) {
+      if (!q.jobDate) return '';
+      if (!q.jobStart) return day(q.jobDate);
+      return day(q.jobDate) + ', ' + time12(q.jobStart) + (q.jobEnd ? ' – ' + time12(q.jobEnd) : '');
+    }
     function text(id, value) { $(id).textContent = value; }
     function show(id, visible) { $(id).hidden = !visible; }
 
@@ -190,6 +201,8 @@
       text('date', day(q.createdAt));
       text('valid', day(q.validUntil));
       show('valid-wrap', !!q.validUntil);
+      text('job', jobWhen(q));
+      show('job-wrap', !!q.jobDate);
       text('desc', q.description || '');
       show('desc', !!q.description);
 
