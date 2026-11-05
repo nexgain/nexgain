@@ -91,6 +91,19 @@ export async function functionError(error: unknown, fallback: string): Promise<{
   return { message: fallback };
 }
 
+type ReturnParams = Record<string, string>;
+
+/**
+ * A login finished in another browser (e.g. the owner tapped Share > Open in Chrome)
+ * comes back to the app as a link instead of to the in-app login. The
+ * oauth-return screen hands its details here so connectAccount can still use them.
+ */
+let lastReturn: { params: ReturnParams; at: number } | null = null;
+
+export function noteOAuthReturn(params: ReturnParams) {
+  lastReturn = { params, at: Date.now() };
+}
+
 export type ConnectResult =
   | { status: 'connected'; email: string }
   | { status: 'cancelled' }
@@ -114,11 +127,27 @@ export async function connectAccount(provider: Provider): Promise<ConnectResult>
     return { status: 'error', message: failure.message };
   }
 
+  const startedAt = Date.now();
   const result = await WebBrowser.openAuthSessionAsync(data.url, redirect);
-  if (result.type !== 'success') return { status: 'cancelled' };
-
-  const { queryParams } = Linking.parse(result.url);
-  const param = (key: string) => (typeof queryParams?.[key] === 'string' ? (queryParams[key] as string) : '');
+  let params: ReturnParams;
+  if (result.type === 'success') {
+    const { queryParams } = Linking.parse(result.url);
+    params = Object.fromEntries(
+      Object.entries(queryParams ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+    );
+  } else if (lastReturn && lastReturn.at >= startedAt) {
+    // Finished in another browser, then the in-app login was closed: use what came back.
+    params = lastReturn.params;
+  } else {
+    // Closed without an answer. It may still have connected elsewhere, so ask the server.
+    await loadConnectedAccounts().catch(() => {});
+    const account = findAccount(connectedAccountsStore.get(), provider);
+    return account && Date.parse(account.connectedAt) >= startedAt
+      ? { status: 'connected', email: account.email }
+      : { status: 'cancelled' };
+  }
+  lastReturn = null;
+  const param = (key: string) => params[key] ?? '';
   if (param('status') === 'cancelled') return { status: 'cancelled' };
   if (param('status') !== 'connected') {
     return { status: 'error', message: param('message') || `Couldn't connect your ${name} account. Please try again.` };

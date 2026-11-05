@@ -68,7 +68,13 @@ Deno.serve(async (req) => {
     });
     if (tokens.error || !tokens.access_token) {
       console.error('oauth-callback token error:', tokens.error, tokens.error_description);
-      return backToApp(appRedirect, { status: 'error', message: `${provider.name} didn't accept the login. Please try again.` });
+      // While testing with Square's Sandbox, show Square's own reason (it never contains a secret).
+      const testing = providerId === 'square' && Deno.env.get('SQUARE_ENVIRONMENT') !== 'production';
+      const reason = testing && tokens.error_description ? ` (Square says: ${tokens.error_description})` : '';
+      return backToApp(appRedirect, {
+        status: 'error',
+        message: `${provider.name} didn't accept the login. Please try again.${reason}`,
+      });
     }
     if (!tokens.refresh_token) {
       return backToApp(appRedirect, {
