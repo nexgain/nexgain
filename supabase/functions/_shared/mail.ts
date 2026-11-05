@@ -2,71 +2,23 @@
 // from their own address and shows in their Sent folder. Used by send-email (quotes,
 // invoices, receipts) and send-reminders (automatic job reminders).
 import {
-  adminDb,
-  decrypt,
-  encrypt,
-  expiresAt,
-  PROVIDERS,
+  ACCOUNT_COLUMNS,
+  ReconnectNeeded,
   randomCode,
-  requestTokens,
   toBase64,
-  type ProviderId,
+  workingAccessToken,
+  type AccountRow,
 } from './connections.ts';
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
+
+export { ACCOUNT_COLUMNS, ReconnectNeeded, type AccountRow };
 
 export type Attachment = { fileName: string; base64: string };
 export type Email = { to: string; subject: string; body: string; fromName: string; attachment: Attachment | null };
 
-/** Access was removed or has run out: the owner needs to connect again. */
-export class ReconnectNeeded extends Error {}
-
 export const EMAIL = /^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]+$/;
 
 export const oneLine = (text: string) => text.replace(/[\r\n]+/g, ' ').trim();
-
-// ---------- Access tokens ----------
-
-export type AccountRow = {
-  id: string;
-  provider: ProviderId;
-  account_email: string;
-  refresh_token_encrypted: string;
-  access_token_encrypted: string | null;
-  access_token_expires_at: string | null;
-};
-
-export const ACCOUNT_COLUMNS =
-  'id, provider, account_email, refresh_token_encrypted, access_token_encrypted, access_token_expires_at';
-
-/** A working access token, refreshed (and saved) when the old one has run out. */
-async function accessToken(db: ReturnType<typeof adminDb>, row: AccountRow) {
-  const stillValid = row.access_token_expires_at && new Date(row.access_token_expires_at) > new Date();
-  if (stillValid && row.access_token_encrypted) return decrypt(row.access_token_encrypted);
-
-  const tokens = await requestTokens(row.provider, {
-    grant_type: 'refresh_token',
-    refresh_token: await decrypt(row.refresh_token_encrypted),
-    // Microsoft wants the scopes again when refreshing; Google doesn't.
-    ...(row.provider === 'microsoft' ? { scope: PROVIDERS[row.provider].scopes } : {}),
-  });
-  if (tokens.error === 'invalid_grant' || tokens.error === 'unauthorized_client') {
-    // Access removed (or Google's 7-day test limit): the connection no longer works,
-    // so remove it and the app stops showing "Connected".
-    await db.from('connected_accounts').delete().eq('id', row.id);
-    throw new ReconnectNeeded();
-  }
-  if (tokens.error || !tokens.access_token) throw new Error(`Refresh failed: ${tokens.error}`);
-
-  const update = {
-    access_token_encrypted: await encrypt(tokens.access_token),
-    access_token_expires_at: expiresAt(tokens.expires_in),
-    // Microsoft hands out a new refresh token each time; keep the latest.
-    ...(tokens.refresh_token ? { refresh_token_encrypted: await encrypt(tokens.refresh_token) } : {}),
-  };
-  await db.from('connected_accounts').update(update).eq('id', row.id);
-  // Several reminders can go in one run: the next one reuses this token.
-  Object.assign(row, update);
-  return tokens.access_token;
-}
 
 /** 401, or 403 for missing permission (not a 403 for sending too fast). */
 const accessRemoved = (status: number, detail: string) =>
@@ -159,8 +111,8 @@ async function sendWithOutlook(token: string, email: Email) {
 // ---------- Send ----------
 
 /** Sends the email from the connected account. Throws ReconnectNeeded if access was removed. */
-export async function sendFromAccount(db: ReturnType<typeof adminDb>, row: AccountRow, email: Email) {
-  const token = await accessToken(db, row);
+export async function sendFromAccount(db: SupabaseClient, row: AccountRow, email: Email) {
+  const token = await workingAccessToken(db, row);
   if (row.provider === 'google') await sendWithGmail(token, email, row.account_email);
   else await sendWithOutlook(token, email);
 }

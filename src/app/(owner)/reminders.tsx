@@ -8,7 +8,14 @@ import { Badge, Button, Card, goBack, Icon, OwnerIcons, OwnerScreen, PageHeader 
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { updateBusiness, useBusiness, type ReminderSettings } from '@/data/business';
 import { useClients } from '@/data/clients';
-import { EMAIL_PROVIDER, findAccount, useConnectedAccounts, type Provider } from '@/data/connected-accounts';
+import {
+  EMAIL_PROVIDER,
+  emailAccounts,
+  findAccount,
+  useConnectedAccounts,
+  useRefreshConnectedAccountsOnFocus,
+  type Provider,
+} from '@/data/connected-accounts';
 import { jobWhen } from '@/components/owner/jobs-ui';
 import { useJobs } from '@/data/jobs';
 import {
@@ -20,7 +27,9 @@ import {
   useReminders,
 } from '@/data/reminders';
 
-const PROVIDER_CHOICES: { value: Provider; label: string }[] = [
+type EmailProvider = Extract<Provider, 'google' | 'microsoft'>;
+
+const PROVIDER_CHOICES: { value: EmailProvider; label: string }[] = [
   { value: 'google', label: 'Gmail' },
   { value: 'microsoft', label: 'Outlook' },
 ];
@@ -32,7 +41,10 @@ type Message = { tone: 'ok' | 'error'; text: string };
 // this screen changes the settings and lists any that couldn't be sent.
 export default function RemindersScreen() {
   const business = useBusiness();
-  const accounts = useConnectedAccounts();
+  // Email accounts only: business apps like Square can't send reminders.
+  const accounts = emailAccounts(useConnectedAccounts());
+  // The same connection list the server sends with, checked fresh each time this screen opens.
+  useRefreshConnectedAccountsOnFocus();
   const jobs = useJobs();
   const clients = useClients();
   const problems = reminderProblems(jobs, useReminders());
@@ -108,7 +120,7 @@ export default function RemindersScreen() {
           </>
         ) : both ? (
           <FormField label="Send reminders from">
-            <Segmented options={PROVIDER_CHOICES} value={sender.provider} onChange={(provider) => save({ provider })} />
+            <Segmented options={PROVIDER_CHOICES} value={sender.provider as EmailProvider} onChange={(provider) => save({ provider })} />
             <Text style={styles.muted}>{sender.email}</Text>
           </FormField>
         ) : (
@@ -122,7 +134,6 @@ export default function RemindersScreen() {
           hint="9:00 am, 7 days before the job. Skipped for jobs booked less than a week ahead."
           value={settings.weekBefore}
           onChange={(weekBefore) => save({ weekBefore })}
-          disabled={!settings.enabled}
         />
         <View style={styles.divider} />
         <SwitchRow
@@ -130,8 +141,10 @@ export default function RemindersScreen() {
           hint="9:00 am the day before. Jobs booked after that get it straight away."
           value={settings.dayBefore}
           onChange={(dayBefore) => save({ dayBefore })}
-          disabled={!settings.enabled}
         />
+        {!settings.enabled && (
+          <Text style={styles.muted}>Reminders are off, so none are sent yet. These choices apply once you turn them on.</Text>
+        )}
       </Card>
 
       <Card title="Message" icon={{ ios: 'envelope.fill', android: 'mail', web: 'mail' }}>

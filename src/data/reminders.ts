@@ -5,7 +5,7 @@
 // table, read only) and changes the settings (see ReminderSettings in business.ts).
 import type { BusinessProfile } from '@/data/business';
 import { addDaysKey, localParts, toTimestamp } from '@/data/business-time';
-import { functionError } from '@/data/connected-accounts';
+import { functionError, loadConnectedAccounts } from '@/data/connected-accounts';
 import { format12h, formatShortDate } from '@/data/employee-roster';
 import type { Job } from '@/data/jobs';
 import { createStore } from '@/data/store';
@@ -192,7 +192,10 @@ export async function sendTestReminder(subject: string, message: string): Promis
     body: { test: true, subject, message },
   });
   if (error || !data?.sent) {
-    return { error: (await functionError(error, "Couldn't send the test reminder. Please try again.")).message };
+    const failure = await functionError(error, "Couldn't send the test reminder. Please try again.");
+    // The server found no working Gmail / Outlook connection: show the same on screen.
+    if (failure.code === 'reconnect' || failure.code === 'not_connected') await loadConnectedAccounts().catch(() => {});
+    return { error: failure.message };
   }
   return { to: data.to };
 }

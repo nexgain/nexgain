@@ -15,7 +15,7 @@
 // Setup: deploy as "send-reminders" with "Verify JWT" OFF (the timer has no
 // NexGain login; the password or the owner's login is checked here instead).
 // Secret: REMINDERS_CRON_SECRET (the same password the timer sends).
-import { adminDb, CORS, env, ownerBusinessId, PROVIDERS, reply, type ProviderId } from '../_shared/connections.ts';
+import { adminDb, CORS, EMAIL_PROVIDERS, env, ownerBusinessId, PROVIDERS, reply, type ProviderId } from '../_shared/connections.ts';
 import { ACCOUNT_COLUMNS, EMAIL, oneLine, ReconnectNeeded, sendFromAccount, type AccountRow } from '../_shared/mail.ts';
 
 type Db = ReturnType<typeof adminDb>;
@@ -127,7 +127,12 @@ function pickAccount(accounts: AccountRow[], reminderProvider: string | null, em
 }
 
 async function accountsFor(db: Db, businessId: string) {
-  const { data } = await db.from('connected_accounts').select(ACCOUNT_COLUMNS).eq('business_id', businessId);
+  // Email accounts only (not apps like Square).
+  const { data } = await db
+    .from('connected_accounts')
+    .select(ACCOUNT_COLUMNS)
+    .eq('business_id', businessId)
+    .in('provider', EMAIL_PROVIDERS);
   return (data ?? []) as AccountRow[];
 }
 

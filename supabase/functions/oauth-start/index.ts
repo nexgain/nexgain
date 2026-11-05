@@ -46,8 +46,16 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    if (!isProvider(body.provider)) return reply(400, { error: 'Unknown provider.' });
+    if (!isProvider(body.provider)) {
+      return reply(400, { error: 'not_set_up', message: "This app can't be connected yet. Please try again later." });
+    }
     const providerId: ProviderId = body.provider;
+    // Its client id / secret haven't been added in Supabase > Edge Functions > Secrets yet.
+    const setUp = PROVIDERS[providerId];
+    if (!Deno.env.get(setUp.clientIdEnv) || !Deno.env.get(setUp.clientSecretEnv)) {
+      console.error(`oauth-start: ${setUp.clientIdEnv} / ${setUp.clientSecretEnv} not set`);
+      return reply(503, { error: 'not_set_up', message: `${setUp.name} isn't set up yet. Please try again later.` });
+    }
     if (!isAppAddress(body.redirect)) return reply(400, { error: 'Invalid return address.' });
 
     const db = adminDb();
@@ -77,8 +85,7 @@ Deno.serve(async (req) => {
       response_type: 'code',
       scope: provider.scopes,
       state,
-      code_challenge: challenge,
-      code_challenge_method: 'S256',
+      ...(provider.pkce === false ? {} : { code_challenge: challenge, code_challenge_method: 'S256' }),
       ...provider.authParams,
     }).toString();
 

@@ -1,8 +1,8 @@
 // The app-connection list, shared by More > Integrations (dark) and owner sign-up
-// (light) so both always look and work the same. Gmail and Outlook really connect
-// (see src/data/connected-accounts.ts); every other app is just marked as used
-// ("Added - coming soon") or requested.
-import { useState, type ReactNode } from 'react';
+// (light) so both always look and work the same. Gmail, Outlook and Square really
+// connect (see src/data/connected-accounts.ts); every other app is just marked as
+// used ("Added - coming soon") or requested.
+import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SvgXml } from 'react-native-svg';
@@ -18,10 +18,14 @@ import {
   disconnectAccount,
   EMAIL_PROVIDER,
   findAccount,
+  loadIntegrationData,
   PROVIDER_NAME,
   useConnectedAccounts,
+  type ConnectedAccount,
+  type IntegrationItem,
   type Provider,
 } from '@/data/connected-accounts';
+import { format12h, formatShortDate } from '@/data/employee-roster';
 import { APP_CATALOG, CATEGORY_LABEL, findCatalogApp, type AppCategory, type CatalogApp } from '@/data/integration-apps';
 import { emailAppHint } from '@/lib/email';
 
@@ -73,8 +77,7 @@ const EMAIL_ROWS: Record<EmailApp, { logo: Logo; sub?: string }> = {
 const EMAIL_LABEL: Partial<Record<EmailApp, string>> = { gmail: 'Gmail', outlook: 'Outlook' };
 
 /** Asks before disconnecting (a plain confirm on the web, where Alert has no buttons). */
-function confirmDisconnect(name: string, email: string) {
-  const message = `Quotes and invoices will open in your phone's email app instead of sending from ${email}.`;
+function confirmDisconnect(name: string, message: string) {
   if (Platform.OS === 'web') return Promise.resolve(window.confirm(`Disconnect ${name}?\n\n${message}`));
   return new Promise<boolean>((resolve) =>
     Alert.alert(
@@ -88,6 +91,11 @@ function confirmDisconnect(name: string, email: string) {
     ),
   );
 }
+
+/** Apps that really connect, and what their data list is called. The rest are a wish list for now. */
+const CONNECTABLE: Record<string, { provider: Provider; dataTitle: string }> = {
+  Square: { provider: 'square', dataTitle: 'Recent payments' },
+};
 
 const PAYMENT_APPS = ['Xero', 'MYOB', 'QuickBooks'];
 const MORE_APPS = ['Google Calendar', 'Stripe', 'Square', 'PayPal'];
@@ -130,6 +138,9 @@ export function ConnectApps({
   const accounts = useConnectedAccounts();
   const [busyProvider, setBusyProvider] = useState<Provider | null>(null);
   const [message, setMessage] = useState<{ tone: 'ok' | 'error' | 'info'; text: string } | null>(null);
+  // Business apps (Square...): their own message, and the open options sheet.
+  const [appMessage, setAppMessage] = useState<{ tone: 'ok' | 'error' | 'info'; text: string } | null>(null);
+  const [openApp, setOpenApp] = useState<string | null>(null);
   const selectedAccount = findAccount(accounts, EMAIL_PROVIDER[selectedEmail]);
   const selectedLabel = EMAIL_LABEL[selectedEmail];
 
@@ -160,7 +171,8 @@ export function ConnectApps({
 
   async function disconnect(app: EmailApp, provider: Provider, email: string) {
     const label = EMAIL_LABEL[app] ?? '';
-    if (!(await confirmDisconnect(label, email))) return;
+    const warning = `Quotes and invoices will open in your phone's email app instead of sending from ${email}.`;
+    if (!(await confirmDisconnect(label, warning))) return;
     setMessage(null);
     setBusyProvider(provider);
     const error = await disconnectAccount(provider);
@@ -172,6 +184,43 @@ export function ConnectApps({
         text: `${label} disconnected. To fully remove NexGain's access, go to account.microsoft.com › Privacy › App access.`,
       });
     } else setMessage({ tone: 'info', text: `${label} disconnected.` });
+  }
+
+  /** Opens the app's login (e.g. Square). Returns true once it's connected. */
+  async function connectApp(name: string, provider: Provider) {
+    setAppMessage(null);
+    setBusyProvider(provider);
+    try {
+      if (beforeConnect && !(await beforeConnect())) return false;
+      const result = await connectAccount(provider);
+      if (result.status === 'connected') {
+        setAppMessage({ tone: 'ok', text: `${name} connected (${result.email}). Tap it to see your latest data.` });
+        return true;
+      }
+      setAppMessage(
+        result.status === 'cancelled'
+          ? { tone: 'info', text: `Login cancelled, so ${name} wasn't connected. Tap + Add to try again.` }
+          : { tone: 'error', text: result.message },
+      );
+    } catch {
+      setAppMessage({ tone: 'error', text: `Couldn't connect ${name}. Check your internet connection and try again.` });
+    } finally {
+      setBusyProvider(null);
+    }
+    return false;
+  }
+
+  async function disconnectApp(name: string, provider: Provider) {
+    if (!(await confirmDisconnect(name, `NexGain will stop seeing your ${name} data. You can connect again at any time.`))) return;
+    setBusyProvider(provider);
+    const error = await disconnectAccount(provider);
+    setBusyProvider(null);
+    if (error) {
+      setAppMessage({ tone: 'error', text: error });
+      return;
+    }
+    setOpenApp(null);
+    setAppMessage({ tone: 'info', text: `${name} disconnected.` });
   }
 
   const emailRight = (value: EmailApp, selected: boolean) => {
@@ -223,6 +272,23 @@ export function ConnectApps({
   const otherExtras = extras.filter((a) => a.category !== 'payments');
 
   const listedRow = (name: string) => {
+    const connectable = CONNECTABLE[name];
+    if (connectable) {
+      const account = findAccount(accounts, connectable.provider);
+      const busy = busyProvider === connectable.provider;
+      return (
+        <AppRow
+          key={name}
+          p={p}
+          logo={logoFor(name)}
+          name={name}
+          sub={account ? account.email : undefined}
+          onPress={busy || busyProvider !== null ? undefined : () => (account ? setOpenApp(name) : connectApp(name, connectable.provider))}
+          accessibilityLabel={account ? `${name}, connected as ${account.email}. Tap for options.` : `${name}, not connected. Tap to connect.`}
+          right={busy ? <ActivityIndicator color={p.accent} /> : account ? <ConnectedLabel p={p} /> : <AddLabel p={p} />}
+        />
+      );
+    }
     const app = findCatalogApp(name)!;
     const chosen = findChosen(apps, name);
     return (
@@ -327,11 +393,37 @@ export function ConnectApps({
         </Group>
       </View>
 
-      <Group p={p}>
-        {MORE_APPS.map(listedRow)}
-        {otherExtras.map(extraRow)}
-        {openRow('Other apps', null)}
-      </Group>
+      <View style={styles.section}>
+        <Group p={p}>
+          {MORE_APPS.map(listedRow)}
+          {otherExtras.map(extraRow)}
+          {openRow('Other apps', null)}
+        </Group>
+        {appMessage && (
+          <Text
+            accessibilityRole={appMessage.tone === 'error' ? 'alert' : undefined}
+            style={[
+              styles.message,
+              { color: appMessage.tone === 'error' ? p.danger : appMessage.tone === 'ok' ? p.success : p.text },
+            ]}>
+            {appMessage.text}
+          </Text>
+        )}
+      </View>
+
+      {openApp && CONNECTABLE[openApp] && (
+        <AppDetails
+          p={p}
+          name={openApp}
+          dataTitle={CONNECTABLE[openApp].dataTitle}
+          provider={CONNECTABLE[openApp].provider}
+          account={findAccount(accounts, CONNECTABLE[openApp].provider)}
+          busy={busyProvider !== null}
+          onReconnect={() => connectApp(openApp, CONNECTABLE[openApp].provider)}
+          onDisconnect={() => disconnectApp(openApp, CONNECTABLE[openApp].provider)}
+          onClose={() => setOpenApp(null)}
+        />
+      )}
 
       <AppSearch
         p={p}
@@ -342,6 +434,154 @@ export function ConnectApps({
         onClose={() => setSearch(null)}
       />
     </View>
+  );
+}
+
+/** A connected app's options: its latest data (so the owner can see it works), Reconnect and Disconnect. */
+function AppDetails({
+  p,
+  name,
+  dataTitle,
+  provider,
+  account,
+  busy,
+  onReconnect,
+  onDisconnect,
+  onClose,
+}: {
+  p: Palette;
+  name: string;
+  dataTitle: string;
+  provider: Provider;
+  account: ConnectedAccount | undefined;
+  busy: boolean;
+  onReconnect: () => Promise<boolean>;
+  onDisconnect: () => void;
+  onClose: () => void;
+}) {
+  const [data, setData] = useState<{ items?: IntegrationItem[]; error?: string; reconnect?: boolean } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let current = true;
+    loadIntegrationData(provider).then((result) => {
+      if (current) setData(result);
+    });
+    return () => {
+      current = false;
+    };
+  }, [provider, attempt]);
+
+  async function reconnect() {
+    if (await onReconnect()) {
+      // Show the loading spinner again while the fresh data comes in.
+      setData(null);
+      setAttempt((n) => n + 1);
+    }
+  }
+
+  return (
+    <Modal visible animationType="slide" presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : undefined} onRequestClose={onClose}>
+      <SafeAreaView style={[styles.sheet, { backgroundColor: p.page }]} edges={['top', 'bottom']}>
+        <View style={styles.sheetHeader}>
+          <Text style={[styles.sheetTitle, { color: p.text }]} numberOfLines={1}>
+            {name}
+          </Text>
+          <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Done" hitSlop={8}>
+            {({ pressed }) => <Text style={[styles.done, { color: p.accent }, pressed && styles.pressed]}>Done</Text>}
+          </Pressable>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.sheetList}>
+          {account ? (
+            <View style={styles.connectedRow}>
+              <Icon name={{ ios: 'checkmark.circle.fill', android: 'check_circle', web: 'check_circle' }} color={p.success} size={18} />
+              <Text style={[styles.rowName, { color: p.text, flex: 1 }]}>Connected: {account.email}</Text>
+            </View>
+          ) : (
+            <Text style={[styles.hint, { color: p.sub }]}>{name} isn&apos;t connected any more.</Text>
+          )}
+
+          <Text style={[styles.heading, { color: p.text }]}>{dataTitle}</Text>
+          {!data ? (
+            <ActivityIndicator color={p.accent} />
+          ) : data.error ? (
+            <Text accessibilityRole="alert" style={[styles.message, { color: p.danger }]}>
+              {data.error}
+            </Text>
+          ) : data.items && data.items.length > 0 ? (
+            <Group p={p}>
+              {data.items.map((item) => (
+                <View key={item.id} style={[styles.row, { borderTopColor: p.border }]}>
+                  <View style={styles.rowText}>
+                    <Text style={[styles.rowName, { color: p.text }]} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                    <Text style={[styles.rowSub, { color: p.sub }]} numberOfLines={1}>
+                      {[whenText(item.date), item.detail, item.status].filter(Boolean).join(' · ')}
+                    </Text>
+                  </View>
+                  {item.amount !== null && <Text style={[styles.amount, { color: p.text }]}>{moneyText(item.amount, item.currency)}</Text>}
+                </View>
+              ))}
+            </Group>
+          ) : (
+            <Text style={[styles.hint, { color: p.sub }]}>Nothing yet. New {name} payments will show here.</Text>
+          )}
+
+          <View style={styles.sheetButtons}>
+            <SheetButton p={p} label={busy ? 'Please wait…' : 'Reconnect'} filled={!!data?.reconnect || !account} onPress={reconnect} disabled={busy} />
+            {account && <SheetButton p={p} label="Disconnect" danger onPress={onDisconnect} disabled={busy} />}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+/** "3 Nov 2026 · 2:15 PM" in the phone's time. */
+function whenText(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${formatShortDate(d)} · ${format12h(`${d.getHours()}:${d.getMinutes()}`)}`;
+}
+
+function moneyText(amount: number, currency: string | null) {
+  try {
+    return new Intl.NumberFormat('en-AU', { style: 'currency', currency: currency ?? 'AUD' }).format(amount);
+  } catch {
+    return `${currency ?? ''} ${amount.toFixed(2)}`.trim();
+  }
+}
+
+function SheetButton({
+  p,
+  label,
+  filled,
+  danger,
+  onPress,
+  disabled,
+}: {
+  p: Palette;
+  label: string;
+  filled?: boolean;
+  danger?: boolean;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      style={({ pressed }) => [
+        styles.sheetButton,
+        filled ? { backgroundColor: p.accent } : { backgroundColor: p.raised, borderColor: p.border, borderWidth: 1 },
+        (pressed || disabled) && styles.pressed,
+      ]}>
+      <Text style={[styles.sheetButtonText, { color: filled ? '#FFFFFF' : danger ? p.danger : p.text }]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -473,7 +713,7 @@ function AppSearchContent({
           </View>
         )}
         <Text style={[styles.note, { color: p.sub }]}>
-          These apps aren&apos;t connected yet. Adding one tells us which connections to build first.
+          These apps can&apos;t connect yet. Adding one tells us which connections to build first.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -595,6 +835,15 @@ function AddLabel({ p }: { p: Palette }) {
   return <Text style={[styles.add, { color: p.accent }]}>+ Add</Text>;
 }
 
+function ConnectedLabel({ p }: { p: Palette }) {
+  return (
+    <View style={styles.rightRow}>
+      <Icon name={{ ios: 'checkmark.circle.fill', android: 'check_circle', web: 'check_circle' }} color={p.success} size={16} />
+      <Text style={[styles.add, { color: p.success }]}>Connected</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   wrap: {
     gap: 20,
@@ -697,6 +946,28 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.7,
+  },
+  connectedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  amount: {
+    fontSize: 15,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  sheetButtons: {
+    gap: 10,
+  },
+  sheetButton: {
+    alignItems: 'center',
+    paddingVertical: 13,
+    borderRadius: 12,
+  },
+  sheetButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
   },
   sheet: {
     flex: 1,

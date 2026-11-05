@@ -2,6 +2,7 @@ import { ConnectApps } from '@/components/owner/connect-apps';
 import { goBack, OwnerScreen, PageHeader } from '@/components/owner/ui';
 import { updateBusiness, useBusiness } from '@/data/business';
 import { toggleBusinessApp, useBusinessApps } from '@/data/business-apps';
+import { useRefreshConnectedAccountsOnFocus } from '@/data/connected-accounts';
 
 // More > Integrations. Gmail and Outlook can be connected so emails send straight
 // from the owner's address; other apps are saved as ones the business uses or has
@@ -9,6 +10,7 @@ import { toggleBusinessApp, useBusinessApps } from '@/data/business-apps';
 export default function IntegrationsScreen() {
   const business = useBusiness();
   const apps = useBusinessApps();
+  useRefreshConnectedAccountsOnFocus();
 
   return (
     <OwnerScreen>

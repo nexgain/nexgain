@@ -1,9 +1,9 @@
-// Supabase Edge Function: where Google / Microsoft send the owner after they log in.
+// Supabase Edge Function: where Google / Microsoft / Square send the owner after they log in.
 //
 // GET ?code=...&state=...   (or ?error=...&state=... if they cancelled)
 //
-// Checks the one-time state code, swaps the login code for tokens, reads the
-// account's email address, saves the connection (encrypted, replacing any old
+// Checks the one-time state code, swaps the login code for tokens, reads who
+// is connected (email address, or business name for apps), saves the connection (encrypted, replacing any old
 // connection for that provider) and sends the owner back into the app with:
 //   ?status=connected&provider=google&email=name@gmail.com
 //   ?status=cancelled
@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
       grant_type: 'authorization_code',
       code: params.get('code') ?? '',
       redirect_uri: callbackUrl(),
-      code_verifier: saved.code_verifier,
+      ...(provider.pkce === false ? {} : { code_verifier: saved.code_verifier }),
     });
     if (tokens.error || !tokens.access_token) {
       console.error('oauth-callback token error:', tokens.error, tokens.error_description);
@@ -84,22 +84,24 @@ Deno.serve(async (req) => {
       });
     }
 
-    const accountEmail = await provider.accountEmail(tokens.access_token);
+    const account = await provider.account(tokens.access_token);
     const { error } = await db.from('connected_accounts').upsert(
       {
         business_id: saved.business_id,
         provider: providerId,
-        account_email: accountEmail,
+        // The email address, or the business name for apps like Square.
+        account_email: account.label,
+        external_id: account.externalId ?? null,
         refresh_token_encrypted: await encrypt(tokens.refresh_token),
         access_token_encrypted: await encrypt(tokens.access_token),
-        access_token_expires_at: expiresAt(tokens.expires_in),
+        access_token_expires_at: expiresAt(tokens),
         connected_at: new Date().toISOString(),
       },
       { onConflict: 'business_id,provider' },
     );
     if (error) throw error;
 
-    return backToApp(appRedirect, { status: 'connected', provider: providerId, email: accountEmail });
+    return backToApp(appRedirect, { status: 'connected', provider: providerId, email: account.label });
   } catch (e) {
     console.error('oauth-callback:', e instanceof Error ? e.message : e);
     return backToApp(appRedirect, { status: 'error', message: 'Something went wrong connecting your account. Please try again.' });
