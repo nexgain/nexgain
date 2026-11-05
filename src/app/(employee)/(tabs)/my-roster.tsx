@@ -7,7 +7,7 @@ import {
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
-  type ScrollView,
+  type ScrollViewInstance,
 } from 'react-native';
 
 import { Card, EmployeeScreen, employeeStyles, Icon, Icons } from '@/components/employee/ui';
@@ -33,7 +33,7 @@ const WEEKS = [
 export default function RosterScreen() {
   const currentEmployee = useCurrentEmployee();
   const today = new Date();
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const sectionY = useRef<number[]>([0, 0]);
   const toggleHeight = useRef(0);
   const [activeWeek, setActiveWeek] = useState(0);

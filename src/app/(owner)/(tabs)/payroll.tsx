@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { ActivityIndicator, StyleSheet, Text, View, type ScrollView } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 
 import { ConfirmDialog } from '@/components/owner/confirm-dialog';
 import { FormField, TextField } from '@/components/owner/form';
@@ -74,7 +74,7 @@ export default function PayrollScreen() {
   const periods = getPayPeriods(now, 4);
   const [periodId, setPeriodId] = useState(periods[0].id);
   const [tab, setTab] = useState<Tab>('Employees');
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const approveCardY = useRef(0);
   const business = useBusiness();
   const [reportBusy, setReportBusy] = useState(false);
