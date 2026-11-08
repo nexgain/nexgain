@@ -112,7 +112,7 @@ export default function EmployeeProfileScreen() {
           <Pressable onPress={changePhoto} accessibilityRole="button" accessibilityLabel="Change profile photo">
             <Avatar name={name} photoUrl={employee.photoUrl} size={72} />
             <View style={styles.cameraBadge}>
-              <Icon name={{ ios: 'camera.fill', android: 'photo_camera', web: 'photo_camera' }} color="#FFFFFF" size={12} />
+              <Icon name={{ ios: 'camera.fill', android: 'photo_camera', web: 'photo_camera' }} color={C.onAccent} size={12} />
             </View>
           </Pressable>
           <View style={styles.flex}>
@@ -948,7 +948,7 @@ const styles = StyleSheet.create({
   },
   chipSelected: {
     borderColor: C.accent,
-    backgroundColor: 'rgba(79, 140, 255, 0.14)',
+    backgroundColor: C.accentSoft,
   },
   chipText: {
     color: C.textSecondary,

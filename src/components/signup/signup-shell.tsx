@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   stepRowActive: {
-    backgroundColor: 'rgba(37, 99, 235, 0.22)',
+    backgroundColor: 'rgba(11, 99, 229, 0.22)',
   },
   stepName: {
     color: C.sidebarMuted,

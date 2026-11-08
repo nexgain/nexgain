@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: C.border,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: C.card,
     overflow: 'hidden',
     boxShadow: '0px 6px 16px rgba(15, 23, 42, 0.08)',
   },
@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.primarySoft,
   },
   customIcon: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: C.track,
   },
   text: {
     flex: 1,

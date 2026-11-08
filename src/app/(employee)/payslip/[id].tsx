@@ -398,7 +398,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   summaryLabel: {
-    color: '#166534',
+    color: C.success,
     fontSize: 12,
     textAlign: 'center',
   },
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   summarySub: {
-    color: '#166534',
+    color: C.success,
     fontSize: 11,
     textAlign: 'center',
   },
@@ -429,7 +429,7 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     paddingVertical: Spacing.two + 2,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: C.divider,
   },
   totalRow: {
     borderBottomWidth: 0,
@@ -482,12 +482,12 @@ const styles = StyleSheet.create({
     backgroundColor: C.success,
   },
   netLabel: {
-    color: '#FFFFFF',
+    color: C.onPrimary,
     fontSize: 16,
     fontWeight: '600',
   },
   netValue: {
-    color: '#FFFFFF',
+    color: C.onPrimary,
     fontSize: 28,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],

@@ -45,7 +45,7 @@ export default function DocListScreen() {
             value={query}
             onChangeText={setQuery}
             placeholder={`Search ${label.many.toLowerCase()}`}
-            placeholderTextColor={C.textSecondary}
+            placeholderTextColor={C.textMuted}
             style={styles.searchInput}
             accessibilityLabel={`Search ${label.many.toLowerCase()}`}
           />
@@ -78,8 +78,8 @@ const styles = StyleSheet.create({
     minHeight: 42,
     borderRadius: Radius.medium,
     borderWidth: 1,
-    borderColor: C.border,
-    backgroundColor: C.surfaceRaised,
+    borderColor: C.inputBorder,
+    backgroundColor: C.surface,
   },
   searchInput: {
     flex: 1,

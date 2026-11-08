@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 4,
     borderRadius: 12,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: C.track,
   },
   tab: {
     flex: 1,
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
   },
   tabSelected: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: C.card,
     boxShadow: '0px 1px 3px rgba(15, 23, 42, 0.12)',
   },
   tabText: {
@@ -190,8 +190,8 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#FCA5A5',
-    backgroundColor: '#FEF2F2',
+    borderColor: C.dangerBorder,
+    backgroundColor: C.dangerSoft,
   },
   errorText: {
     flex: 1,
@@ -204,8 +204,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   businessCard: {
-    borderColor: '#86EFAC',
-    backgroundColor: '#F0FDF4',
+    borderColor: C.successBorder,
+    backgroundColor: C.successSoft,
   },
   found: {
     flexDirection: 'row',
@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: C.card,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: C.border,

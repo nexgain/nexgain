@@ -2,24 +2,38 @@ import { useState, type ReactNode } from 'react';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 
+import { Palette } from '@/constants/theme';
+
 export type IconName = SymbolViewProps['name'];
 
+/** Sign-up screens' colours, from the app-wide theme in constants/theme.ts. */
 export const SignupColors = {
-  sidebar: '#0B0D12',
+  /** The sidebar / top bar behind the logo stays dark (the logo's "NEX" is white). */
+  sidebar: Palette.logoBackground,
   sidebarMuted: '#8A93A6',
-  page: '#FFFFFF',
-  card: '#FFFFFF',
-  field: '#F8FAFC',
-  border: '#E2E8F0',
-  text: '#0F172A',
-  textSecondary: '#64748B',
-  muted: '#94A3B8',
-  primary: '#2563EB',
-  primarySoft: '#EFF4FF',
-  done: '#16A34A',
-  green: '#1FD98A',
-  onGreen: '#07130D',
-  danger: '#DC2626',
+  page: Palette.page,
+  card: Palette.card,
+  field: Palette.inputBackground,
+  border: Palette.inputBorder,
+  text: Palette.text,
+  textSecondary: Palette.textSecondary,
+  muted: Palette.textMuted,
+  primary: Palette.primary,
+  primarySoft: Palette.primarySoft,
+  onPrimary: Palette.onPrimary,
+  done: Palette.success,
+  green: Palette.primary,
+  onGreen: Palette.onPrimary,
+  danger: Palette.danger,
+  dangerSoft: Palette.dangerSoft,
+  dangerBorder: Palette.dangerBorder,
+  success: Palette.success,
+  successSoft: Palette.successSoft,
+  successBorder: Palette.successBorder,
+  warning: Palette.warning,
+  warningSoft: Palette.warningSoft,
+  infoBorder: Palette.infoBorder,
+  track: Palette.track,
 } as const;
 
 const C = SignupColors;
@@ -112,7 +126,7 @@ export function Button({
   disabled?: boolean;
   icon?: IconName;
 }) {
-  const textColor = variant === 'primary' ? '#FFFFFF' : variant === 'green' ? C.onGreen : variant === 'ghost' ? C.textSecondary : C.text;
+  const textColor = variant === 'primary' ? C.onPrimary : variant === 'green' ? C.onGreen : variant === 'ghost' ? C.textSecondary : C.text;
   return (
     <Pressable
       onPress={onPress}
@@ -155,7 +169,7 @@ export function YesNo({ value, onChange, label }: { value: boolean; onChange: (v
 export function Checkbox({ checked }: { checked: boolean }) {
   return (
     <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
-      {checked ? <Icon name={{ ios: 'checkmark', android: 'check', web: 'check' }} color="#FFFFFF" size={11} /> : null}
+      {checked ? <Icon name={{ ios: 'checkmark', android: 'check', web: 'check' }} color={C.onPrimary} size={11} /> : null}
     </View>
   );
 }
@@ -216,13 +230,13 @@ const styles = StyleSheet.create({
   },
   boxFocused: {
     borderColor: C.primary,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: C.card,
   },
   boxError: {
     borderColor: C.danger,
   },
   boxDisabled: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: C.track,
   },
   input: {
     flex: 1,
@@ -251,7 +265,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.green,
   },
   secondary: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: C.card,
     borderColor: C.border,
   },
   ghost: {
@@ -300,7 +314,7 @@ const styles = StyleSheet.create({
     borderColor: C.muted,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: C.card,
   },
   checkboxChecked: {
     backgroundColor: C.primary,

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, type TextInputProps } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,7 +14,7 @@ export const OWNER_PICKER_THEME: PickerTheme = {
   text: C.text,
   muted: C.textSecondary,
   accent: C.accent,
-  dark: true,
+  dark: false,
 };
 
 export function FormField({
@@ -114,11 +114,21 @@ export function TimeField({
 }
 
 export function TextField(props: TextInputProps) {
+  // The border turns blue while the field is being typed in.
+  const [focused, setFocused] = useState(false);
   return (
     <TextInput
-      placeholderTextColor={C.textSecondary}
+      placeholderTextColor={C.textMuted}
       {...props}
-      style={[styles.box, styles.input, props.multiline && styles.multiline, props.style]}
+      onFocus={(e) => {
+        setFocused(true);
+        props.onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        setFocused(false);
+        props.onBlur?.(e);
+      }}
+      style={[styles.box, styles.input, props.multiline && styles.multiline, focused && styles.boxFocused, props.style]}
     />
   );
 }
@@ -147,9 +157,9 @@ export function SwitchRow({
         value={value}
         onValueChange={onChange}
         disabled={disabled}
-        trackColor={{ true: C.accent, false: C.border }}
-        thumbColor="#FFFFFF"
-        ios_backgroundColor={C.border}
+        trackColor={{ true: C.accent, false: C.inputBorder }}
+        thumbColor={C.onAccent}
+        ios_backgroundColor={C.inputBorder}
         accessibilityLabel={label}
       />
     </View>
@@ -159,7 +169,7 @@ export function SwitchRow({
 export function Checkbox({ checked }: { checked: boolean }) {
   return (
     <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
-      {checked && <Icon name={{ ios: 'checkmark', android: 'check', web: 'check' }} color="#FFFFFF" size={12} />}
+      {checked && <Icon name={{ ios: 'checkmark', android: 'check', web: 'check' }} color={C.onAccent} size={12} />}
     </View>
   );
 }
@@ -212,7 +222,7 @@ export function OptionSheet<T extends string>({
 export const formStyles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: C.overlay,
   },
   sheet: {
     maxHeight: '80%',
@@ -252,8 +262,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three - 2,
     borderRadius: Radius.medium,
     borderWidth: 1,
-    borderColor: C.border,
-    backgroundColor: C.surfaceRaised,
+    borderColor: C.inputBorder,
+    backgroundColor: C.surface,
+  },
+  boxFocused: {
+    borderColor: C.accent,
   },
   boxError: {
     borderColor: C.danger,
@@ -264,7 +277,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   placeholder: {
-    color: C.textSecondary,
+    color: C.textMuted,
   },
   input: {
     color: C.text,
@@ -299,7 +312,7 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 6,
     borderWidth: 1.5,
-    borderColor: C.textSecondary,
+    borderColor: C.textMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },

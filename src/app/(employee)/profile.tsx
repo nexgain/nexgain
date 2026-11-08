@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   saveText: {
-    color: '#FFFFFF',
+    color: C.onPrimary,
     fontSize: 17,
     fontWeight: '700',
   },

@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     padding: Spacing.three - 4,
     borderRadius: Radius.medium,
-    backgroundColor: 'rgba(79, 140, 255, 0.12)',
+    backgroundColor: C.accentSoft,
   },
   messageText: {
     flex: 1,
@@ -617,7 +617,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.accent,
   },
   avatarText: {
-    color: '#FFFFFF',
+    color: C.onAccent,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -732,7 +732,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   monthDayOut: {
-    color: C.border,
+    color: C.textMuted,
   },
   monthCount: {
     minWidth: 18,
@@ -742,7 +742,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   monthCountText: {
-    color: '#FFFFFF',
+    color: C.onAccent,
     fontSize: 11,
     fontWeight: '700',
   },
@@ -765,7 +765,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.surfaceRaised,
   },
   availabilityDayOn: {
-    backgroundColor: 'rgba(34, 197, 94, 0.16)',
+    backgroundColor: C.successSoft,
   },
   availabilityDayText: {
     color: C.textSecondary,

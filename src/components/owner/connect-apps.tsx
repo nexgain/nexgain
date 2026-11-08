@@ -10,7 +10,7 @@ import { SvgXml } from 'react-native-svg';
 import { Icon, type IconName } from '@/components/owner/ui';
 import { SignupColors } from '@/components/signup/fields';
 import { BrandLogos, BrandTileColors, type BrandLogoName } from '@/constants/brand-logos';
-import { Colors } from '@/constants/theme';
+import { Colors, Palette as ThemePalette } from '@/constants/theme';
 import { EMAIL_APP_CHOICES, shownEmailApp, type EmailApp } from '@/data/business';
 import { findChosen, type ChosenApp } from '@/data/business-apps';
 import {
@@ -41,14 +41,14 @@ const PALETTES: Record<ConnectTheme, Palette> = {
     text: Colors.text,
     sub: Colors.textSecondary,
     accent: Colors.accent,
-    accentSoft: 'rgba(79, 140, 255, 0.14)',
+    accentSoft: Colors.accentSoft,
     success: Colors.success,
     danger: Colors.danger,
   },
   light: {
     page: SignupColors.page,
     card: SignupColors.card,
-    raised: '#F1F5F9',
+    raised: ThemePalette.track,
     border: SignupColors.border,
     text: SignupColors.text,
     sub: SignupColors.textSecondary,
@@ -69,7 +69,7 @@ const EMAIL_ROWS: Record<EmailApp, { logo: Logo; sub?: string }> = {
   // Generic envelope (not Apple's logo) for the iPhone Mail app.
   mail: { logo: { symbol: { ios: 'envelope.fill', android: 'mail', web: 'mail' }, tile: '#1A8CFF' }, sub: ON_PHONE },
   other: {
-    logo: { symbol: { ios: 'envelope', android: 'alternate_email', web: 'alternate_email' }, tile: '#64748B' },
+    logo: { symbol: { ios: 'envelope', android: 'alternate_email', web: 'alternate_email' }, tile: ThemePalette.textSecondary },
     sub: `${ON_PHONE} Works with Yahoo, iCloud, your own domain and more.`,
   },
 };
@@ -580,7 +580,7 @@ function SheetButton({
         filled ? { backgroundColor: p.accent } : { backgroundColor: p.raised, borderColor: p.border, borderWidth: 1 },
         (pressed || disabled) && styles.pressed,
       ]}>
-      <Text style={[styles.sheetButtonText, { color: filled ? '#FFFFFF' : danger ? p.danger : p.text }]}>{label}</Text>
+      <Text style={[styles.sheetButtonText, { color: filled ? ThemePalette.onPrimary : danger ? p.danger : p.text }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -771,7 +771,7 @@ function LogoTile({ p, logo }: { p: Palette; logo: Logo }) {
   if ('brand' in logo) {
     const tile = BrandTileColors[logo.brand];
     return (
-      <View style={[styles.logo, { backgroundColor: tile ?? '#FFFFFF' }, !tile && { borderWidth: 1, borderColor: p.border }]}>
+      <View style={[styles.logo, { backgroundColor: tile ?? ThemePalette.card }, !tile && { borderWidth: 1, borderColor: p.border }]}>
         <SvgXml xml={BrandLogos[logo.brand]} width={tile ? 20 : 22} height={tile ? 20 : 22} />
       </View>
     );
@@ -779,7 +779,7 @@ function LogoTile({ p, logo }: { p: Palette; logo: Logo }) {
   if ('symbol' in logo) {
     return (
       <View style={[styles.logo, { backgroundColor: logo.tile }]}>
-        <Icon name={logo.symbol} color="#FFFFFF" size={18} />
+        <Icon name={logo.symbol} color={ThemePalette.onPrimary} size={18} />
       </View>
     );
   }
@@ -826,7 +826,7 @@ function SmallButton({
         filled ? { backgroundColor: p.accent } : { backgroundColor: p.raised, borderColor: p.border, borderWidth: 1 },
         (pressed || disabled) && styles.pressed,
       ]}>
-      <Text style={[styles.smallButtonText, { color: filled ? '#FFFFFF' : p.text }]}>{label}</Text>
+      <Text style={[styles.smallButtonText, { color: filled ? ThemePalette.onPrimary : p.text }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -1036,7 +1036,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   requestText: {
-    color: '#FFFFFF',
+    color: ThemePalette.onPrimary,
     fontSize: 15,
     fontWeight: '700',
   },

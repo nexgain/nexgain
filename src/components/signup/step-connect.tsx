@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: C.track,
   },
   dot: {
     width: 7,

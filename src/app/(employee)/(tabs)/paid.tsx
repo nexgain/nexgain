@@ -120,18 +120,18 @@ const styles = StyleSheet.create({
     backgroundColor: C.success,
   },
   summaryLabel: {
-    color: '#DCFCE7',
+    color: C.successSoft,
     fontSize: 13,
     fontWeight: '600',
   },
   summaryValue: {
-    color: '#FFFFFF',
+    color: C.onPrimary,
     fontSize: 30,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
   },
   summarySub: {
-    color: '#DCFCE7',
+    color: C.successSoft,
     fontSize: 14,
   },
   loading: {

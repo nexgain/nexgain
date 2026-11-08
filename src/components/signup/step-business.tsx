@@ -80,7 +80,7 @@ export function StepBusiness({ data, update, onNext }: StepProps) {
               accessibilityLabel="Remove logo"
               hitSlop={8}
               style={styles.logoRemove}>
-              <Icon name={{ ios: 'xmark', android: 'close', web: 'close' }} color="#FFFFFF" size={11} />
+              <Icon name={{ ios: 'xmark', android: 'close', web: 'close' }} color={C.onPrimary} size={11} />
             </Pressable>
           </View>
         ) : (
@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: '#B9CCF5',
+    borderColor: C.infoBorder,
     backgroundColor: C.primarySoft,
   },
   uploadTitle: {
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 10,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: C.card,
   },
   logoText: {
     flex: 1,

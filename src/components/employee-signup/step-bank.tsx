@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 14,
     borderRadius: 12,
-    backgroundColor: '#F0FDF4',
+    backgroundColor: C.successSoft,
   },
   secureText: {
     flex: 1,

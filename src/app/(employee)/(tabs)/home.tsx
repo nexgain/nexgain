@@ -333,7 +333,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.danger,
   },
   clockButtonText: {
-    color: '#FFFFFF',
+    color: C.onPrimary,
     fontSize: 18,
     fontWeight: '700',
   },

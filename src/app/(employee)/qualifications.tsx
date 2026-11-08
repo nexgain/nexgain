@@ -81,7 +81,7 @@ export default function QualificationsScreen() {
 
 const STATUS_COLORS: Record<QualificationStatus['tone'], { text: string; background: string }> = {
   valid: { text: C.success, background: C.successSoft },
-  expiring: { text: '#B45309', background: '#FEF3C7' },
+  expiring: { text: C.warning, background: C.warningSoft },
   expired: { text: C.danger, background: C.dangerSoft },
 };
 

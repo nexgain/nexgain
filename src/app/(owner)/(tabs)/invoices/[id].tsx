@@ -560,11 +560,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.medium,
     borderWidth: 1,
     borderColor: C.success,
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    backgroundColor: C.successSoft,
   },
   noticeError: {
     borderColor: C.danger,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: C.dangerSoft,
   },
   noticeText: {
     flex: 1,
@@ -582,7 +582,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.medium,
     borderWidth: 1,
     borderColor: C.danger,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: C.dangerSoft,
   },
   confirmText: {
     color: C.text,
@@ -599,7 +599,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.danger,
   },
   deleteText: {
-    color: '#FFFFFF',
+    color: C.onAccent,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -617,7 +617,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.accent,
   },
   avatarText: {
-    color: '#FFFFFF',
+    color: C.onAccent,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -644,7 +644,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(79, 140, 255, 0.14)',
+    backgroundColor: C.accentSoft,
   },
   detailRow: {
     gap: 2,

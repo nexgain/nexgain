@@ -8,7 +8,7 @@ import { Button, Field, Icon, Input, SignupColors as C } from '@/components/sign
 import { formatShortDate } from '@/data/employee-roster';
 
 const PICKER_THEME = {
-  sheet: '#FFFFFF',
+  sheet: C.card,
   border: C.border,
   text: C.text,
   muted: C.textSecondary,
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1.5,
     borderColor: C.border,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: C.card,
   },
   chipSelected: {
     borderColor: C.primary,

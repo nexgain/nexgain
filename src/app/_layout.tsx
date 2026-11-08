@@ -1,4 +1,4 @@
-import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
+import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { EmailPreviewHost } from '@/components/email-preview';
@@ -7,9 +7,9 @@ import { Colors } from '@/constants/theme';
 import '@/lib/auth';
 
 const navigationTheme = {
-  ...DarkTheme,
+  ...DefaultTheme,
   colors: {
-    ...DarkTheme.colors,
+    ...DefaultTheme.colors,
     primary: Colors.accent,
     background: Colors.background,
     card: Colors.surface,

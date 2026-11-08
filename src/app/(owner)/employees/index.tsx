@@ -89,7 +89,7 @@ export default function EmployeesScreen() {
           value={search}
           onChangeText={setSearch}
           placeholder="Search by name, role or email"
-          placeholderTextColor={C.textSecondary}
+          placeholderTextColor={C.textMuted}
           style={styles.searchInput}
           accessibilityLabel="Search employees"
         />
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three - 2,
     borderRadius: Radius.medium,
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: C.inputBorder,
     backgroundColor: C.surface,
   },
   searchInput: {
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   filterTextSelected: {
-    color: '#FFFFFF',
+    color: C.onAccent,
   },
   row: {
     flexDirection: 'row',

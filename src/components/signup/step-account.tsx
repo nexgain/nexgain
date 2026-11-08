@@ -23,7 +23,7 @@ export function PasswordChecklist({ password }: { password: string }) {
         return (
           <View key={rule.label} style={styles.rule} accessibilityLabel={`${rule.label}: ${met ? 'done' : 'not yet'}`}>
             <View style={[styles.tick, met && styles.tickMet]}>
-              {met && <Icon name={{ ios: 'checkmark', android: 'check', web: 'check' }} color="#FFFFFF" size={9} />}
+              {met && <Icon name={{ ios: 'checkmark', android: 'check', web: 'check' }} color={C.onPrimary} size={9} />}
             </View>
             <Text style={[styles.ruleText, met && styles.ruleTextMet]}>{rule.label}</Text>
           </View>

@@ -160,7 +160,7 @@ function ItemRow({
       value={item.description}
       onChangeText={(description) => onUpdate({ description })}
       placeholder="Description"
-      placeholderTextColor={C.textSecondary}
+      placeholderTextColor={C.textMuted}
       style={[styles.input, wide ? styles.descCol : styles.flex]}
       accessibilityLabel={`Item ${index + 1} description`}
     />
@@ -170,7 +170,7 @@ function ItemRow({
       value={item.qty}
       onChangeText={(t) => onUpdate({ qty: cleanNumber(t) })}
       placeholder="0"
-      placeholderTextColor={C.textSecondary}
+      placeholderTextColor={C.textMuted}
       keyboardType="decimal-pad"
       style={[styles.input, styles.number, wide ? styles.qtyCol : styles.flex]}
       accessibilityLabel={`Item ${index + 1} quantity`}
@@ -181,7 +181,7 @@ function ItemRow({
       value={item.rate}
       onChangeText={(t) => onUpdate({ rate: cleanNumber(t) })}
       placeholder="0.00"
-      placeholderTextColor={C.textSecondary}
+      placeholderTextColor={C.textMuted}
       keyboardType="decimal-pad"
       style={[styles.input, styles.number, wide ? styles.rateCol : styles.flex]}
       accessibilityLabel={`Item ${index + 1} rate`}
@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.two + 2,
     borderRadius: Radius.medium - 4,
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: C.inputBorder,
     backgroundColor: C.surface,
     color: C.text,
     fontSize: 15,

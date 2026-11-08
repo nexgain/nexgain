@@ -256,7 +256,7 @@ function ChatInput({ placeholder, disabled }: { placeholder: string; disabled: b
           value={text}
           onChangeText={setText}
           placeholder={placeholder}
-          placeholderTextColor={C.textSecondary}
+          placeholderTextColor={C.textMuted}
           multiline
           maxLength={4000}
           returnKeyType="send"
@@ -285,7 +285,7 @@ function ChatInput({ placeholder, disabled }: { placeholder: string; disabled: b
           accessibilityRole="button"
           accessibilityLabel="Send"
           style={({ pressed }) => [styles.sendButton, !canSend && styles.disabled, pressed && styles.pressed]}>
-          <Icon name={{ ios: 'arrow.up', android: 'arrow_upward', web: 'arrow_upward' }} color="#FFFFFF" size={18} />
+          <Icon name={{ ios: 'arrow.up', android: 'arrow_upward', web: 'arrow_upward' }} color={C.onAccent} size={18} />
         </Pressable>
       </View>
       {showMicTip && (
@@ -432,8 +432,8 @@ const styles = StyleSheet.create({
     paddingRight: Spacing.two,
     borderRadius: 26,
     borderWidth: 1,
-    borderColor: C.border,
-    backgroundColor: C.background,
+    borderColor: C.inputBorder,
+    backgroundColor: C.surface,
   },
   input: {
     flex: 1,
@@ -576,7 +576,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.accent,
   },
   userText: {
-    color: '#FFFFFF',
+    color: C.onAccent,
     fontSize: 15,
     lineHeight: 21,
   },
@@ -592,9 +592,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: C.surfaceRaised,
+    // Dark behind the logo (its "NEX" is white).
+    backgroundColor: C.logoBackground,
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: C.logoBackground,
   },
   avatarImage: {
     width: 24,
@@ -627,7 +628,7 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   failedBubble: {
-    borderColor: 'rgba(245, 158, 11, 0.5)',
+    borderColor: C.warningBorder,
   },
   failedText: {
     color: C.warning,

@@ -393,10 +393,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   monthDayOut: {
-    color: C.border,
+    color: C.textMuted,
   },
   monthDaySelected: {
-    color: '#FFFFFF',
+    color: C.onAccent,
   },
   dots: {
     flexDirection: 'row',

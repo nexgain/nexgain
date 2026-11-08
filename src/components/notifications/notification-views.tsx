@@ -5,7 +5,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EmployeeColors } from '@/constants/employee-theme';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Colors, Palette as ThemePalette, Radius, Spacing } from '@/constants/theme';
 import {
   formatBytes,
   fullTime,
@@ -42,10 +42,10 @@ export const EMPLOYEE_PALETTE: Palette = {
 };
 
 export const OWNER_PALETTE: Palette = {
-  dark: true,
+  dark: false,
   background: Colors.background,
   card: Colors.surface,
-  cardAlt: Colors.surfaceRaised,
+  cardAlt: Colors.accentSoft,
   border: Colors.border,
   text: Colors.text,
   textSecondary: Colors.textSecondary,
@@ -53,12 +53,12 @@ export const OWNER_PALETTE: Palette = {
 };
 
 const TONES: Record<Tone, { color: string; light: string; dark: string }> = {
-  red: { color: '#EF4444', light: '#FDECEC', dark: 'rgba(239, 68, 68, 0.16)' },
-  amber: { color: '#F59E0B', light: '#FEF3C7', dark: 'rgba(245, 158, 11, 0.16)' },
-  green: { color: '#22C55E', light: '#E8F7EE', dark: 'rgba(34, 197, 94, 0.16)' },
-  blue: { color: '#3B82F6', light: '#EAF1FF', dark: 'rgba(59, 130, 246, 0.18)' },
+  red: { color: ThemePalette.danger, light: ThemePalette.dangerSoft, dark: 'rgba(239, 68, 68, 0.16)' },
+  amber: { color: ThemePalette.warning, light: ThemePalette.warningSoft, dark: 'rgba(245, 158, 11, 0.16)' },
+  green: { color: ThemePalette.success, light: ThemePalette.successSoft, dark: 'rgba(34, 197, 94, 0.16)' },
+  blue: { color: ThemePalette.info, light: ThemePalette.infoSoft, dark: 'rgba(59, 130, 246, 0.18)' },
   purple: { color: '#8B5CF6', light: '#F1ECFE', dark: 'rgba(139, 92, 246, 0.18)' },
-  grey: { color: '#94A3B8', light: '#F1F5F9', dark: 'rgba(148, 163, 184, 0.16)' },
+  grey: { color: ThemePalette.neutral, light: ThemePalette.neutralSoft, dark: 'rgba(148, 163, 184, 0.16)' },
 };
 
 function toneColors(tone: Tone, palette: Palette) {
@@ -133,7 +133,7 @@ export function FilterPills({
               styles.pill,
               { borderColor: selected ? palette.accent : palette.border, backgroundColor: selected ? palette.accent : palette.card },
             ]}>
-            <Text style={[styles.pillText, { color: selected ? '#FFFFFF' : palette.textSecondary }]}>
+            <Text style={[styles.pillText, { color: selected ? ThemePalette.onPrimary : ThemePalette.neutral }]}>
               {f} ({counts[f] ?? 0})
             </Text>
           </Pressable>
@@ -448,7 +448,7 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: Radius.large - 4,
     borderWidth: 1,
-    boxShadow: '0px 2px 8px rgba(15, 23, 42, 0.06)',
+    boxShadow: ThemePalette.cardShadow,
   },
   row: {
     flexDirection: 'row',

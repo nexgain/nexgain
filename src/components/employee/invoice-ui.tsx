@@ -6,9 +6,9 @@ import { Spacing } from '@/constants/theme';
 import { INVOICE_STATUS_LABEL, loadContractorInvoices, type InvoiceStatus } from '@/data/contractor-invoices';
 
 const STATUS_COLORS: Record<InvoiceStatus, { text: string; background: string }> = {
-  draft: { text: C.textSecondary, background: '#EEF1F5' },
+  draft: { text: C.neutral, background: C.neutralSoft },
   sent: { text: C.primary, background: C.primarySoft },
-  approved: { text: '#7C3AED', background: '#F1EBFE' },
+  approved: { text: C.warning, background: C.warningSoft },
   declined: { text: C.danger, background: C.dangerSoft },
   paid: { text: C.success, background: C.successSoft },
 };

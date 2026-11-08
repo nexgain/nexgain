@@ -21,9 +21,9 @@ const TYPE_ICONS: Record<UpcomingItemType, IconName> = {
 };
 
 const TONE_COLORS: Record<UpcomingTone, { text: string; background: string }> = {
-  today: { text: C.success, background: 'rgba(34, 197, 94, 0.14)' },
-  tomorrow: { text: C.accent, background: 'rgba(79, 140, 255, 0.14)' },
-  soon: { text: C.warning, background: 'rgba(245, 158, 11, 0.14)' },
+  today: { text: C.success, background: C.successSoft },
+  tomorrow: { text: C.accent, background: C.accentSoft },
+  soon: { text: C.warning, background: C.warningSoft },
   later: { text: C.textSecondary, background: C.border },
 };
 

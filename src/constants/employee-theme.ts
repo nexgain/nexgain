@@ -1,23 +1,39 @@
 /**
- * Light palette for the Employee section. The Owner section uses the dark
- * palette in theme.ts; spacing and radius values are shared from there.
+ * Employee screens' colours. They come from the app-wide theme in theme.ts,
+ * so the Owner and Employee sections always match; spacing and radius values
+ * are shared from there too.
  */
+import { Palette } from '@/constants/theme';
 
 export const EmployeeColors = {
-  background: '#F4F6FA',
-  card: '#FFFFFF',
-  border: '#E6E9EF',
-  text: '#0F172A',
-  textSecondary: '#64748B',
-  textMuted: '#94A3B8',
-  primary: '#2563EB',
-  primarySoft: '#EAF1FF',
-  success: '#16A34A',
-  successSoft: '#E8F7EE',
-  danger: '#DC2626',
-  dangerSoft: '#FDECEC',
+  background: Palette.page,
+  card: Palette.card,
+  border: Palette.cardBorder,
+  text: Palette.text,
+  textSecondary: Palette.textSecondary,
+  textMuted: Palette.textMuted,
+  primary: Palette.primary,
+  primaryPressed: Palette.primaryPressed,
+  primarySoft: Palette.primarySoft,
+  onPrimary: Palette.onPrimary,
+  success: Palette.success,
+  successSoft: Palette.successSoft,
+  successBorder: Palette.successBorder,
+  warning: Palette.warning,
+  warningSoft: Palette.warningSoft,
+  warningBorder: Palette.warningBorder,
+  danger: Palette.danger,
+  dangerSoft: Palette.dangerSoft,
+  dangerBorder: Palette.dangerBorder,
+  infoBorder: Palette.infoBorder,
+  neutral: Palette.neutral,
+  neutralSoft: Palette.neutralSoft,
+  track: Palette.track,
+  divider: Palette.divider,
+  inputBorder: Palette.inputBorder,
+  overlay: Palette.overlay,
 } as const;
 
 export const cardShadow = {
-  boxShadow: '0px 2px 8px rgba(15, 23, 42, 0.06)',
+  boxShadow: Palette.cardShadow,
 } as const;

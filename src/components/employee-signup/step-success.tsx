@@ -16,7 +16,7 @@ export function StepSuccess({
     <>
       <View style={styles.hero}>
         <View style={styles.tick}>
-          <Icon name={{ ios: 'checkmark', android: 'check', web: 'check' }} color="#FFFFFF" size={44} />
+          <Icon name={{ ios: 'checkmark', android: 'check', web: 'check' }} color={C.onPrimary} size={44} />
         </View>
         <Text style={styles.title}>You&apos;re all set!</Text>
         <Text style={styles.subtitle}>You&apos;ve successfully joined {businessName}.</Text>
@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   warning: {
-    color: '#B45309',
+    color: C.warning,
     fontSize: 14,
     textAlign: 'center',
   },

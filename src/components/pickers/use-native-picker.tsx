@@ -3,6 +3,8 @@ import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Palette } from '@/constants/theme';
+
 export type PickerTheme = {
   sheet: string;
   border: string;
@@ -99,7 +101,7 @@ export function useNativePicker({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: Palette.overlay,
   },
   sheet: {
     borderTopLeftRadius: 20,

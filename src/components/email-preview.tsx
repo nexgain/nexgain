@@ -121,7 +121,7 @@ function EmailPreview({ request }: { request: EmailPreviewRequest }) {
                   value={subject}
                   onChangeText={setSubject}
                   style={[styles.value, styles.input]}
-                  placeholderTextColor={C.textSecondary}
+                  placeholderTextColor={C.textMuted}
                   placeholder="Subject"
                   maxLength={200}
                   accessibilityLabel="Subject"
@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: C.accent,
-    backgroundColor: C.surfaceRaised,
+    backgroundColor: C.surface,
   },
   attachment: {
     flexDirection: 'row',
@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.medium,
     borderWidth: 1,
     borderColor: C.danger,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: C.dangerSoft,
   },
   failureText: {
     color: C.text,

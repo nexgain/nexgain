@@ -202,7 +202,7 @@ export default function AddQualificationScreen() {
                 accessibilityLabel="Remove document"
                 hitSlop={8}
                 style={styles.removeButton}>
-                <Icon name={{ ios: 'xmark', android: 'close', web: 'close' }} color="#FFFFFF" size={12} />
+                <Icon name={{ ios: 'xmark', android: 'close', web: 'close' }} color={C.onPrimary} size={12} />
               </Pressable>
             </Card>
           ) : (
@@ -233,7 +233,7 @@ export default function AddQualificationScreen() {
           accessibilityRole="button"
           accessibilityState={{ disabled: saving }}
           style={({ pressed }) => [styles.saveButton, (pressed || saving) && styles.pressed]}>
-          {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.saveButtonText}>Save Qualification</Text>}
+          {saving ? <ActivityIndicator color={C.onPrimary} /> : <Text style={styles.saveButtonText}>Save Qualification</Text>}
         </Pressable>
       </View>
     </View>
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.large - 4,
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: '#B9CCF5',
+    borderColor: C.infoBorder,
     backgroundColor: C.primarySoft,
   },
   uploadIcon: {
@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary,
   },
   saveButtonText: {
-    color: '#FFFFFF',
+    color: C.onPrimary,
     fontSize: 17,
     fontWeight: '700',
   },

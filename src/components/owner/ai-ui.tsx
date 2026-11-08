@@ -17,7 +17,7 @@ import { fromDateKey } from '@/data/shifts';
 
 /** The app's accent colour, and its soft background (the same as an "info" badge). */
 export const AI_ACCENT = C.accent;
-export const AI_ACCENT_SOFT = 'rgba(79, 140, 255, 0.14)';
+export const AI_ACCENT_SOFT = C.accentSoft;
 
 const SEVERITY: Record<AiInsight['severity'], { label: string; tone: 'danger' | 'warning' | 'info' }> = {
   high: { label: 'Urgent', tone: 'danger' },

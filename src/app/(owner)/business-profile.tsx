@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: Radius.medium,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: C.surface,
   },
   logoActions: {
     flex: 1,

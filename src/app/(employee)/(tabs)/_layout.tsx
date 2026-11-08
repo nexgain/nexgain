@@ -28,7 +28,7 @@ export default function EmployeeTabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: C.primary,
-        tabBarInactiveTintColor: C.textMuted,
+        tabBarInactiveTintColor: C.textSecondary,
         tabBarStyle: {
           backgroundColor: C.card,
           borderTopColor: C.border,

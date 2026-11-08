@@ -24,10 +24,10 @@ export const KIND_LABEL: Record<DocKind, { one: string; many: string }> = {
 };
 
 export const ToneColors = {
-  blue: { text: C.accent, background: 'rgba(79, 140, 255, 0.14)' },
-  amber: { text: C.warning, background: 'rgba(245, 158, 11, 0.14)' },
-  green: { text: C.success, background: 'rgba(34, 197, 94, 0.14)' },
-  red: { text: C.danger, background: 'rgba(239, 68, 68, 0.14)' },
+  blue: { text: C.accent, background: C.accentSoft },
+  amber: { text: C.warning, background: C.warningSoft },
+  green: { text: C.success, background: C.successSoft },
+  red: { text: C.danger, background: C.dangerSoft },
   grey: { text: C.textSecondary, background: C.surfaceRaised },
 } as const;
 export type Tone = keyof typeof ToneColors;
@@ -183,7 +183,7 @@ export function HeaderIconButton({
             ? { ios: 'plus', android: 'add', web: 'add' }
             : { ios: 'ellipsis', android: 'more_horiz', web: 'more_horiz' }
         }
-        color={icon === 'plus' ? '#FFFFFF' : C.text}
+        color={icon === 'plus' ? C.onAccent : C.text}
         size={16}
       />
     </Pressable>
@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: Spacing.four,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: C.overlay,
   },
   dialog: {
     width: '100%',
@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   segmentTextSelected: {
-    color: '#FFFFFF',
+    color: C.onAccent,
   },
   tile: {
     flex: 1,

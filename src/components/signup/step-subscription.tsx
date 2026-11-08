@@ -54,7 +54,7 @@ export function StepSubscription({ onNext }: StepProps) {
           {FEATURES.map((f) => (
             <View key={f} style={styles.feature}>
               <View style={styles.featureTick}>
-                <Icon name={{ ios: 'checkmark', android: 'check', web: 'check' }} color="#FFFFFF" size={10} />
+                <Icon name={{ ios: 'checkmark', android: 'check', web: 'check' }} color={C.onPrimary} size={10} />
               </View>
               <Text style={styles.featureText}>{f}</Text>
             </View>

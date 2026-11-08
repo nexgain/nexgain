@@ -48,9 +48,9 @@ export default function InvoicesScreen() {
           accessibilityLabel="New invoice"
           style={({ pressed }) => [styles.newButton, pressed && styles.pressed]}>
           {creating ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={C.onPrimary} />
           ) : (
-            <Icon name={{ ios: 'plus', android: 'add', web: 'add' }} color="#FFFFFF" size={18} />
+            <Icon name={{ ios: 'plus', android: 'add', web: 'add' }} color={C.onPrimary} size={18} />
           )}
           <Text style={styles.newText}>New</Text>
         </Pressable>
@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary,
   },
   newText: {
-    color: '#FFFFFF',
+    color: C.onPrimary,
     fontSize: 15,
     fontWeight: '700',
   },

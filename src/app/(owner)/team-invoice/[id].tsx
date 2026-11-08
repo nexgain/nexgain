@@ -308,10 +308,10 @@ const styles = StyleSheet.create({
   message: {
     padding: Spacing.three - 4,
     borderRadius: Radius.medium,
-    backgroundColor: 'rgba(34, 197, 94, 0.12)',
+    backgroundColor: C.successSoft,
   },
   messageError: {
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    backgroundColor: C.dangerSoft,
   },
   messageText: {
     color: C.text,

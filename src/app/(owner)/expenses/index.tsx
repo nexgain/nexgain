@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.14)',
+    backgroundColor: C.dangerSoft,
   },
   title: {
     color: C.text,

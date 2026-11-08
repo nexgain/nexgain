@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.medium,
     borderWidth: 1,
     borderColor: C.danger,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: C.dangerSoft,
   },
   errorTitle: {
     color: C.danger,

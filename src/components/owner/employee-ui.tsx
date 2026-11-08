@@ -439,7 +439,7 @@ const styles = StyleSheet.create({
   },
   chipSelected: {
     borderColor: C.accent,
-    backgroundColor: 'rgba(79, 140, 255, 0.14)',
+    backgroundColor: C.accentSoft,
   },
   chipText: {
     color: C.textSecondary,
@@ -477,10 +477,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: Spacing.two + 2,
     borderRadius: Radius.medium - 2,
-    backgroundColor: 'rgba(79, 140, 255, 0.14)',
+    backgroundColor: C.accentSoft,
   },
   otTagCustom: {
-    backgroundColor: 'rgba(245, 158, 11, 0.14)',
+    backgroundColor: C.warningSoft,
   },
   otTagText: {
     color: C.accent,

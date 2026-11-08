@@ -933,7 +933,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   choiceTextSelected: {
-    color: '#FFFFFF',
+    color: C.onAccent,
   },
   settingUnit: {
     color: C.textSecondary,

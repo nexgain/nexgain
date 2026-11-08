@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(34, 197, 94, 0.14)',
+    backgroundColor: C.successSoft,
   },
   title: {
     color: C.text,

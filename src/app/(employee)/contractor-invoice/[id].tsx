@@ -326,7 +326,7 @@ function Editor({ invoice, me }: { invoice: ContractorInvoice; me: Employee }) {
             (missing.length > 0 || !hasLines || !!dueError) && styles.disabled,
             pressed && styles.pressed,
           ]}>
-          {busy === 'send' ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>Send</Text>}
+          {busy === 'send' ? <ActivityIndicator color={C.onPrimary} /> : <Text style={styles.primaryText}>Send</Text>}
         </Pressable>
       </View>
 
@@ -596,16 +596,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   bannerWarn: {
-    backgroundColor: '#FEF3C7',
-    borderColor: '#FCD34D',
+    backgroundColor: C.warningSoft,
+    borderColor: C.warningBorder,
   },
   bannerError: {
     backgroundColor: C.dangerSoft,
-    borderColor: '#FCA5A5',
+    borderColor: C.dangerBorder,
   },
   bannerOk: {
     backgroundColor: C.successSoft,
-    borderColor: '#86EFAC',
+    borderColor: C.successBorder,
   },
   bannerTitle: {
     color: C.text,
@@ -801,7 +801,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary,
   },
   primaryText: {
-    color: '#FFFFFF',
+    color: C.onPrimary,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -820,7 +820,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    backgroundColor: C.overlay,
   },
   sheet: {
     gap: Spacing.three,
@@ -838,7 +838,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 4,
     borderRadius: Radius.medium,
-    backgroundColor: '#E9EDF3',
+    backgroundColor: C.track,
   },
   toggleTab: {
     flex: 1,

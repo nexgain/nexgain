@@ -591,7 +591,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   stepNumberTextActive: {
-    color: '#FFFFFF',
+    color: C.onAccent,
   },
   stepName: {
     flex: 1,
@@ -670,7 +670,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: Spacing.four,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: C.overlay,
   },
   dialog: {
     width: '100%',

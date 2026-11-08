@@ -10,10 +10,10 @@ import { JOB_STATUS_LABEL, type Job, type JobStatus } from '@/data/jobs';
 import { fromDateKey } from '@/data/shifts';
 
 const STATUS_COLORS: Record<JobStatus, { text: string; background: string }> = {
-  scheduled: { text: C.accent, background: 'rgba(79, 140, 255, 0.14)' },
+  scheduled: { text: C.accent, background: C.accentSoft },
   assigned: { text: '#9085e9', background: 'rgba(144, 133, 233, 0.16)' },
-  in_progress: { text: C.warning, background: 'rgba(245, 158, 11, 0.14)' },
-  completed: { text: C.success, background: 'rgba(34, 197, 94, 0.14)' },
+  in_progress: { text: C.warning, background: C.warningSoft },
+  completed: { text: C.success, background: C.successSoft },
   cancelled: { text: C.textSecondary, background: C.surfaceRaised },
 };
 

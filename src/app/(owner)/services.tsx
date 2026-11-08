@@ -46,7 +46,7 @@ export default function ServicesScreen() {
                       accessibilityRole="button"
                       accessibilityLabel={`Remove ${s}`}
                       hitSlop={8}>
-                      <Icon name={{ ios: 'xmark', android: 'close', web: 'close' }} color="#FFFFFF" size={11} />
+                      <Icon name={{ ios: 'xmark', android: 'close', web: 'close' }} color={C.onAccent} size={11} />
                     </Pressable>
                   </View>
                 ))}
@@ -60,7 +60,7 @@ export default function ServicesScreen() {
               onChangeText={setText}
               onSubmitEditing={add}
               placeholder="e.g. Emergency call-outs"
-              placeholderTextColor={C.textSecondary}
+              placeholderTextColor={C.textMuted}
               returnKeyType="done"
               accessibilityLabel="New service"
               style={styles.input}
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.accent,
   },
   chipText: {
-    color: '#FFFFFF',
+    color: C.onAccent,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -108,8 +108,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three - 2,
     borderRadius: Radius.medium,
     borderWidth: 1,
-    borderColor: C.border,
-    backgroundColor: C.surfaceRaised,
+    borderColor: C.inputBorder,
+    backgroundColor: C.surface,
     color: C.text,
     fontSize: 15,
   },

@@ -99,7 +99,7 @@ export function Avatar({ initials, size = 40 }: { initials?: string; size?: numb
       ) : (
         <Icon
           name={{ ios: 'person.fill', android: 'person', web: 'person' }}
-          color="#FFFFFF"
+          color={C.onPrimary}
           size={size * 0.5}
         />
       )}
@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarText: {
-    color: '#FFFFFF',
+    color: C.onPrimary,
     fontWeight: '700',
   },
   row: {

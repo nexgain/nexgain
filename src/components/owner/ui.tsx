@@ -280,7 +280,7 @@ export function Button({
   disabled?: boolean;
 }) {
   const primary = variant === 'primary';
-  const color = primary ? '#FFFFFF' : C.text;
+  const color = primary ? C.onAccent : C.text;
   return (
     <Pressable
       onPress={onPress}
@@ -291,7 +291,7 @@ export function Button({
         styles.button,
         primary ? styles.buttonPrimary : styles.buttonSecondary,
         disabled && styles.buttonDisabled,
-        pressed && styles.pressed,
+        pressed && (primary ? styles.buttonPrimaryPressed : styles.pressed),
       ]}>
       {icon ? <Icon name={icon} color={color} size={16} /> : null}
       <Text style={[styles.buttonText, { color }]}>{label}</Text>
@@ -300,11 +300,11 @@ export function Button({
 }
 
 const BADGE_TONES = {
-  success: { color: C.success, background: 'rgba(34, 197, 94, 0.14)' },
-  warning: { color: C.warning, background: 'rgba(245, 158, 11, 0.14)' },
-  danger: { color: C.danger, background: 'rgba(239, 68, 68, 0.14)' },
-  info: { color: C.accent, background: 'rgba(79, 140, 255, 0.14)' },
-  neutral: { color: C.textSecondary, background: C.surfaceRaised },
+  success: { color: C.success, background: C.successSoft },
+  warning: { color: C.warning, background: C.warningSoft },
+  danger: { color: C.danger, background: C.dangerSoft },
+  info: { color: C.accent, background: C.accentSoft },
+  neutral: { color: C.neutral, background: C.neutralSoft },
 } as const;
 
 export function Badge({ label, tone }: { label: string; tone: keyof typeof BADGE_TONES }) {
@@ -459,9 +459,9 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: C.surface,
+    backgroundColor: C.surfaceRaised,
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: C.surfaceRaised,
   },
   pageSubtitle: {
     color: C.textSecondary,
@@ -481,6 +481,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.large - 4,
     borderWidth: 1,
     borderColor: C.border,
+    boxShadow: C.cardShadow,
     padding: Spacing.three,
     gap: Spacing.three - 4,
   },
@@ -499,7 +500,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: Radius.medium - 2,
-    backgroundColor: C.surfaceRaised,
+    backgroundColor: C.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -544,19 +545,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three - 2,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: C.surfaceRaised,
+    backgroundColor: C.surfaceRaised,
   },
   tabSelected: {
     backgroundColor: C.accent,
     borderColor: C.accent,
   },
   tabText: {
-    color: C.textSecondary,
+    color: C.neutral,
     fontSize: 14,
     fontWeight: '600',
   },
   tabTextSelected: {
-    color: '#FFFFFF',
+    color: C.onAccent,
   },
   empty: {
     flex: 1,
@@ -587,9 +589,13 @@ const styles = StyleSheet.create({
     backgroundColor: C.accent,
     borderColor: C.accent,
   },
+  buttonPrimaryPressed: {
+    backgroundColor: C.accentPressed,
+    borderColor: C.accentPressed,
+  },
   buttonSecondary: {
     backgroundColor: C.surfaceRaised,
-    borderColor: C.border,
+    borderColor: C.surfaceRaised,
   },
   buttonDisabled: {
     opacity: 0.45,
@@ -635,7 +641,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three - 4,
     borderRadius: Radius.medium,
     borderWidth: 1,
-    borderColor: C.border,
+    borderColor: C.inputBorder,
     backgroundColor: C.surface,
     maxWidth: 320,
   },
@@ -651,7 +657,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: C.overlay,
   },
   sheet: {
     backgroundColor: C.surface,

@@ -13,7 +13,7 @@ import { newId } from '@/lib/ids';
 const SUGGESTED_QUALIFICATIONS = QUALIFICATION_TYPES.filter((q) => q !== 'Other');
 
 const PICKER_THEME = {
-  sheet: '#FFFFFF',
+  sheet: C.card,
   border: C.border,
   text: C.text,
   muted: C.textSecondary,
@@ -263,7 +263,7 @@ function QualificationsField({ data, update }: Pick<EmployeeStepProps, 'data' | 
           )}
         </View>
         <Pressable onPress={add} accessibilityRole="button" style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}>
-          <Icon name={{ ios: 'plus', android: 'add', web: 'add' }} color="#FFFFFF" size={16} />
+          <Icon name={{ ios: 'plus', android: 'add', web: 'add' }} color={C.onPrimary} size={16} />
           <Text style={styles.addText}>Add qualification</Text>
         </Pressable>
       </View>
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1.5,
     borderColor: C.border,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: C.card,
   },
   chipSelected: {
     borderColor: C.primary,
@@ -333,7 +333,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary,
   },
   addText: {
-    color: '#FFFFFF',
+    color: C.onPrimary,
     fontSize: 15,
     fontWeight: '700',
   },
@@ -379,7 +379,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: C.track,
   },
   docKind: {
     color: C.text,

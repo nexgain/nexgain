@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 
 import { Colors } from '@/constants/theme';
 
@@ -15,13 +16,17 @@ export const unstable_settings = {
 
 export default function OwnerLayout() {
   return (
-    <Stack
-      screenOptions={{
-        // Each page draws its own header with a back button.
-        headerShown: false,
-        contentStyle: { backgroundColor: Colors.background },
-      }}>
-      <Stack.Screen name="(tabs)" />
-    </Stack>
+    <>
+      {/* Dark status bar icons on the light owner screens. */}
+      <StatusBar style="dark" />
+      <Stack
+        screenOptions={{
+          // Each page draws its own header with a back button.
+          headerShown: false,
+          contentStyle: { backgroundColor: Colors.background },
+        }}>
+        <Stack.Screen name="(tabs)" />
+      </Stack>
+    </>
   );
 }

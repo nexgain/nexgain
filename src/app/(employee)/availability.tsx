@@ -64,9 +64,9 @@ export default function AvailabilityScreen() {
                 <Switch
                   value={day.available}
                   onValueChange={(available) => updateDay(i, { available })}
-                  trackColor={{ true: C.primary, false: '#CBD5E1' }}
-                  thumbColor="#FFFFFF"
-                  ios_backgroundColor="#CBD5E1"
+                  trackColor={{ true: C.primary, false: C.inputBorder }}
+                  thumbColor={C.onPrimary}
+                  ios_backgroundColor={C.inputBorder}
                   accessibilityLabel={`Available on ${WEEKDAY_NAMES[i]}`}
                 />
               </View>
@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   saveText: {
-    color: '#FFFFFF',
+    color: C.onPrimary,
     fontSize: 17,
     fontWeight: '700',
   },

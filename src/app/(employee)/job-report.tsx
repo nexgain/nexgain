@@ -18,7 +18,7 @@ const MAX_PHOTOS = 10;
 
 const OUTCOME_COLORS: Record<JobOutcome, { text: string; soft: string }> = {
   'Went well': { text: C.success, soft: C.successSoft },
-  'Minor issues': { text: '#B45309', soft: '#FEF3C7' },
+  'Minor issues': { text: C.warning, soft: C.warningSoft },
   "Didn't go well": { text: C.danger, soft: C.dangerSoft },
 };
 
@@ -199,7 +199,7 @@ export default function JobReportScreen() {
                   accessibilityLabel={`Remove photo ${i + 1}`}
                   hitSlop={6}
                   style={styles.photoRemove}>
-                  <Icon name={{ ios: 'xmark', android: 'close', web: 'close' }} color="#FFFFFF" size={10} />
+                  <Icon name={{ ios: 'xmark', android: 'close', web: 'close' }} color={C.onPrimary} size={10} />
                 </Pressable>
               </View>
             ))}
@@ -221,9 +221,9 @@ export default function JobReportScreen() {
             <Switch
               value={completed}
               onValueChange={setCompleted}
-              trackColor={{ true: C.primary, false: '#CBD5E1' }}
-              thumbColor="#FFFFFF"
-              ios_backgroundColor="#CBD5E1"
+              trackColor={{ true: C.primary, false: C.inputBorder }}
+              thumbColor={C.onPrimary}
+              ios_backgroundColor={C.inputBorder}
               accessibilityLabel="Job completed"
             />
           </Card>
@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.medium,
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: '#B9CCF5',
+    borderColor: C.infoBorder,
     backgroundColor: C.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
@@ -439,7 +439,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary,
   },
   submitText: {
-    color: '#FFFFFF',
+    color: C.onPrimary,
     fontSize: 17,
     fontWeight: '700',
   },

@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 4,
     borderRadius: Radius.medium,
-    backgroundColor: '#E9EDF3',
+    backgroundColor: C.track,
   },
   toggleTab: {
     flex: 1,
@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: C.primarySoft,
     borderWidth: 1,
-    borderColor: '#D4E2FF',
+    borderColor: C.infoBorder,
   },
   infoText: {
     flex: 1,

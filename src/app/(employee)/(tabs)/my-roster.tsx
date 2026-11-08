@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 4,
     borderRadius: Radius.medium,
-    backgroundColor: '#E8ECF2',
+    backgroundColor: C.track,
   },
   segment: {
     flex: 1,
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   todayText: {
-    color: '#FFFFFF',
+    color: C.onPrimary,
   },
   rowText: {
     flex: 1,

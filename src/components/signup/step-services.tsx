@@ -47,7 +47,7 @@ export function StepServices({ data, update, onNext }: StepProps) {
               style={({ pressed }) => [styles.tile, checked && styles.tileSelected, pressed && styles.pressed]}>
               <View style={styles.tileTop}>
                 <View style={[styles.tileIcon, checked && styles.tileIconSelected]}>
-                  <Icon name={icon} color={checked ? '#FFFFFF' : C.primary} size={15} />
+                  <Icon name={icon} color={checked ? C.onPrimary : C.primary} size={15} />
                 </View>
                 <Checkbox checked={checked} />
               </View>
@@ -103,7 +103,7 @@ export function StepServices({ data, update, onNext }: StepProps) {
                   accessibilityRole="button"
                   accessibilityLabel={`Remove ${service}`}
                   hitSlop={8}>
-                  <Icon name={{ ios: 'xmark', android: 'close', web: 'close' }} color="#FFFFFF" size={11} />
+                  <Icon name={{ ios: 'xmark', android: 'close', web: 'close' }} color={C.onPrimary} size={11} />
                 </Pressable>
               </View>
             ))}
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: C.border,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: C.card,
   },
   tileSelected: {
     borderColor: C.primary,
@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary,
   },
   addButtonText: {
-    color: '#FFFFFF',
+    color: C.onPrimary,
     fontSize: 15,
     fontWeight: '700',
   },
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.primary,
   },
   chipText: {
-    color: '#FFFFFF',
+    color: C.onPrimary,
     fontSize: 13,
     fontWeight: '600',
   },

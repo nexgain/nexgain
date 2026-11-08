@@ -50,7 +50,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: Spacing.four,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: C.overlay,
   },
   dialog: {
     width: '100%',
@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
     backgroundColor: C.accent,
   },
   destructiveText: {
-    color: '#FFFFFF',
+    color: C.onAccent,
     fontSize: 15,
     fontWeight: '600',
   },

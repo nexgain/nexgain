@@ -264,7 +264,7 @@ export function ShiftEditor({
                       onChangeText={setNewTask}
                       onSubmitEditing={addTask}
                       placeholder="New task"
-                      placeholderTextColor={C.textSecondary}
+                      placeholderTextColor={C.textMuted}
                       returnKeyType="done"
                       style={styles.addTaskInput}
                       accessibilityLabel="New task"
@@ -756,7 +756,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.two,
     padding: Spacing.two + 2,
     borderRadius: Radius.medium - 2,
-    backgroundColor: 'rgba(79, 140, 255, 0.12)',
+    backgroundColor: C.accentSoft,
   },
   linkedJobText: {
     flex: 1,
