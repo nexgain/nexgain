@@ -73,6 +73,9 @@ export type EmployeeSignupData = {
   tfn: string;
   superFund: string | null;
   superFundOther: string;
+  /** Optional: the fund's USI or ABN, and the person's member number. */
+  superFundUsi: string;
+  superMemberNumber: string;
   emergencyName: string;
   emergencyPhone: string;
   qualifications: SignupQualification[];
@@ -104,6 +107,8 @@ export const EMPTY_EMPLOYEE_SIGNUP: EmployeeSignupData = {
   tfn: '',
   superFund: null,
   superFundOther: '',
+  superFundUsi: '',
+  superMemberNumber: '',
   emergencyName: '',
   emergencyPhone: '',
   qualifications: [],

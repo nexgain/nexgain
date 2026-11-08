@@ -10,14 +10,18 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useBusiness } from '@/data/business';
 import { useCurrentEmployee } from '@/data/current-employee';
 import { formatShortDate } from '@/data/employee-roster';
+import { financialYearStart } from '@/data/contractor-invoices';
 import { formatCurrency as money, formatHrs, usePayslipViews, type PayslipView } from '@/data/employee-payslips';
-import { SUPER_GUARANTEE_RATE } from '@/data/payroll';
+import { fromDateKey } from '@/data/shifts';
+import { SUPER_STATUS_LABEL, superFor, superPaidDateKey, useSuperPayments } from '@/data/super-payments';
 
 // One payslip, exactly as it was approved. Download saves it as a PDF.
 export default function PayslipScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const payslip = usePayslipViews().find((p) => p.id === id);
+  const payslips = usePayslipViews();
+  const payslip = payslips.find((p) => p.id === id);
   const business = useBusiness();
+  const superRecords = useSuperPayments();
   const me = useCurrentEmployee();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -155,19 +159,77 @@ export default function PayslipScreen() {
         <Row cells={['Total Deductions', money(payslip.totalDeductions)]} total />
       </Card>
 
-      <Card style={styles.superCard}>
-        <View style={styles.superRow}>
-          <Text style={styles.cell}>Superannuation ({SUPER_GUARANTEE_RATE * 100}%)</Text>
-          <Text style={[styles.cell, styles.bold]}>{money(payslip.super)}</Text>
-        </View>
-        <Text style={styles.smallMuted}>Paid by your employer on top of your pay. It isn&apos;t taken out of your net pay.</Text>
-      </Card>
+      <SuperSection payslip={payslip} payslips={payslips} records={superRecords} fyStartMonth={business?.financialYearStartMonth ?? 7} fund={me?.superFund ?? ''} />
 
       <View style={styles.netBox}>
         <Text style={styles.netLabel}>Net Pay</Text>
         <Text style={styles.netValue}>{money(payslip.net)}</Text>
       </View>
     </ScrollView>
+  );
+}
+
+/**
+ * Super for this pay period: how much, whether it's been paid into the fund
+ * yet, and the total paid so far this financial year (up to this payslip).
+ */
+function SuperSection({
+  payslip,
+  payslips,
+  records,
+  fyStartMonth,
+  fund,
+}: {
+  payslip: PayslipView;
+  payslips: PayslipView[];
+  records: ReturnType<typeof useSuperPayments>;
+  fyStartMonth: number;
+  fund: string;
+}) {
+  const own = superFor(records, payslip.record.payRunId, payslip.record.employeeId);
+  const payDateKey = payslip.record.payDate ?? payslip.record.periodEnd;
+  const fyStart = financialYearStart(fromDateKey(payDateKey), fyStartMonth);
+  const paidYtd = payslips
+    .filter((p) => (p.record.payDate ?? p.record.periodEnd) >= fyStart && p.record.periodStart <= payslip.record.periodStart)
+    .map((p) => superFor(records, p.record.payRunId, p.record.employeeId))
+    .reduce((sum, s) => sum + (s?.status === 'paid' ? s.superAmount : 0), 0);
+  const paidDate = own ? superPaidDateKey(own) : null;
+  const status = own ? SUPER_STATUS_LABEL[own.status] : payslip.super > 0 ? 'Unpaid' : '—';
+  const percent = own ? `${Math.round(own.superRate * 10000) / 100}%` : null;
+
+  const rows: [string, string][] = [
+    [`Super for this period${percent ? ` (${percent})` : ''}`, money(payslip.super)],
+    ['Super paid this period', money(own?.status === 'paid' ? own.superAmount : 0)],
+    ['Super paid year to date', money(Math.round(paidYtd * 100) / 100)],
+    ['Super fund', fund || 'Not added yet'],
+    [
+      'Status',
+      own?.status === 'paid' && paidDate
+        ? `Paid ${formatShortDate(fromDateKey(paidDate))}`
+        : own && own.status !== 'paid'
+          ? `${status} · due ${formatShortDate(fromDateKey(own.dueDate))}`
+          : status,
+    ],
+  ];
+
+  return (
+    <>
+      <Text style={styles.sectionTitle}>Superannuation</Text>
+      <Card style={styles.tableCard}>
+        {rows.map(([label, value], i) => (
+          <View key={label} style={[styles.row, i === rows.length - 1 && styles.lastRow]}>
+            <Text style={[styles.cell, styles.descCol]}>{label}</Text>
+            <Text style={[styles.cell, i < 3 && styles.bold, styles.superValue]} numberOfLines={2}>
+              {value}
+            </Text>
+          </View>
+        ))}
+        <Text style={[styles.smallMuted, styles.superNote]}>
+          Paid by your employer into your super fund, on top of your pay. It isn&apos;t taken out of your net pay.
+          {!fund ? ' Add your super fund in My Profile.' : ''}
+        </Text>
+      </Card>
+    </>
   );
 }
 
@@ -398,13 +460,16 @@ const styles = StyleSheet.create({
     width: 110,
     textAlign: 'right',
   },
-  superCard: {
-    gap: 4,
-    padding: Spacing.three,
+  lastRow: {
+    borderBottomWidth: 0,
   },
-  superRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  superValue: {
+    flexShrink: 1,
+    textAlign: 'right',
+  },
+  superNote: {
+    paddingTop: Spacing.one,
+    paddingBottom: Spacing.two,
   },
   netBox: {
     flexDirection: 'row',

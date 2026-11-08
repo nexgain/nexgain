@@ -88,6 +88,26 @@ export function StepAdditional({ data, update, onNext, nextLabel }: EmployeeStep
         )}
         {tried && errors.superOther ? <Text style={styles.errorText}>{errors.superOther}</Text> : null}
       </Field>
+      <Field label="Super fund USI or ABN" optional>
+        <Input
+          value={data.superFundUsi}
+          onChangeText={(superFundUsi) => update({ superFundUsi })}
+          placeholder="e.g. STA0100AU"
+          autoCapitalize="characters"
+          maxLength={30}
+          accessibilityLabel="Super fund USI or ABN"
+        />
+      </Field>
+      <Field label="Super member number" optional>
+        <Input
+          value={data.superMemberNumber}
+          onChangeText={(superMemberNumber) => update({ superMemberNumber })}
+          placeholder="Your member number with the fund"
+          autoCapitalize="characters"
+          maxLength={30}
+          accessibilityLabel="Super member number"
+        />
+      </Field>
 
       <Field label="Emergency contact name" error={tried && errors.emergencyName}>
         <Input

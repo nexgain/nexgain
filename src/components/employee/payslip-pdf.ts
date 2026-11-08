@@ -1,8 +1,7 @@
 // One payslip as a single portrait A4 PDF, laid out like the on-screen payslip.
-import type { BusinessProfile } from '@/data/business';
+import { superRateOf, type BusinessProfile } from '@/data/business';
 import { formatShortDate } from '@/data/employee-roster';
 import { formatCurrency as money, formatHrs, type PayslipView } from '@/data/employee-payslips';
-import { SUPER_GUARANTEE_RATE } from '@/data/payroll';
 import { escapeHtml as esc, sharePdf } from '@/lib/share-pdf';
 
 export type PayslipPerson = { name: string; position: string; employeeId: string };
@@ -100,7 +99,7 @@ export function buildPayslipHtml(v: PayslipView, business: BusinessProfile | nul
         </tbody>
       </table>
       <table style="margin-top:8px"><tbody>
-        <tr><td>Superannuation (${SUPER_GUARANTEE_RATE * 100}%)</td><td class="num">${money(v.super)}</td></tr>
+        <tr><td>Superannuation (${Math.round(superRateOf(business) * 10000) / 100}%)</td><td class="num">${money(v.super)}</td></tr>
       </tbody></table>
       <div class="note">Superannuation is paid by your employer on top of your pay. It is not taken out of your net pay.</div>
     </div>

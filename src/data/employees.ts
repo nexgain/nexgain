@@ -56,6 +56,9 @@ export type Employee = {
   dateOfBirth: string | null;
   address: string;
   superFund: string;
+  /** Super fund USI or ABN (optional). */
+  superFundUsi: string;
+  superMemberNumber: string;
   emergencyContactName: string;
   emergencyContactPhone: string;
   /** Hourly rate, or yearly salary when payType is 'salary'. Set by the owner; null until set. */
@@ -91,6 +94,8 @@ type EmployeeRow = {
   gst_registered?: boolean | null;
   pay_rate: number | string | null;
   super_fund: string | null;
+  super_fund_usi?: string | null;
+  super_member_number?: string | null;
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   availability: WeeklyAvailability | null;
@@ -124,6 +129,8 @@ export function fromRow(row: EmployeeRow, businessName = '', photoUrl: string | 
     dateOfBirth: row.date_of_birth,
     address: row.address ?? '',
     superFund: row.super_fund ?? '',
+    superFundUsi: row.super_fund_usi ?? '',
+    superMemberNumber: row.super_member_number ?? '',
     emergencyContactName: row.emergency_contact_name ?? '',
     emergencyContactPhone: row.emergency_contact_phone ?? '',
     payRate: row.pay_rate === null ? null : Number(row.pay_rate),
@@ -191,7 +198,10 @@ type EditableFields =
   | 'status'
   | 'startDate'
   | 'abn'
-  | 'gstRegistered';
+  | 'gstRegistered'
+  | 'superFund'
+  | 'superFundUsi'
+  | 'superMemberNumber';
 
 /** Owner or employee edits: shows straight away, then saves to the database. */
 export async function updateEmployee(id: string, changes: Partial<Pick<Employee, EditableFields>>) {
@@ -207,6 +217,9 @@ export async function updateEmployee(id: string, changes: Partial<Pick<Employee,
   if (changes.abn !== undefined) cols.abn = changes.abn.replace(/\D/g, '') || null;
   if (changes.gstRegistered !== undefined) cols.gst_registered = changes.gstRegistered;
   if (changes.status !== undefined) cols.status = changes.status;
+  if (changes.superFund !== undefined) cols.super_fund = changes.superFund.trim() || null;
+  if (changes.superFundUsi !== undefined) cols.super_fund_usi = changes.superFundUsi.trim() || null;
+  if (changes.superMemberNumber !== undefined) cols.super_member_number = changes.superMemberNumber.trim() || null;
   if (changes.startDate !== undefined) cols.start_date = changes.startDate;
   const { error } = await supabase.from('employees').update(cols).eq('id', id);
   if (error) console.warn('Could not save employee changes:', error.message);
@@ -291,6 +304,20 @@ export const CONTRACTOR = 'Contractor';
 /** Contractors invoice the business instead of getting payslips. */
 export function isContractor(employee: Pick<Employee, 'employmentType'> | null | undefined) {
   return employee?.employmentType === CONTRACTOR;
+}
+
+/** Employees, part-time and casual workers get super; contractors don't (they invoice instead). */
+export function getsSuper(employee: Pick<Employee, 'employmentType'> | null | undefined) {
+  return !!employee && !isContractor(employee);
+}
+
+/** Super fund details the employee hasn't added yet (all optional for now), e.g. ['Member number']. */
+export function missingSuperDetails(employee: Pick<Employee, 'superFund' | 'superFundUsi' | 'superMemberNumber'>) {
+  const missing: string[] = [];
+  if (!employee.superFund.trim()) missing.push('Fund name');
+  if (!employee.superFundUsi.trim()) missing.push('Fund USI/ABN');
+  if (!employee.superMemberNumber.trim()) missing.push('Member number');
+  return missing;
 }
 
 /** "51824753556" -> "51 824 753 556" */

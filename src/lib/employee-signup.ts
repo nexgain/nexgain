@@ -74,7 +74,20 @@ export async function completeEmployeeSignup(data: EmployeeSignupData) {
     },
   });
   if (error) throw error;
-  return row as { id: string; business_id: string };
+  const created = row as { id: string; business_id: string };
+
+  // Optional super fund USI/ABN and member number. The profile already exists,
+  // so a failure here doesn't stop sign-up (they can add them in My Profile).
+  const usi = data.superFundUsi.trim();
+  const member = data.superMemberNumber.trim();
+  if (data.employmentType !== 'Contractor' && (usi || member)) {
+    const { error: superError } = await supabase
+      .from('employees')
+      .update({ super_fund_usi: usi || null, super_member_number: member || null })
+      .eq('id', created.id);
+    if (superError) console.warn('Could not save super fund details:', superError.message);
+  }
+  return created;
 }
 
 /**

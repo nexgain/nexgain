@@ -2,17 +2,41 @@
 // (pay rate, overtime rate, bank details), clock records (hours) and the
 // business's overtime rule - nothing is stored twice. Approved weeks use what
 // was saved on their payslips, so later changes never alter them.
-import { businessStore, overtimeRulesOf, type OvertimeRules } from '@/data/business';
+import {
+  businessStore,
+  overtimeRulesOf,
+  superIncludesOf,
+  superRateOf,
+  type OvertimeRules,
+  type SuperIncludes,
+} from '@/data/business';
 import { clockStore, type ClockSession } from '@/data/clock-records';
-import { employeesStore, isContractor, overtimeRateOf, type Employee, type PayType } from '@/data/employees';
+import { employeesStore, getsSuper, isContractor, overtimeRateOf, type Employee, type PayType } from '@/data/employees';
 import { createStore } from '@/data/store';
+import { loadSuperPayments } from '@/data/super-payments';
 import { newId, warnSaveFailed } from '@/lib/ids';
 import { supabase } from '@/lib/supabase';
 
 /** Flat placeholder until proper PAYG withholding tables are set up. */
 export const TAX_RATE_PLACEHOLDER = 0.2;
-/** Superannuation Guarantee rate (12% from 1 July 2025), paid by the employer on top of gross. */
-export const SUPER_GUARANTEE_RATE = 0.12;
+
+/**
+ * Qualifying earnings (what super is worked out on): the pay items set to
+ * "includes super" in Payroll Settings. By default ordinary pay, commissions
+ * and allowances, but not overtime. Commissions and allowances aren't entered
+ * anywhere yet, so they're $0 for now.
+ */
+export function qualifyingEarningsOf(
+  pay: { ordinaryPay: number; overtimePay: number; commissions?: number; allowances?: number },
+  includes: SuperIncludes,
+) {
+  return roundCents(
+    (includes.ordinary ? pay.ordinaryPay : 0) +
+      (includes.overtime ? pay.overtimePay : 0) +
+      (includes.commission ? (pay.commissions ?? 0) : 0) +
+      (includes.allowance ? (pay.allowances ?? 0) : 0),
+  );
+}
 
 export type Period = {
   id: string;
@@ -40,7 +64,9 @@ export type PayLine = {
   gross: number | null;
   tax: number | null;
   net: number | null;
-  /** Paid by the employer on top of gross, on normal (ordinary-time) pay only. */
+  /** What super is worked out on (see qualifyingEarningsOf). null for contractors, or when it isn't known (approved weeks: see the super record). */
+  qualifyingEarnings: number | null;
+  /** Paid by the employer on top of gross: qualifying earnings x the super rate. null for contractors. */
   super: number | null;
   status: PayStatus;
 };
@@ -156,7 +182,8 @@ export function splitHours(
  * One employee's pay for a period.
  * - Hourly staff: (normal hours x pay rate) + (overtime hours x overtime rate).
  * - Salaried staff: yearly salary / 52 per week, whatever hours they clocked; no overtime.
- * Tax is the flat placeholder on gross. Super is on normal (ordinary-time) pay only.
+ * Tax is the flat placeholder on gross. Super is the business's super rate on
+ * qualifying earnings (not overtime by default); contractors get none.
  * Rates always come from the employee's profile, so a changed rate applies straight away.
  */
 export function calculatePayLine(employee: Employee, split: HoursSplit, status: PayStatus, weeks = 1): PayLine {
@@ -168,7 +195,7 @@ export function calculatePayLine(employee: Employee, split: HoursSplit, status: 
   if (rate === null) {
     return {
       employee, hours, ordinaryHours, overtimeHours, rate, overtimeRate: null,
-      ordinaryPay: null, overtimePay: null, gross: null, tax: null, net: null, super: null, status,
+      ordinaryPay: null, overtimePay: null, gross: null, tax: null, net: null, qualifyingEarnings: null, super: null, status,
     };
   }
   const overtimeRate = salaried ? null : overtimeRateOf(employee);
@@ -176,6 +203,10 @@ export function calculatePayLine(employee: Employee, split: HoursSplit, status: 
   const overtimePay = roundCents(overtimeHours * (overtimeRate ?? 0));
   const gross = roundCents(ordinaryPay + overtimePay);
   const tax = roundCents(gross * TAX_RATE_PLACEHOLDER);
+  const business = businessStore.get();
+  const qualifyingEarnings = getsSuper(employee)
+    ? qualifyingEarningsOf({ ordinaryPay, overtimePay }, superIncludesOf(business))
+    : null;
   return {
     employee,
     hours,
@@ -188,7 +219,8 @@ export function calculatePayLine(employee: Employee, split: HoursSplit, status: 
     gross,
     tax,
     net: roundCents(gross - tax),
-    super: roundCents(ordinaryPay * SUPER_GUARANTEE_RATE),
+    qualifyingEarnings,
+    super: qualifyingEarnings === null ? null : roundCents(qualifyingEarnings * superRateOf(business)),
     status,
   };
 }
@@ -207,6 +239,7 @@ function lineFromPayslip(employee: Employee, p: PayslipRecord): PayLine {
     gross: p.gross,
     tax: p.tax,
     net: p.net,
+    qualifyingEarnings: null,
     super: p.super,
     status: p.status === 'paid' ? 'Paid' : 'Approved',
   };
@@ -407,7 +440,7 @@ export function usePayStatuses(periodId: string): Record<string, PayStatus> {
 /**
  * Approves payments for a period: the database makes one pay run with the
  * business's next payroll number, plus a payslip for each employee (status
- * approved). Nobody is told they've been paid until the owner marks the pay
+ * approved), and an Unpaid super record for each person. Nobody is told they've been paid until the owner marks the pay
  * run as paid. Returns the new pay run's id, or throws with a plain message.
  */
 export async function approvePayments(periodId: string, employeeIds: string[], payDate: string) {
@@ -419,40 +452,44 @@ export async function approvePayments(periodId: string, employeeIds: string[], p
   const sessions = clockStore.get();
   const rules = overtimeRulesOf(businessStore.get());
   const hrs = (h: number) => Math.round(h * 100) / 100;
+  const superRate = superRateOf(businessStore.get());
 
-  const created: PayslipRecord[] = employeesStore
+  const lines = employeesStore
     .get()
     // Contractors are never paid through payroll (they invoice instead).
     .filter((e) => employeeIds.includes(e.id) && !alreadyPaid.has(e.id) && !isContractor(e))
     // Each employee's current rates and the current overtime rule; the payslip
     // keeps them, so later changes don't affect it.
     .map((e) => calculatePayLine(e, splitHours(sessions, e.id, period, rules), 'Pending'))
-    .filter((l) => l.rate !== null && l.gross !== null)
-    .map((l) => ({
-      id: newId(),
-      employeeId: l.employee.id,
-      periodStart: periodId,
-      periodEnd: lastDay,
-      hours: hrs(hrs(l.ordinaryHours) + hrs(l.overtimeHours)),
-      rate: l.rate!,
-      payType: l.employee.payType,
-      ordinaryHours: hrs(l.ordinaryHours),
-      overtimeHours: hrs(l.overtimeHours),
-      ordinaryRate: l.rate!,
-      overtimeRate: l.overtimeRate ?? 0,
-      ordinaryPay: l.ordinaryPay!,
-      overtimePay: l.overtimePay!,
-      overtimeAfterHours: rules.dailyAfterHours,
-      gross: l.gross!,
-      tax: l.tax!,
-      net: l.net!,
-      super: l.super!,
-      paidAt: null,
-      status: 'approved' as const,
-      payRunId: null,
-      payrollNumber: null,
-      payDate,
-    }));
+    .filter((l) => l.rate !== null && l.gross !== null);
+  // What each person's super was worked out on, for their super record.
+  const qualifying = new Map(lines.map((l) => [l.employee.id, l.qualifyingEarnings ?? 0]));
+
+  const created: PayslipRecord[] = lines.map((l) => ({
+    id: newId(),
+    employeeId: l.employee.id,
+    periodStart: periodId,
+    periodEnd: lastDay,
+    hours: hrs(hrs(l.ordinaryHours) + hrs(l.overtimeHours)),
+    rate: l.rate!,
+    payType: l.employee.payType,
+    ordinaryHours: hrs(l.ordinaryHours),
+    overtimeHours: hrs(l.overtimeHours),
+    ordinaryRate: l.rate!,
+    overtimeRate: l.overtimeRate ?? 0,
+    ordinaryPay: l.ordinaryPay!,
+    overtimePay: l.overtimePay!,
+    overtimeAfterHours: rules.dailyAfterHours,
+    gross: l.gross!,
+    tax: l.tax!,
+    net: l.net!,
+    super: l.super ?? 0,
+    paidAt: null,
+    status: 'approved' as const,
+    payRunId: null,
+    payrollNumber: null,
+    payDate,
+  }));
   if (created.length === 0 || !businessId) throw new Error('There is no one to pay.');
 
   const { data, error } = await supabase.rpc('approve_pay_run', {
@@ -476,6 +513,9 @@ export async function approvePayments(periodId: string, employeeIds: string[], p
       tax: p.tax,
       net: p.net,
       super: p.super,
+      // The database makes an Unpaid super record from these (see super_payments).
+      qualifying_earnings: qualifying.get(p.employeeId) ?? 0,
+      super_rate: superRate,
     })),
   });
   if (error) {
@@ -487,6 +527,7 @@ export async function approvePayments(periodId: string, employeeIds: string[], p
     ...created.map((p) => ({ ...p, payRunId: run.id, payrollNumber: run.payroll_number, payDate: run.pay_date })),
     ...all,
   ]);
+  loadSuperPayments().catch(() => {});
   return run.id;
 }
 

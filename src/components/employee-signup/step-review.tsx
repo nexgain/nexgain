@@ -30,7 +30,14 @@ export function StepReview({
         ]
       : []),
     { label: 'Bank account', value: maskLast4(data.iban.replace(/\D/g, '').slice(-4) || data.accountNumber), step: 3 },
-    { label: 'Superannuation', value: superFund || 'Not provided', step: 4 },
+    {
+      label: 'Superannuation',
+      value:
+        [superFund, data.superFundUsi.trim() && `USI/ABN ${data.superFundUsi.trim()}`, data.superMemberNumber.trim() && `Member ${data.superMemberNumber.trim()}`]
+          .filter(Boolean)
+          .join(' · ') || 'Not provided',
+      step: 4,
+    },
     {
       label: 'Qualifications',
       value: data.qualifications.map((q) => q.name).join(', ') || 'None added',

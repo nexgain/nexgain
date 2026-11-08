@@ -18,6 +18,7 @@ import { loadPayRuns, payRunsStore } from '@/data/pay-runs';
 import { loadPayslips, payslipsStore } from '@/data/payroll';
 import { qualificationsStore } from '@/data/qualifications';
 import { loadShifts, shiftsStore } from '@/data/shifts';
+import { loadSuperPayments, superPaymentsStore } from '@/data/super-payments';
 import { supabase } from '@/lib/supabase';
 
 let stopListening: (() => void)[] = [];
@@ -67,6 +68,7 @@ async function load(userId: string) {
       loadClockSessions().catch(() => {}),
       loadPayslips().catch(() => {}),
       loadPayRuns().catch(() => {}),
+      loadSuperPayments().catch(() => {}),
       loadClients().catch(() => {}),
       loadJobs().catch(() => {}),
       loadEvents().catch(() => {}),
@@ -84,6 +86,7 @@ async function load(userId: string) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'shifts', filter }, refresh(loadShifts))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payslips', filter }, refresh(loadPayslips))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pay_runs', filter }, refresh(loadPayRuns))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'super_payments', filter }, refresh(loadSuperPayments))
       // Jobs change when shifts are linked to them (Assigned) and when they're booked or moved.
       .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs', filter }, refresh(loadJobs))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_events', filter }, refresh(loadEvents))
@@ -104,6 +107,7 @@ async function load(userId: string) {
       loadShifts().catch(() => {}),
       loadClockSessions().catch(() => {}),
       loadPayslips().catch(() => {}),
+      loadSuperPayments().catch(() => {}),
       loadMyAssignedJobs().catch(() => {}),
       // Only contractors can see any (the database returns none for other workers).
       isContractor(me) ? loadContractorInvoices().catch(() => {}) : Promise.resolve(),
@@ -140,6 +144,7 @@ async function load(userId: string) {
           refresh(loadMyAssignedJobs)();
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'payslips', filter: `employee_id=eq.${me.id}` }, refresh(loadPayslips))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'super_payments', filter: `employee_id=eq.${me.id}` }, refresh(loadSuperPayments))
         .subscribe();
       stopListening.push(() => {
         supabase.removeChannel(live);
@@ -166,6 +171,7 @@ export function endSession() {
   clockStore.set([]);
   payslipsStore.set([]);
   payRunsStore.set([]);
+  superPaymentsStore.set([]);
   availabilityStore.set({});
   jobReportsStore.set([]);
   clientsStore.set([]);

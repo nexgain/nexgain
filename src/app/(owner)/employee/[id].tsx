@@ -29,6 +29,7 @@ import {
   EMPLOYEE_STATUS_LABEL,
   employeeFullName,
   formatPayRate,
+  isContractor,
   loadEmployeeDocuments,
   loadPayRateHistory,
   overtimeRateOf,
@@ -176,7 +177,13 @@ function DetailsTab({ employee }: { employee: Employee }) {
             ['Address', employee.address || '—'],
             ['Date of birth', dateText(employee.dateOfBirth)],
             ['Emergency contact', [employee.emergencyContactName, employee.emergencyContactPhone].filter(Boolean).join(' · ') || '—'],
-            ['Super fund', employee.superFund || '—'],
+            ['Super fund', isContractor(employee) ? 'N/A - contractor' : employee.superFund || 'Missing'],
+            ...(isContractor(employee)
+              ? []
+              : ([
+                  ['Super fund USI/ABN', employee.superFundUsi || 'Missing'],
+                  ['Super member number', employee.superMemberNumber || 'Missing'],
+                ] as [string, string][])),
             ['Employee ID', employee.employeeId],
           ]}
         />

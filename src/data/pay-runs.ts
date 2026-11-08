@@ -7,6 +7,7 @@ import { businessStore } from '@/data/business';
 import { employeeFullName, employeesStore } from '@/data/employees';
 import { loadPayslips, payslipsStore } from '@/data/payroll';
 import { createStore } from '@/data/store';
+import { loadSuperPayments } from '@/data/super-payments';
 import {
   bankFieldSetFor,
   buildPaymentFile,
@@ -252,7 +253,11 @@ export async function downloadPaymentFile(run: PayRun): Promise<DownloadResult> 
     });
     if (!recordError && updated) {
       replaceRun(updated as PayRunRow);
-      if (payDate !== run.payDate) loadPayslips().catch(() => {});
+      if (payDate !== run.payDate) {
+        loadPayslips().catch(() => {});
+        // Unpaid super is due 7 business days after the new pay date.
+        loadSuperPayments().catch(() => {});
+      }
     }
     return { ok: true, fileName };
   } catch (e) {

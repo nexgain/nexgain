@@ -30,6 +30,9 @@ export default function MyProfileScreen() {
   const [position, setPosition] = useState<string | null>(null);
   const [abn, setAbn] = useState<string | null>(null);
   const [gst, setGst] = useState<boolean | null>(null);
+  const [superFund, setSuperFund] = useState<string | null>(null);
+  const [superUsi, setSuperUsi] = useState<string | null>(null);
+  const [superMember, setSuperMember] = useState<string | null>(null);
   const [bank, setBank] = useState<BankForm>(EMPTY_BANK_FORM);
   const [status, setStatus] = useState<'idle' | 'saving' | 'error'>('idle');
   // Bank boxes match the business's country (BSB, routing number, sort code or IBAN).
@@ -48,11 +51,20 @@ export default function MyProfileScreen() {
   const positionValue = position ?? me.role;
   const abnValue = abn ?? formatAbnInput(me.abn);
   const gstValue = gst ?? me.gstRegistered;
+  const superFundValue = superFund ?? me.superFund;
+  const superUsiValue = superUsi ?? me.superFundUsi;
+  const superMemberValue = superMember ?? me.superMemberNumber;
+  const superChanged =
+    !contractor &&
+    (superFundValue.trim() !== me.superFund ||
+      superUsiValue.trim() !== me.superFundUsi ||
+      superMemberValue.trim() !== me.superMemberNumber);
   const bankChanged = !!(bank.accountName.trim() || bank.branchCode.trim() || bank.accountNumber.trim() || bank.iban.trim());
   const changed =
     phoneValue.trim() !== me.phone ||
     positionValue.trim() !== me.role ||
     bankChanged ||
+    superChanged ||
     (contractor && (abnValue.replace(/\D/g, '') !== me.abn || gstValue !== me.gstRegistered));
   const phoneError = phoneValue.replace(/\D/g, '').length < 8 ? 'Enter a valid phone number.' : null;
   const positionError = positionValue.trim() ? null : 'Enter your position.';
@@ -68,6 +80,9 @@ export default function MyProfileScreen() {
       phone: phoneValue.trim(),
       role: positionValue.trim(),
       ...(contractor ? { abn: abnValue.replace(/\D/g, ''), gstRegistered: gstValue } : {}),
+      ...(superChanged
+        ? { superFund: superFundValue.trim(), superFundUsi: superUsiValue.trim(), superMemberNumber: superMemberValue.trim() }
+        : {}),
     });
     if (ok && bankChanged) ok = await updateMyBankDetails(me.id, bankSet, bank);
     if (!ok) {
@@ -215,6 +230,35 @@ export default function MyProfileScreen() {
           <>
             <Text style={styles.sectionTitle}>Bank details</Text>
             <Card style={styles.form}>{bankFields}</Card>
+
+            <Text style={styles.sectionTitle}>Super fund</Text>
+            <Card style={styles.form}>
+              <Text style={styles.hint}>
+                Your employer pays your super into this fund. You&apos;ll find these details on your fund&apos;s website or
+                app, or on a recent statement.
+              </Text>
+              {(
+                [
+                  ['Fund name', superFundValue, setSuperFund, 'e.g. AustralianSuper', 'words', 80],
+                  ['Fund USI or ABN', superUsiValue, setSuperUsi, 'e.g. STA0100AU', 'characters', 30],
+                  ['Member number', superMemberValue, setSuperMember, 'e.g. 123456789', 'characters', 30],
+                ] as const
+              ).map(([label, value, set, placeholder, caps, max]) => (
+                <View key={label} style={styles.field}>
+                  <Text style={styles.fieldLabel}>{label}</Text>
+                  <TextInput
+                    value={value}
+                    onChangeText={set}
+                    placeholder={placeholder}
+                    autoCapitalize={caps}
+                    maxLength={max}
+                    placeholderTextColor={C.textMuted}
+                    accessibilityLabel={label}
+                    style={styles.input}
+                  />
+                </View>
+              ))}
+            </Card>
           </>
         )}
         {status === 'error' && (

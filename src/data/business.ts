@@ -42,6 +42,10 @@ export type BusinessProfile = {
   createdAt: string;
   /** When overtime starts (owner only). Missing until loaded; see overtimeRulesOf(). */
   overtimeRules?: OvertimeRules;
+  /** Super rate, e.g. 0.12. Missing until loaded; see superRateOf(). */
+  superRate?: number;
+  /** Which pay items count towards super. Missing until loaded; see superIncludesOf(). */
+  superIncludes?: SuperIncludes;
 };
 
 /**
@@ -57,6 +61,37 @@ export const DEFAULT_OVERTIME_RULES: OvertimeRules = { dailyAfterHours: 8 };
 
 export function overtimeRulesOf(profile: BusinessProfile | null): OvertimeRules {
   return profile?.overtimeRules ?? DEFAULT_OVERTIME_RULES;
+}
+
+/**
+ * Superannuation Guarantee rate (12%; Payday Super from 1 July 2026). The
+ * business's saved rate (businesses.super_rate) is the one value payroll uses;
+ * this is only the default until it's loaded.
+ */
+export const DEFAULT_SUPER_RATE = 0.12;
+
+export function superRateOf(profile: BusinessProfile | null) {
+  return profile?.superRate ?? DEFAULT_SUPER_RATE;
+}
+
+/** Kinds of pay. Commissions and allowances aren't entered anywhere yet (always $0). */
+export type PayItemType = 'ordinary' | 'overtime' | 'commission' | 'allowance';
+
+export const PAY_ITEM_TYPES: { type: PayItemType; label: string }[] = [
+  { type: 'ordinary', label: 'Ordinary hours' },
+  { type: 'overtime', label: 'Overtime' },
+  { type: 'commission', label: 'Commissions' },
+  { type: 'allowance', label: 'Allowances' },
+];
+
+/** "Includes super" yes/no for each kind of pay. Qualifying earnings = the pay items set to yes. */
+export type SuperIncludes = Record<PayItemType, boolean>;
+
+/** Ordinary pay, commissions and allowances count towards super; overtime doesn't. */
+export const DEFAULT_SUPER_INCLUDES: SuperIncludes = { ordinary: true, overtime: false, commission: true, allowance: true };
+
+export function superIncludesOf(profile: BusinessProfile | null): SuperIncludes {
+  return profile?.superIncludes ?? DEFAULT_SUPER_INCLUDES;
 }
 
 export type EmailApp = 'gmail' | 'outlook' | 'other';
@@ -91,6 +126,8 @@ type BusinessRow = {
   invite_code: string;
   created_at: string;
   overtime_rules?: { daily_after_hours?: number | string } | null;
+  super_rate?: number | string | null;
+  pay_item_super?: Partial<SuperIncludes> | null;
 };
 
 export function fromRow(row: BusinessRow): BusinessProfile {
@@ -124,6 +161,8 @@ export function fromRow(row: BusinessRow): BusinessProfile {
     overtimeRules: {
       dailyAfterHours: Number(row.overtime_rules?.daily_after_hours ?? DEFAULT_OVERTIME_RULES.dailyAfterHours),
     },
+    superRate: row.super_rate === null || row.super_rate === undefined ? DEFAULT_SUPER_RATE : Number(row.super_rate),
+    superIncludes: { ...DEFAULT_SUPER_INCLUDES, ...row.pay_item_super },
   };
 }
 
@@ -148,6 +187,7 @@ function toColumns(p: Partial<BusinessProfile>) {
   if (p.country !== undefined) cols.country = p.country;
   if (p.trackGstInReports !== undefined) cols.track_gst_in_reports = p.trackGstInReports;
   if (p.overtimeRules !== undefined) cols.overtime_rules = { daily_after_hours: p.overtimeRules.dailyAfterHours };
+  if (p.superIncludes !== undefined) cols.pay_item_super = p.superIncludes;
   if (p.emailApp !== undefined) cols.email_app = p.emailApp;
   if (p.businessEmail !== undefined) cols.business_email = p.businessEmail;
   return cols;
