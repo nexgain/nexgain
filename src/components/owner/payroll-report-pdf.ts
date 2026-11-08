@@ -4,6 +4,7 @@ import type { BusinessProfile } from '@/data/business';
 import { formatShortDate } from '@/data/employee-roster';
 import { employeeFullName, employeeInitialsOf } from '@/data/employees';
 import { formatHours, formatMoney, payTotals, type PayLine, type Period } from '@/data/payroll';
+import { TAX_ESTIMATE_NOTE } from '@/data/tax';
 import { escapeHtml as esc, sharePdf } from '@/lib/share-pdf';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -93,7 +94,7 @@ export function buildPayrollReportHtml(period: Period, frequency: string, busine
       <div><div class="label">Total Deductions</div><div class="value">${formatMoney(totals.tax)}</div><div class="sub2">+ ${formatMoney(totals.super)} super paid by employer</div></div>
       <div><div class="label">Total Net Pay</div><div class="value">${formatMoney(totals.net)}</div></div>
     </div>
-    <div class="foot">Deductions are PAYG tax taken out of pay. Super is paid by the employer on top of gross pay and isn't deducted.</div>
+    <div class="foot">Deductions are PAYG tax taken out of pay. ${TAX_ESTIMATE_NOTE} Super is paid by the employer on top of gross pay and isn't deducted.</div>
   </body></html>`;
 }
 

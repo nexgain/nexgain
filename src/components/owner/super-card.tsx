@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ConfirmDialog } from '@/components/owner/confirm-dialog';
 import { Checkbox } from '@/components/owner/form';
 import { Table, type Column } from '@/components/owner/table';
 import { Badge, Button, Card, Icon, OwnerIcons, ownerStyles } from '@/components/owner/ui';
@@ -21,7 +20,7 @@ import {
   type SuperStatus,
 } from '@/data/super-payments';
 import { payrollLabel } from '@/lib/payment-files';
-import { paySuper, SUPER_PAYMENTS_SIMULATED, superToPay } from '@/services/super-payments';
+import { paySuper } from '@/services/super-payments';
 
 const STATUS_TONE: Record<SuperStatus, 'warning' | 'info' | 'success'> = {
   unpaid: 'warning',
@@ -51,8 +50,7 @@ export function SuperCard() {
   // Ticked super records (by id).
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busyRunId, setBusyRunId] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<{ run: PayRun; employeeIds?: string[] } | null>(null);
-  const [message, setMessage] = useState<{ runId: string; tone: 'ok' | 'warn'; text: string } | null>(null);
+  const [message, setMessage] = useState<{ runId: string; tone: 'info' | 'warn'; text: string } | null>(null);
 
   const ratePercent = `${Math.round(superRateOf(business) * 10000) / 100}%`;
   const withEmployee = (s: SuperPayment): Row => ({ ...s, employee: employees.find((e) => e.id === s.employeeId) ?? null });
@@ -76,28 +74,15 @@ export function SuperCard() {
     });
   }
 
+
+  /** Pay Super (everyone unpaid in the run, or the ticked people). Not connected to a clearing house yet. */
   async function pay(run: PayRun, employeeIds?: string[]) {
-    setConfirm(null);
     setBusyRunId(run.id);
     setMessage(null);
     const result = await paySuper(run.id, employeeIds);
     setBusyRunId(null);
-    if (result.ok) {
-      setSelected(new Set());
-      setMessage({
-        runId: run.id,
-        tone: 'ok',
-        text:
-          result.status === 'paid'
-            ? `${formatMoney(result.total)} super paid for ${result.count} ${result.count === 1 ? 'person' : 'people'} (ref ${result.reference}).`
-            : `${formatMoney(result.total)} super is processing. It will show as Paid once the provider confirms.`,
-      });
-    } else {
-      setMessage({ runId: run.id, tone: 'warn', text: result.message });
-    }
+    setMessage({ runId: run.id, tone: result.status === 'coming-soon' ? 'info' : 'warn', text: result.message });
   }
-
-  const confirmBatch = confirm ? superToPay(confirm.run.id, confirm.employeeIds) : null;
 
   return (
     <Card title="Super" icon={OwnerIcons.percent}>
@@ -208,21 +193,21 @@ export function SuperCard() {
 
               <View style={styles.buttons}>
                 <Button
-                  label={busy ? 'Paying super…' : `Pay Super · ${formatMoney(unpaidTotal)}`}
+                  label={busy ? 'Working…' : `Pay Super · ${formatMoney(unpaidTotal)}`}
                   icon={OwnerIcons.check}
                   disabled={unpaid.length === 0 || busyRunId !== null}
-                  onPress={() => setConfirm({ run })}
+                  onPress={() => pay(run)}
                 />
                 <Button
                   label={`Pay selected (${ticked.length})`}
                   variant="secondary"
                   disabled={ticked.length === 0 || busyRunId !== null}
-                  onPress={() => setConfirm({ run, employeeIds: ticked.map((r) => r.employeeId) })}
+                  onPress={() => pay(run, ticked.map((r) => r.employeeId))}
                 />
               </View>
 
               {message?.runId === run.id && (
-                <Text style={[styles.messageText, message.tone === 'warn' && styles.warningText]}>{message.text}</Text>
+                <Text style={[styles.messageText, message.tone === 'warn' ? styles.warningText : styles.infoText]}>{message.text}</Text>
               )}
             </View>
           );
@@ -231,7 +216,7 @@ export function SuperCard() {
 
       {/* Paid runs drop out of the list above, so show the last result here. */}
       {message && !open.some((g) => g.run.id === message.runId) && (
-        <Text style={[styles.messageText, message.tone === 'warn' && styles.warningText]}>{message.text}</Text>
+        <Text style={[styles.messageText, message.tone === 'warn' ? styles.warningText : styles.infoText]}>{message.text}</Text>
       )}
 
       {contractors.length > 0 && (
@@ -246,24 +231,6 @@ export function SuperCard() {
         </View>
       )}
 
-      <ConfirmDialog
-        visible={confirm !== null}
-        destructive={false}
-        message={
-          confirm && confirmBatch
-            ? `Pay ${formatMoney(confirmBatch.total)} super for ${confirmBatch.lines.length} ${
-                confirmBatch.lines.length === 1 ? 'person' : 'people'
-              } in ${payrollLabel(confirm.run.payrollNumber)}?${
-                SUPER_PAYMENTS_SIMULATED
-                  ? '\n\nSuper payments are simulated for now: no money is sent, it’s only marked as paid.'
-                  : ''
-              }`
-            : ''
-        }
-        confirmLabel={`Pay ${confirmBatch ? formatMoney(confirmBatch.total) : ''}`}
-        onConfirm={() => confirm && pay(confirm.run, confirm.employeeIds)}
-        onCancel={() => setConfirm(null)}
-      />
     </Card>
   );
 }
@@ -320,8 +287,11 @@ const styles = StyleSheet.create({
     gap: Spacing.three - 4,
   },
   messageText: {
-    color: C.success,
     fontSize: 13,
+    lineHeight: 18,
+  },
+  infoText: {
+    color: C.accent,
   },
   contractors: {
     gap: Spacing.two,

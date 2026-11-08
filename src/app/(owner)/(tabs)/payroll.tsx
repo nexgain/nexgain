@@ -43,7 +43,6 @@ import {
   getPayPeriods,
   maskAccountNumber,
   payTotals,
-  TAX_RATE_PLACEHOLDER,
   usePayslipRecords,
   usePayStatuses,
   type PayLine,
@@ -52,17 +51,26 @@ import {
 } from '@/data/payroll';
 import { downloadPaymentFile, markPayRunPaid, todayKey, usePayRuns, type PayRun } from '@/data/pay-runs';
 import { fromDateKey } from '@/data/shifts';
+import { TAX_ESTIMATE_NOTE, taxSetupFor, type TaxSetup } from '@/data/tax';
 import { SUPER_STATUS_LABEL, superFor, useSuperPayments, type SuperStatus } from '@/data/super-payments';
 import { countryName, paymentFileTypeFor, payrollLabel, payrollReference } from '@/lib/payment-files';
 
 const TABS = ['Employees', 'Summary', 'Tax & Super', 'Bank Accounts'] as const;
 type Tab = (typeof TABS)[number];
 
-const TAX_PERCENT = `${TAX_RATE_PLACEHOLDER * 100}%`;
 /** e.g. "12%" */
 const percentText = (rate: number) => `${Math.round(rate * 10000) / 100}%`;
 
 const moneyOrDash = (amount: number | null) => (amount === null ? '—' : formatMoney(amount));
+
+/** The note shown next to tax amounts: estimated from brackets, or the rate the owner entered. */
+function taxNoteFor(setup: TaxSetup, country: string | null | undefined) {
+  if (setup.kind === 'brackets') return `${TAX_ESTIMATE_NOTE} (${setup.rules.label}.) Contractors have no tax taken out.`;
+  if (setup.kind === 'manual') {
+    return `Tax is worked out at the ${percentText(setup.rate)} rate you entered in Payroll Settings, as NexGain doesn't have tax brackets for ${countryName(country)} yet. Contractors have no tax taken out.`;
+  }
+  return `NexGain doesn't have tax brackets for ${countryName(country)} yet. Enter a tax rate in Payroll Settings so payroll can work out tax.`;
+}
 
 function periodSpan(period: Period) {
   const last = new Date(period.end);
@@ -88,6 +96,8 @@ export default function PayrollScreen() {
   const approveCardY = useRef(0);
   const business = useBusiness();
   const superPercent = percentText(superRateOf(business));
+  const taxSetup = taxSetupFor(business);
+  const taxNote = taxNoteFor(taxSetup, business?.country);
   const superRecords = useSuperPayments();
   const [reportBusy, setReportBusy] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -132,7 +142,8 @@ export default function PayrollScreen() {
     }
   }
 
-  const payable = lines.filter((l) => l.gross !== null && l.status === 'Pending');
+  // Tax must be known before anyone can be paid (see the tax rate message).
+  const payable = lines.filter((l) => l.gross !== null && l.tax !== null && l.status === 'Pending');
   const missingRate = lines.filter((l) => l.rate === null);
   const missingBank = lines.filter((l) => !l.employee.bankAccount);
   const paidCount = lines.filter((l) => l.status === 'Paid').length;
@@ -195,7 +206,13 @@ export default function PayrollScreen() {
   const taxColumns: Column<PayLine>[] = [
     nameColumn,
     { key: 'gross', label: 'Gross Pay', width: 110, align: 'right', render: (l) => moneyOrDash(l.gross) },
-    { key: 'tax', label: `Tax (${TAX_PERCENT})`, width: 110, align: 'right', render: (l) => moneyOrDash(l.tax) },
+    {
+      key: 'tax',
+      label: 'Tax (estimate)',
+      width: 120,
+      align: 'right',
+      render: (l) => (isContractor(l.employee) ? 'None - contractor' : moneyOrDash(l.tax)),
+    },
     {
       key: 'super',
       label: `Super (${superPercent})`,
@@ -315,7 +332,7 @@ export default function PayrollScreen() {
               ['Normal hours', formatHours(totals.ordinaryHours)],
               ['Overtime hours', formatHours(totals.overtimeHours)],
               ['Total gross pay', formatMoney(totals.gross)],
-              [`Tax withheld (${TAX_PERCENT} placeholder)`, formatMoney(totals.tax)],
+              ['Tax withheld (estimate)', formatMoney(totals.tax)],
               ['Total net pay', formatMoney(totals.net)],
               [`Total super (${superPercent})`, formatMoney(totals.super)],
               ['Approved', `${approvedCount} of ${lines.length}`],
@@ -345,8 +362,7 @@ export default function PayrollScreen() {
               }}
             />
             <Text style={ownerStyles.mutedText}>
-              Tax is a flat {TAX_PERCENT} placeholder until proper PAYG withholding is set up. Super is
-              the {superPercent} Superannuation Guarantee on qualifying earnings (the pay items set to count towards
+              {taxNote} Super is the {superPercent} Superannuation Guarantee on qualifying earnings (the pay items set to count towards
               super in Payroll Settings; not overtime by default), paid by you on top of gross pay.
             </Text>
           </View>
@@ -382,6 +398,7 @@ export default function PayrollScreen() {
           {missingRate.length > 0 && (
             <Warning text={`${missingRate.length} employee(s) have no pay rate set and can't be paid yet.`} />
           )}
+          {taxSetup.kind === 'missing' && <Warning text={taxNote} />}
           {missingBank.length > 0 && (
             <Warning text={`${missingBank.length} employee(s) haven't added bank account details.`} />
           )}
@@ -409,6 +426,7 @@ export default function PayrollScreen() {
             Approving makes a pay run with its own payroll number. Download its payment file, upload it to
             your bank, then mark it as paid. NexGain never moves money itself.
           </Text>
+          {taxSetup.kind !== 'missing' && <Text style={ownerStyles.mutedText}>{taxNote}</Text>}
         </Card>
       </View>
 
@@ -418,6 +436,51 @@ export default function PayrollScreen() {
 
       <PayrollSettingsCard />
     </OwnerScreen>
+  );
+}
+
+/**
+ * Only when NexGain has no tax brackets for the business's country: the owner
+ * enters a flat tax rate to use instead (so payroll never guesses).
+ */
+function ManualTaxRateField() {
+  const business = useBusiness();
+  const setup = taxSetupFor(business);
+  const saved = business?.manualTaxRate;
+  const [text, setText] = useState<string | null>(null);
+  if (setup.kind === 'brackets') return null;
+
+  const value = text ?? (saved === null || saved === undefined ? '' : String(Math.round(saved * 10000) / 100));
+  const percent = Number(value.trim());
+  const valid = value.trim() !== '' && Number.isFinite(percent) && percent >= 0 && percent <= 60;
+  return (
+    <>
+      <View style={styles.divider} />
+      <FormField
+        label={`Tax rate for ${countryName(business?.country)} (%)`}
+        error={value.trim() && !valid ? 'Enter a percentage between 0 and 60, e.g. 20' : undefined}>
+        <View style={styles.settingRow}>
+          <TextField
+            value={value}
+            onChangeText={(t) => {
+              setText(t);
+              const n = Number(t.trim());
+              if (t.trim() && Number.isFinite(n) && n >= 0 && n <= 60) updateBusiness({ manualTaxRate: n / 100 });
+            }}
+            onBlur={() => setText(null)}
+            keyboardType="decimal-pad"
+            placeholder="e.g. 20"
+            accessibilityLabel="Tax rate percentage"
+            style={styles.settingInput}
+          />
+          <Text style={styles.settingUnit}>% of gross pay</Text>
+        </View>
+      </FormField>
+      <Text style={ownerStyles.mutedText}>
+        NexGain doesn&apos;t have tax brackets for {countryName(business?.country)} yet, so enter the rate to take out of
+        each pay. Check it with your accountant.
+      </Text>
+    </>
   );
 }
 
@@ -460,6 +523,7 @@ function PayrollSettingsCard() {
       <Text style={ownerStyles.mutedText}>
         Hours worked past this in a single day are paid at the employee&apos;s overtime rate.
       </Text>
+      <ManualTaxRateField />
       <View style={styles.divider} />
       <FormField label={`Super rate: ${percentText(superRateOf(business))} of qualifying earnings`}>
         <Text style={ownerStyles.mutedText}>

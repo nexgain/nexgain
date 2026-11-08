@@ -56,6 +56,7 @@ import {
   type QualificationDocument,
 } from '@/data/qualifications';
 import { fromDateKey } from '@/data/shifts';
+import { TAX_ESTIMATE_NOTE } from '@/data/tax';
 import { supabase } from '@/lib/supabase';
 
 const TABS = ['Details', 'Pay & Payroll', 'Qualifications', 'Documents', 'Availability', 'Job Notes'] as const;
@@ -320,6 +321,36 @@ function PayTab({ employee }: { employee: Employee }) {
           Payroll always uses this rate. Change it on the Details tab. Payments already approved keep the rate they
           were paid at.
         </Text>
+      </Card>
+
+      <Card title="Tax" icon={OwnerIcons.percent}>
+        {isContractor(employee) ? (
+          <Text style={styles.muted}>No tax is taken out for contractors. They invoice you and handle their own tax.</Text>
+        ) : (
+          <>
+            <Text style={styles.rowLabel}>Claimed the tax-free threshold?</Text>
+            <View style={styles.chips}>
+              {([true, false] as const).map((v) => {
+                const selected = employee.taxFreeThreshold === v;
+                return (
+                  <Pressable
+                    key={String(v)}
+                    onPress={() => updateEmployee(employee.id, { taxFreeThreshold: v })}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`Claimed the tax-free threshold: ${v ? 'Yes' : 'No'}`}
+                    style={[styles.chip, selected && styles.chipSelected]}>
+                    <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{v ? 'Yes' : 'No'}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text style={styles.muted}>
+              Most people claim it from one employer only (their main job). If they haven&apos;t, more tax is taken out of
+              their pay. {TAX_ESTIMATE_NOTE}
+            </Text>
+          </>
+        )}
       </Card>
 
       <Card title="Pay Rate History" icon={OwnerIcons.trendingUp}>

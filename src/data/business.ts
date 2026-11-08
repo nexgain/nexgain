@@ -54,6 +54,11 @@ export type BusinessProfile = {
   superRate?: number;
   /** Which pay items count towards super. Missing until loaded; see superIncludesOf(). */
   superIncludes?: SuperIncludes;
+  /**
+   * Flat tax rate (e.g. 0.2) the owner entered, used only when there are no
+   * tax brackets for the business's country yet (see config/tax-brackets.ts).
+   */
+  manualTaxRate?: number | null;
 };
 
 /**
@@ -178,6 +183,7 @@ type BusinessRow = {
   overtime_rules?: { daily_after_hours?: number | string } | null;
   super_rate?: number | string | null;
   pay_item_super?: Partial<SuperIncludes> | null;
+  manual_tax_rate?: number | string | null;
 };
 
 export function fromRow(row: BusinessRow): BusinessProfile {
@@ -223,6 +229,7 @@ export function fromRow(row: BusinessRow): BusinessProfile {
     },
     superRate: row.super_rate === null || row.super_rate === undefined ? DEFAULT_SUPER_RATE : Number(row.super_rate),
     superIncludes: { ...DEFAULT_SUPER_INCLUDES, ...row.pay_item_super },
+    manualTaxRate: row.manual_tax_rate === null || row.manual_tax_rate === undefined ? null : Number(row.manual_tax_rate),
   };
 }
 
@@ -248,6 +255,7 @@ function toColumns(p: Partial<BusinessProfile>) {
   if (p.trackGstInReports !== undefined) cols.track_gst_in_reports = p.trackGstInReports;
   if (p.overtimeRules !== undefined) cols.overtime_rules = { daily_after_hours: p.overtimeRules.dailyAfterHours };
   if (p.superIncludes !== undefined) cols.pay_item_super = p.superIncludes;
+  if (p.manualTaxRate !== undefined) cols.manual_tax_rate = p.manualTaxRate;
   if (p.emailApp !== undefined) cols.email_app = p.emailApp;
   if (p.businessEmail !== undefined) cols.business_email = p.businessEmail;
   if (p.phone !== undefined) cols.phone = p.phone;

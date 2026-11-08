@@ -15,10 +15,9 @@ import { employeesStore, getsSuper, isContractor, overtimeRateOf, type Employee,
 import { createStore } from '@/data/store';
 import { loadSuperPayments } from '@/data/super-payments';
 import { newId, warnSaveFailed } from '@/lib/ids';
+import { taxOnPay, taxSetupFor } from '@/data/tax';
 import { supabase } from '@/lib/supabase';
 
-/** Flat placeholder until proper PAYG withholding tables are set up. */
-export const TAX_RATE_PLACEHOLDER = 0.2;
 
 /**
  * Qualifying earnings (what super is worked out on): the pay items set to
@@ -182,7 +181,8 @@ export function splitHours(
  * One employee's pay for a period.
  * - Hourly staff: (normal hours x pay rate) + (overtime hours x overtime rate).
  * - Salaried staff: yearly salary / 52 per week, whatever hours they clocked; no overtime.
- * Tax is the flat placeholder on gross. Super is the business's super rate on
+ * Tax is estimated from the tax brackets for the business's country, on this
+ * pay (none for contractors). Super is the business's super rate on
  * qualifying earnings (not overtime by default); contractors get none.
  * Rates always come from the employee's profile, so a changed rate applies straight away.
  */
@@ -202,8 +202,15 @@ export function calculatePayLine(employee: Employee, split: HoursSplit, status: 
   const ordinaryPay = roundCents(salaried ? (rate / 52) * weeks : ordinaryHours * rate);
   const overtimePay = roundCents(overtimeHours * (overtimeRate ?? 0));
   const gross = roundCents(ordinaryPay + overtimePay);
-  const tax = roundCents(gross * TAX_RATE_PLACEHOLDER);
   const business = businessStore.get();
+  // Worked out from this pay (see data/tax.ts). null when the business's country
+  // has no tax brackets and no rate has been entered yet.
+  const tax = taxOnPay(
+    gross,
+    taxSetupFor(business),
+    { contractor: isContractor(employee), claimsTaxFreeThreshold: employee.taxFreeThreshold },
+    weeks,
+  );
   const qualifyingEarnings = getsSuper(employee)
     ? qualifyingEarningsOf({ ordinaryPay, overtimePay }, superIncludesOf(business))
     : null;
@@ -218,7 +225,7 @@ export function calculatePayLine(employee: Employee, split: HoursSplit, status: 
     overtimePay,
     gross,
     tax,
-    net: roundCents(gross - tax),
+    net: tax === null ? null : roundCents(gross - tax),
     qualifyingEarnings,
     super: qualifyingEarnings === null ? null : roundCents(qualifyingEarnings * superRateOf(business)),
     status,
@@ -461,7 +468,8 @@ export async function approvePayments(periodId: string, employeeIds: string[], p
     // Each employee's current rates and the current overtime rule; the payslip
     // keeps them, so later changes don't affect it.
     .map((e) => calculatePayLine(e, splitHours(sessions, e.id, period, rules), 'Pending'))
-    .filter((l) => l.rate !== null && l.gross !== null);
+    // No pay rate, or tax can't be worked out yet (no brackets or rate for the country).
+    .filter((l) => l.rate !== null && l.gross !== null && l.tax !== null);
   // What each person's super was worked out on, for their super record.
   const qualifying = new Map(lines.map((l) => [l.employee.id, l.qualifyingEarnings ?? 0]));
 

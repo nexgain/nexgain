@@ -77,6 +77,8 @@ export type Employee = {
   /** Which country's format the saved bank details are in ('AU', 'US', 'GB', 'EU', 'OTHER'); null = saved before countries existed (Australian). */
   bankCountry: string | null;
   hasTfn: boolean;
+  /** Whether they claim the tax-free threshold with this employer (yes by default). Set by the owner. */
+  taxFreeThreshold: boolean;
 };
 
 type EmployeeRow = {
@@ -96,6 +98,7 @@ type EmployeeRow = {
   super_fund: string | null;
   super_fund_usi?: string | null;
   super_member_number?: string | null;
+  tax_free_threshold?: boolean | null;
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   availability: WeeklyAvailability | null;
@@ -143,6 +146,7 @@ export function fromRow(row: EmployeeRow, businessName = '', photoUrl: string | 
     bankAccount: last4 ? { accountName: 'On file', bsb: '', accountNumber: last4 } : null,
     bankCountry: row.employee_private?.bank_country ?? null,
     hasTfn: row.employee_private?.has_tfn ?? false,
+    taxFreeThreshold: row.tax_free_threshold ?? true,
   };
 }
 
@@ -201,7 +205,8 @@ type EditableFields =
   | 'gstRegistered'
   | 'superFund'
   | 'superFundUsi'
-  | 'superMemberNumber';
+  | 'superMemberNumber'
+  | 'taxFreeThreshold';
 
 /** Owner or employee edits: shows straight away, then saves to the database. */
 export async function updateEmployee(id: string, changes: Partial<Pick<Employee, EditableFields>>) {
@@ -220,6 +225,7 @@ export async function updateEmployee(id: string, changes: Partial<Pick<Employee,
   if (changes.superFund !== undefined) cols.super_fund = changes.superFund.trim() || null;
   if (changes.superFundUsi !== undefined) cols.super_fund_usi = changes.superFundUsi.trim() || null;
   if (changes.superMemberNumber !== undefined) cols.super_member_number = changes.superMemberNumber.trim() || null;
+  if (changes.taxFreeThreshold !== undefined) cols.tax_free_threshold = changes.taxFreeThreshold;
   if (changes.startDate !== undefined) cols.start_date = changes.startDate;
   const { error } = await supabase.from('employees').update(cols).eq('id', id);
   if (error) console.warn('Could not save employee changes:', error.message);
