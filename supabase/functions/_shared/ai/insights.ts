@@ -362,6 +362,32 @@ function scheduleClashes(s: BusinessSnapshot, today: DateKey): Insight[] {
   return out;
 }
 
+/** Licences, tickets and certificates that have expired or expire in the next 30 days. */
+function expiringQualifications(s: BusinessSnapshot, today: DateKey): Insight[] {
+  const soon = addDays(today, 30);
+  const names = new Map(s.employees.filter((e) => e.status !== 'inactive').map((e) => [e.id, e.name]));
+  return s.qualifications
+    .filter((q) => q.expiryDate && q.expiryDate <= soon && names.has(q.employeeId))
+    .map((q) => {
+      const days = daysBetween(today, q.expiryDate!);
+      const name = names.get(q.employeeId)!;
+      const expired = days < 0;
+      return insight({
+        key: `qualification:${q.id}:${q.expiryDate}`,
+        check: 'qualification_expiring',
+        area: 'team',
+        severity: expired ? 'high' : days <= 14 ? 'medium' : 'low',
+        title: expired
+          ? `${name}'s ${q.name} expired ${plural(-days, 'day')} ago`
+          : `${name}'s ${q.name} expires ${days === 0 ? 'today' : `in ${plural(days, 'day')}`}`,
+        summary: `${q.name} ${expired ? 'expired' : 'expires'} on ${formatDate(q.expiryDate!)}.${expired ? ` ${name.split(' ')[0]} shouldn't do work that needs it until it's renewed.` : ''}`,
+        suggestion: `Ask ${name.split(' ')[0]} to renew it and upload the new one in their NexGain profile (Qualifications).`,
+        related: [{ type: 'team_member', id: q.employeeId }],
+        metrics: { expiry_date: q.expiryDate, days_left: days },
+      });
+    });
+}
+
 function overdueSuper(s: BusinessSnapshot, today: DateKey): Insight[] {
   const late = s.superPayments.filter((p) => p.status === 'unpaid' && p.dueDate < today);
   if (late.length === 0) return [];
@@ -634,6 +660,7 @@ export function runHealthCheck(s: BusinessSnapshot, now = new Date()): Insight[]
     ...revenueDrop(s, today),
     ...labourCostShare(s, today),
     ...overdueSuper(s, today),
+    ...expiringQualifications(s, today),
     ...unassignedJobs(s, now, today),
     ...scheduleClashes(s, today),
   ];

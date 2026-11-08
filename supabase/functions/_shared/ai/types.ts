@@ -14,6 +14,8 @@ export type InvoiceInfo = {
   clientId: string | null;
   clientName: string;
   total: number;
+  /** The GST part of the total (0 when no GST was charged). */
+  gst: number;
   dueDate: DateKey | null;
   createdAt: string;
   paidAt: string | null;
@@ -98,6 +100,60 @@ export type SuperInfo = {
   status: string;
 };
 
+/** When someone can work on a day of the week (from their Availability screen). */
+export type DayAvailability = { available: boolean; start: string; end: string };
+
+/** A clock-in / clock-out. `end` is null while they're still clocked in. */
+export type ClockInfo = { id: string; employeeId: string; start: string; end: string | null };
+
+/** A licence, ticket or certificate (e.g. White Card). */
+export type QualificationInfo = { id: string; employeeId: string; name: string; expiryDate: DateKey | null };
+
+/** What an employee wrote after a shift. */
+export type JobReportInfo = {
+  id: string;
+  employeeId: string;
+  date: DateKey;
+  jobTitle: string;
+  location: string;
+  /** e.g. "Went well", "Minor issues", "Incident" */
+  outcome: string;
+  notes: string;
+  issues: string;
+  completed: boolean;
+  submittedAt: string;
+};
+
+/** A calendar entry that isn't a job: a material delivery or another reminder. */
+export type EventInfo = {
+  id: string;
+  /** "delivery" or "other" (jobs are in `jobs`). */
+  type: string;
+  title: string;
+  date: DateKey;
+  start: string;
+  end: string;
+  allDay: boolean;
+  address: string;
+  supplier: string;
+  deliveryItems: string;
+  notes: string;
+};
+
+/** An invoice a contractor sent the business. */
+export type ContractorInvoiceInfo = {
+  id: string;
+  employeeId: string;
+  number: string;
+  invoiceDate: DateKey;
+  dueDate: DateKey | null;
+  /** draft, sent (waiting for the owner's review), approved (to pay), declined, paid */
+  status: string;
+  total: number;
+  gst: number;
+  paidAt: string | null;
+};
+
 /** Expenses the owner typed in on the Expenses page. */
 export type ExpenseInfo = { id: string; date: DateKey; amount: number; category: string; description: string };
 
@@ -127,6 +183,7 @@ export type BusinessSnapshot = {
   country: string | null;
   /** Month the financial year starts (7 = July). */
   financialYearStartMonth: number;
+  gstRegistered: boolean;
   invoices: InvoiceInfo[];
   quotes: QuoteInfo[];
   jobs: JobInfo[];
@@ -136,6 +193,13 @@ export type BusinessSnapshot = {
   payslips: PayslipInfo[];
   superPayments: SuperInfo[];
   expenses: ExpenseInfo[];
+  /** Weekly availability by employee id (Monday first). Missing = not set yet. */
+  availability: Record<string, DayAvailability[]>;
+  clockSessions: ClockInfo[];
+  qualifications: QualificationInfo[];
+  jobReports: JobReportInfo[];
+  events: EventInfo[];
+  contractorInvoices: ContractorInvoiceInfo[];
   /** Bank transactions. Empty until the Transactions page is connected. */
   transactions: Transaction[];
   /** False until the Transactions page is connected (see transactions-adapter.ts). */

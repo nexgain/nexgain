@@ -217,3 +217,153 @@ describe('the free AI Assistant (no paid AI)', () => {
     expect(unknown.text).toMatch(/Try one of these/);
   });
 });
+
+describe('rostering staff from the chat', () => {
+  const ask = (q: string, context = {}, s = sample) => answerQuestion(s, q, NOW, context);
+
+  it('asks who to roster on "this job" (the last job shown), listing everyone', () => {
+    const a = ask('can you roster an employee to this job', { lastJobId: 'sample-job-4521' });
+    expect(a.text).toBe(
+      'Yes. Who do you want to roster on House Wash (Q-4521), 11 Nov 2026, 8:00 am–11:00 am? Tick the people below, or choose All employees.',
+    );
+    expect(a.roster?.options.map((o) => o.name)).toEqual(['Jake Wilson', 'Mia Chen']);
+    expect(a.roster?.preselected).toEqual([]);
+  });
+
+  it('asks which job when it isn\'t clear', () => {
+    const a = ask('can you roster someone');
+    expect(a.roster).toBeUndefined();
+    expect(a.text).toMatch(/^Sure\. Which job\?/);
+    expect(a.cards.map((c) => c.id)).toEqual(['sample-job-4521']);
+  });
+
+  it('ticks the people named, or everyone free', () => {
+    const mia = ask('put mia on job #4521');
+    expect(mia.roster?.preselected).toEqual(['sample-emp-mia']);
+    expect(mia.text).toMatch(/^Roster Mia Chen on House Wash \(Q-4521\)/);
+    expect(ask('roster all employees on job #4521').roster?.preselected).toEqual(['sample-emp-jake', 'sample-emp-mia']);
+  });
+
+  it("warns when someone is busy then, and won't roster on finished jobs", () => {
+    const busyDay = {
+      ...sample,
+      shifts: [...sample.shifts, { id: 'x', date: '2026-11-11', start: '07:00', end: '09:00', employeeIds: ['sample-emp-mia'], jobId: null, jobType: 'Office clean', location: '' }],
+    };
+    const a = ask('assign mia to job #4521', {}, busyDay);
+    expect(a.roster?.options.find((o) => o.name === 'Mia Chen')?.busy).toBe('Busy 07:00–09:00 (Office clean)');
+    expect(a.text).toMatch(/Heads up: Mia is busy 07:00–09:00 \(office clean\)\./);
+    expect(ask('roster jake on job #4498').text).toBe("Deck restore (Q-4498) has already finished, so there's no one to roster.");
+  });
+
+  it('still answers roster questions as questions', () => {
+    expect(ask("who's rostered tomorrow?").roster).toBeUndefined();
+    expect(ask('Which jobs are unassigned?').text).toMatch(/^1 upcoming job has no staff yet/);
+  });
+});
+
+describe('ten more things the assistant can answer', () => {
+  const ask = (q: string) => answerQuestion(sample, q, NOW);
+
+  it("1. who's free, then offers to roster them", () => {
+    expect(ask("Who's free Thursday morning?").text).toBe(
+      'Free Thursday 12 Nov 2026 in the morning: Jake Wilson. Already rostered: Mia Chen (08:00–12:00 Office clean).',
+    );
+    const job = ask('who can do a job tomorrow at 9');
+    expect(job.text).toMatch(/House Wash \(Q-4521\) .* still needs staff\. Want to roster them\?/);
+    expect(job.roster?.preselected).toEqual(['sample-emp-jake', 'sample-emp-mia']);
+  });
+
+  it('2. clock-ins: lateness, hours vs rostered, who is on now', () => {
+    expect(ask('Who clocked in late this week?').text).toMatch(/Jake Wilson, 20 min late on 9 Nov 2026 \(rostered 07:00, clocked in 07:20\)/);
+    expect(ask('How many hours did Jake actually work vs rostered?').text).toMatch(/Jake Wilson worked 10\.8 hours, against 16 rostered so far/);
+    expect(ask("who's clocked in right now").text).toBe('Clocked in right now: Jake Wilson (since 6:58 am).');
+  });
+
+  it('3. expiring licences and tickets (also in the health check)', () => {
+    expect(ask('Whose White Card expires soon?').text).toMatch(/^1 licence or ticket needs attention: Jake Wilson's White Card expires 30 Nov 2026 \(in 20 days\)/);
+    expect(ask('any tickets expiring?').text).toMatch(/Mia Chen's First Aid Certificate expired 5 Nov 2026/);
+    const insight = runHealthCheck(sample, NOW).find((i) => i.check === 'qualification_expiring' && i.severity === 'high');
+    expect(insight?.title).toBe("Mia Chen's First Aid Certificate expired 5 days ago");
+  });
+
+  it('4. job reports and incidents', () => {
+    const deck = ask('What did Jake write on the deck job?');
+    expect(deck.text).toMatch(/^1 job report from Jake Wilson\. 17 Oct 2026, Deck restore/);
+    expect(deck.text).toMatch(/Cracked board near the back step/);
+    expect(ask('Any incidents last month?').text).toMatch(/^1 incident in October 2026/);
+  });
+
+  it("5. daily briefing: what's on tomorrow", () => {
+    const a = ask("What's on tomorrow?");
+    expect(a.text).toMatch(/House Wash \(Q-4521\) at 24 Ocean Dr, Wellington Point \(NO STAFF YET\)/);
+    expect(a.text).toMatch(/7:30 am Bunnings delivery \(Decking oil x2, sugar soap\)/);
+  });
+
+  it('6. client history and best clients', () => {
+    expect(ask('When did I last do a job for Sarah?').text).toMatch(/last paid invoice was INV-1039 on 13 Oct 2026\. Next one: House Wash \(Q-4521\)/);
+    expect(ask('Who are my best clients this year?').text).toMatch(/1\. Tom Nguyen \$6,200\.00 \(1 invoice\); 2\. Sarah Smith \$3,100\.00/);
+    expect(ask('Does Lee pay late?').text).toMatch(/^Lee Property Group often pays late/);
+  });
+
+  it('7. quote win rate and average quote', () => {
+    expect(ask('How many quotes did I win this month?').text).toBe(
+      'This month (November 2026) you sent 2 quotes: 1 won ($495.00), 0 declined, 1 still waiting. That\'s a 100% win rate on the ones decided. Average quote: $1,672.50.',
+    );
+  });
+
+  it("8. what's due in the next 2 weeks", () => {
+    const a = ask("What's due in the next 2 weeks?");
+    expect(a.text).toMatch(/plus \$2,035\.00 already overdue/);
+    expect(a.text).toMatch(/contractor invoices \$2,200\.00/);
+    expect(a.text).toMatch(/more going out than coming in/);
+  });
+
+  it('9. GST estimate, clearly labelled', () => {
+    const a = ask('Roughly how much GST will I owe this quarter?');
+    expect(a.text).toMatch(/^Rough GST estimate for 1 Oct 2026 – 31 Dec 2026: \$281\.82 GST collected/);
+    expect(a.text).toMatch(/Check with your accountant or BAS agent/);
+    expect(answerQuestion({ ...sample, gstRegistered: false }, 'how much gst do i owe', NOW).text).toMatch(/isn't set up as registered for GST/);
+  });
+
+  it('10. contractor invoices waiting', () => {
+    expect(ask('Any contractor invoices waiting for me?').text).toBe(
+      '1 invoice to review: MC-014 from Mia Chen ($880.00, due 22 Nov 2026). 1 approved invoice to pay: MC-013 from Mia Chen ($1,320.00, due 15 Nov 2026). Open More > Contractor invoices to review or pay them.',
+    );
+  });
+});
+
+describe('follow-up questions in a conversation', () => {
+  /** Asks the questions in order, like a chat, and returns each answer. */
+  const chat = (...questions: string[]) => {
+    let previous: string | null = null;
+    return questions.map((q) => {
+      const a = answerQuestion(sample, q, NOW, { previousQuestion: previous });
+      if (a.understood) previous = a.asked ?? q;
+      return a;
+    });
+  };
+
+  it('"Was there an incident this month?" then "When was the last one?"', () => {
+    const [first, second] = chat('Was there an incident report from this month?', 'When was the last one?');
+    expect(first.text).toBe('No incidents this month (November 2026).');
+    expect(second.text).toMatch(/^The last incident was on 17 Oct 2026 \(24 days ago\): Deck restore at 3 Bay Rd, Cleveland, reported by Jake Wilson/);
+  });
+
+  it('swaps in a new date, supplier or person', () => {
+    const [, sept, reece, last] = chat('How much did I spend at Bunnings last month?', 'What about September?', 'and Reece?', 'when was the last one?');
+    expect(sept.text).toMatch(/^You spent \$2,140\.00 at Bunnings in September 2026/);
+    expect(reece.text).toMatch(/^You spent \$660\.00 at Reece in September 2026/);
+    expect(last.text).toBe('Your last purchase at Reece was $425.00 on 23 Oct 2026.');
+    expect(chat('what hours has mia got this week', 'and jake?')[1].text).toMatch(/^Jake Wilson has 2 shifts this week/);
+    expect(chat("Who's free Thursday morning?", 'what about friday?')[1].text).toMatch(/^Free Friday 13 Nov 2026 in the morning/);
+    expect(chat('Whose White Card expires soon?', 'what about first aid?')[1].text).toMatch(/Mia Chen's First Aid Certificate expired/);
+  });
+
+  it('narrows down, and answers new questions as new', () => {
+    expect(chat('Which invoices are overdue?', 'which ones are Lee?')[1].text).toMatch(/^1 invoice is overdue for Lee Property Group/);
+    const [, briefing] = chat('Which invoices are overdue?', "What's on tomorrow?");
+    expect(briefing.asked).toBeUndefined();
+    expect(briefing.text).toMatch(/^Here's tomorrow/);
+    expect(chat('Which invoices are overdue?', 'thanks')[1].text).toMatch(/^You're welcome!/);
+  });
+});

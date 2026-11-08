@@ -1,7 +1,7 @@
 // What happens after someone logs in (or reopens the app while logged in):
 // load their data from the database and listen for live changes. Cleared on log out.
 import { clearAiInsights, loadAiInsights } from '@/data/ai-insights';
-import { newChat } from '@/data/ai-chat';
+import { loadSavedChats, resetChats } from '@/data/ai-chat';
 import { availabilityStore } from '@/data/availability';
 import { businessStore, clearBusiness, loadMyBusiness } from '@/data/business';
 import { clearBusinessApps, loadBusinessApps } from '@/data/business-apps';
@@ -82,6 +82,7 @@ async function load(userId: string) {
       loadEvents().catch(() => {}),
       loadContractorInvoices().catch(() => {}),
       loadAiInsights().catch(() => {}),
+      loadSavedChats(userId),
     ]);
     stopListening.push(subscribeToNotifications(userId, null));
 
@@ -192,7 +193,7 @@ export function endSession() {
   clientsStore.set([]);
   clearContractorInvoices();
   clearAiInsights();
-  newChat();
+  resetChats();
   jobsStore.set([]);
   clearReminders();
   eventsStore.set([]);

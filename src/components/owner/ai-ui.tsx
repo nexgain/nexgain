@@ -2,13 +2,17 @@ import { useState } from 'react';
 import { router, type Href } from 'expo-router';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { Checkbox } from '@/components/owner/form';
 import { Badge, Button, EmptyState, Icon, OwnerIcons, type IconName } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { cardFor, type ResultCard } from '@/data/ai-cards';
+import { confirmRoster, rosterStaffOn } from '@/data/ai-chat';
 import { dismissAiInsight, insightsFor, useAiInsights, useSampleSnapshot, type AiInsight, type Placement } from '@/data/ai-insights';
 import { formatShortDate } from '@/data/employee-roster';
 import { JOB_STATUS_LABEL, type JobStatus } from '@/data/jobs';
 import { formatMoney } from '@/data/payroll';
+
+import type { RosterProposal } from '../../../supabase/functions/_shared/ai/answer';
 import { fromDateKey } from '@/data/shifts';
 
 /** The app's accent colour, and its soft background (the same as an "info" badge). */
@@ -165,6 +169,18 @@ export function ResultCardView({ card }: { card: ResultCard }) {
         tone: card.status === 'completed' ? 'success' : card.status === 'cancelled' ? 'neutral' : card.staffNames.length ? 'info' : 'warning',
       };
       buttons = [
+        // Asks the AI who to roster (works in the sample preview too: nothing is saved there).
+        ...(card.status !== 'completed' && card.status !== 'cancelled'
+          ? [
+              {
+                label: 'Roster staff',
+                onPress: () => {
+                  rosterStaffOn(card.id, card.reference ? `${card.title} (${card.reference})` : card.title);
+                  router.navigate('/ai-assistant');
+                },
+              },
+            ]
+          : []),
         { label: 'View Job', onPress: go({ pathname: '/job/[id]', params: { id: card.id } }) },
         {
           label: 'View in Calendar',
@@ -226,6 +242,75 @@ export function ResultCardView({ card }: { card: ResultCard }) {
           ))}
         </View>
       )}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// "Who do you want to roster?" (under the AI's answer)
+// ---------------------------------------------------------------------------
+
+/** Tick team members (or All employees) and tap Roster. Busy people are shown, people already on the job can't be picked. */
+export function RosterPicker({ messageId, proposal, done }: { messageId: string; proposal: RosterProposal; done: boolean }) {
+  const [picked, setPicked] = useState<Set<string>>(new Set(proposal.preselected));
+  const pickable = proposal.options.filter((o) => !o.alreadyOn);
+  const allPicked = pickable.length > 0 && pickable.every((o) => picked.has(o.employeeId));
+
+  if (done) return <Text style={styles.rosterDone}>Roster for {proposal.jobLabel} closed.</Text>;
+
+  const toggle = (id: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  return (
+    <View style={styles.card}>
+      <Pressable
+        onPress={() => setPicked(allPicked ? new Set() : new Set(pickable.map((o) => o.employeeId)))}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: allPicked }}
+        style={({ pressed }) => [styles.rosterRow, pressed && styles.pressed]}>
+        <Checkbox checked={allPicked} />
+        <View style={styles.flex}>
+          <Text style={styles.rosterName}>All employees</Text>
+          <Text style={styles.cardLine}>{pickable.length} available to roster</Text>
+        </View>
+      </Pressable>
+      {proposal.options.map((o) => (
+        <Pressable
+          key={o.employeeId}
+          onPress={() => !o.alreadyOn && toggle(o.employeeId)}
+          disabled={o.alreadyOn}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: o.alreadyOn || picked.has(o.employeeId), disabled: o.alreadyOn }}
+          accessibilityLabel={`${o.name}${o.busy ? `, ${o.busy}` : ''}${o.alreadyOn ? ', already on this job' : ''}`}
+          style={({ pressed }) => [styles.rosterRow, styles.divider, o.alreadyOn && styles.disabledRow, pressed && styles.pressed]}>
+          <Checkbox checked={o.alreadyOn || picked.has(o.employeeId)} />
+          <View style={styles.flex}>
+            <Text style={styles.rosterName}>{o.name}</Text>
+            {o.role ? <Text style={styles.cardLine}>{o.role}</Text> : null}
+          </View>
+          {o.alreadyOn ? (
+            <Badge label="Already on this job" tone="neutral" />
+          ) : o.busy ? (
+            <Badge label={o.busy} tone="warning" />
+          ) : (
+            <Badge label="Free" tone="success" />
+          )}
+        </Pressable>
+      ))}
+      <View style={styles.actions}>
+        <Button
+          label={picked.size > 0 ? `Roster ${picked.size === 1 ? '1 person' : `${picked.size} people`}` : 'Roster'}
+          icon={OwnerIcons.check}
+          disabled={picked.size === 0}
+          onPress={() => confirmRoster(messageId, [...picked])}
+        />
+        <Button label="Cancel" variant="secondary" onPress={() => confirmRoster(messageId, null)} />
+      </View>
     </View>
   );
 }
@@ -336,6 +421,24 @@ const styles = StyleSheet.create({
     color: C.text,
     fontSize: 15,
     fontWeight: '700',
+  },
+  rosterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three - 4,
+    paddingVertical: Spacing.two + 2,
+  },
+  rosterName: {
+    color: C.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  rosterDone: {
+    color: C.textSecondary,
+    fontSize: 13,
+  },
+  disabledRow: {
+    opacity: 0.5,
   },
   cardLine: {
     color: C.textSecondary,
