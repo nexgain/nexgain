@@ -25,6 +25,7 @@ import {
   docTotals,
   hasBankDetails,
   invoiceForQuote,
+  jobTimeText,
   lineAmount,
   markQuoteSent,
   setDocStatus,
@@ -310,6 +311,7 @@ export default function DocDetailScreen() {
       <Card title="Job Details" icon={OwnerIcons.calendar}>
         <DetailRow label="Job Type" value={doc.jobType} />
         <DetailRow label="Job Date" value={dateText(doc.jobDate)} />
+        {doc.kind === 'quote' && <DetailRow label="Job Time" value={jobTimeText(doc) || null} />}
         <DetailRow label="Notes" value={doc.description} />
       </Card>
 

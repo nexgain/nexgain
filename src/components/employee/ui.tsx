@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type ScrollViewInstance,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -44,7 +45,7 @@ export function EmployeeScreen({
   title?: string;
   headerRight?: ReactNode;
   children: ReactNode;
-  scrollRef?: React.Ref<ScrollView>;
+  scrollRef?: React.Ref<ScrollViewInstance>;
   onScroll?: React.ComponentProps<typeof ScrollView>['onScroll'];
   /** Indexes of children to pin while scrolling (the title row, when shown, is index 0). */
   stickyHeaderIndices?: number[];

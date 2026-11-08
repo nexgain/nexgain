@@ -15,6 +15,12 @@ import { confirmJob, emailJobDetails, loadJobs } from '@/data/jobs';
 import { fromDateKey, toDateKey } from '@/data/shifts';
 import { toMinutes } from '@/data/time';
 
+/** "08:00" -> "09:00" (stays within the day). */
+const hourAfter = (time: string) => {
+  const minutes = Math.min(toMinutes(time) + 60, 23 * 60 + 59);
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+};
+
 const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
 
 /** Work summary for the client: the quote's notes plus each line item (no prices). */
@@ -39,8 +45,9 @@ export default function ConfirmJobScreen() {
     title: quote?.jobType || (quote ? `Quote ${quote.number}` : ''),
     description: quote ? workSummary(quote) : '',
     date: fromDateKey(quote?.jobDate && quote.jobDate >= todayKey() ? quote.jobDate : addDaysKey(todayKey(), 1)),
-    start: '08:00',
-    end: '12:00',
+    // The quote's job time, if one was picked (no finish: an hour after the start).
+    start: quote?.jobStart ?? '08:00',
+    end: quote?.jobEnd ?? (quote?.jobStart ? hourAfter(quote.jobStart) : '12:00'),
     notes: '',
   }));
   const [submitted, setSubmitted] = useState(false);

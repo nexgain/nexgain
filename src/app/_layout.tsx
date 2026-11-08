@@ -1,6 +1,7 @@
 import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
+import { EmailPreviewHost } from '@/components/email-preview';
 import { Colors } from '@/constants/theme';
 // Starts listening for logins so the signed-in person's business loads automatically.
 import '@/lib/auth';
@@ -24,6 +25,8 @@ export default function RootLayout() {
     <ThemeProvider value={navigationTheme}>
       <StatusBar style="light" />
       <Stack screenOptions={{ headerShown: false }} />
+      {/* Preview before sending from a connected Gmail / Outlook account (src/lib/email.ts). */}
+      <EmailPreviewHost />
     </ThemeProvider>
   );
 }

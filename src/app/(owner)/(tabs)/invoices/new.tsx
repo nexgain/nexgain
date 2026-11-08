@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import { router, useLocalSearchParams, type Href } from 'expo-router';
-import { BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ConfirmDialog } from '@/components/owner/confirm-dialog';
-import { FieldButton, FormField, OptionSheet, OWNER_PICKER_THEME, TextField } from '@/components/owner/form';
+import { Checkbox, FieldButton, FormField, OptionSheet, OWNER_PICKER_THEME, TextField } from '@/components/owner/form';
 import { KIND_LABEL, ScreenHeader, TotalsBlock } from '@/components/owner/invoices-ui';
 import { emptyItem, ItemsEditor, toNumber, type EditItem } from '@/components/owner/items-editor';
 import { Button, Card, OwnerIcons, OwnerScreen } from '@/components/owner/ui';
 import { useNativePicker } from '@/components/pickers/use-native-picker';
-import { Colors as C, Spacing } from '@/constants/theme';
-import { formatShortDate, formatWeekday } from '@/data/employee-roster';
+import { Colors as C, Radius, Spacing } from '@/constants/theme';
+import { format12h, formatShortDate, formatWeekday } from '@/data/employee-roster';
 import {
   docsStore,
   docTotals,
@@ -21,7 +21,8 @@ import {
 } from '@/data/invoices';
 import { formatMoney } from '@/data/payroll';
 import { fromDateKey, JOB_TYPES, toDateKey } from '@/data/shifts';
-import { currentGstRate, useBusiness } from '@/data/business';
+import { currentGstRate, updateBusiness, useBusiness } from '@/data/business';
+import { dateToTime, timeToDate, toMinutes } from '@/data/time';
 
 const STEPS = ['Client & Job Details', 'Add Items', 'Review & Send'] as const;
 
@@ -32,6 +33,9 @@ type Draft = {
   client: Client;
   jobType: string | null;
   jobDate: Date | null;
+  /** Quotes only: "HH:MM" start time and estimated finish (both optional). */
+  jobStart: string | null;
+  jobEnd: string | null;
   description: string;
   items: EditItem[];
   dueDate: Date | null;
@@ -53,6 +57,8 @@ export default function NewDocScreen() {
           client: existing.client,
           jobType: existing.jobType,
           jobDate: existing.jobDate ? fromDateKey(existing.jobDate) : null,
+          jobStart: existing.jobStart ?? null,
+          jobEnd: existing.jobEnd ?? null,
           description: existing.description,
           items: existing.items.map((i) => ({
             id: i.id,
@@ -66,6 +72,8 @@ export default function NewDocScreen() {
           client: { name: '', phone: '', email: '', address: '' },
           jobType: null,
           jobDate: null,
+          jobStart: null,
+          jobEnd: null,
           description: '',
           items: [emptyItem()],
           dueDate: null,
@@ -74,6 +82,8 @@ export default function NewDocScreen() {
 
   const [initialDraft] = useState(draft);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  // The step the owner was heading to when the "no time selected" pop-up opened.
+  const [noTimeTarget, setNoTimeTarget] = useState<number | null>(null);
   const hasChanges = JSON.stringify(draft) !== JSON.stringify(initialDraft);
 
   // Job types come from the services chosen at sign-up (editable under More > Services).
@@ -90,6 +100,28 @@ export default function NewDocScreen() {
   // Keep an existing document's GST rate; new ones follow the business's GST registration.
   const gstRate = existing?.gstRate ?? currentGstRate();
   const totals = docTotals(items, gstRate);
+  const isQuote = kind === 'quote';
+  const timeError =
+    isQuote && draft.jobStart && draft.jobEnd && toMinutes(draft.jobEnd) <= toMinutes(draft.jobStart)
+      ? 'The finish time must be after the start time.'
+      : null;
+
+  // Leaving "Client & Job Details" on a quote with no time: ask first, unless the
+  // owner ticked "Don't show this again".
+  function goToStep(target: number) {
+    if (target > step && step === 0 && timeError) return;
+    if (isQuote && step === 0 && target > 0 && !draft.jobStart && !business?.hideNoTimeWarning) {
+      setNoTimeTarget(target);
+      return;
+    }
+    setStep(target);
+  }
+
+  function answerNoTime(moveOn: boolean, dontShowAgain: boolean) {
+    if (dontShowAgain) updateBusiness({ hideNoTimeWarning: true });
+    if (moveOn && noTimeTarget !== null) setStep(noTimeTarget);
+    setNoTimeTarget(null);
+  }
 
   function persist(status: DocStatus) {
     return saveDoc({
@@ -104,6 +136,8 @@ export default function NewDocScreen() {
       },
       jobType: draft.jobType,
       jobDate: draft.jobDate ? toDateKey(draft.jobDate) : null,
+      jobStart: isQuote ? draft.jobStart : null,
+      jobEnd: isQuote && draft.jobStart ? draft.jobEnd : null,
       description: draft.description.trim(),
       items,
       dueDate: draft.dueDate ? toDateKey(draft.dueDate) : null,
@@ -122,6 +156,7 @@ export default function NewDocScreen() {
       !draft.client.name.trim() && 'Add a client name.',
       items.length === 0 && 'Add at least one item.',
       items.some((i) => !i.description) && 'Every item needs a description.',
+      timeError,
     ].filter(Boolean) as string[];
     setErrors(problems);
     if (problems.length > 0) return;
@@ -176,7 +211,7 @@ export default function NewDocScreen() {
         }
       />
 
-      <StepIndicator step={step} onSelect={setStep} />
+      <StepIndicator step={step} onSelect={goToStep} />
 
       {step === 0 && (
         <>
@@ -214,6 +249,37 @@ export default function NewDocScreen() {
             <FormField label="Job Date">
               <OptionalDateField label="Job Date" value={draft.jobDate} onChange={(jobDate) => update({ jobDate })} />
             </FormField>
+            {isQuote && (
+              <>
+                <View style={styles.timeRow}>
+                  <FormField label="Start Time" style={styles.flex}>
+                    <OptionalTimeField
+                      label="Start Time"
+                      value={draft.jobStart}
+                      fallback="08:00"
+                      onChange={(jobStart) => update({ jobStart })}
+                      hasError={!!timeError}
+                    />
+                  </FormField>
+                  <FormField label="Estimated Finish" style={styles.flex}>
+                    <OptionalTimeField
+                      label="Estimated Finish"
+                      value={draft.jobEnd}
+                      fallback={draft.jobStart ?? '12:00'}
+                      onChange={(jobEnd) => update({ jobEnd })}
+                      hasError={!!timeError}
+                    />
+                  </FormField>
+                </View>
+                {timeError ? <Text style={styles.error}>{timeError}</Text> : null}
+                {(draft.jobStart || draft.jobEnd) && (
+                  <Pressable onPress={() => update({ jobStart: null, jobEnd: null })} accessibilityRole="button" hitSlop={6}>
+                    <Text style={styles.clearTime}>Clear time</Text>
+                  </Pressable>
+                )}
+                <Text style={styles.muted}>Once it&apos;s sent, the quote goes on your calendar on this date and time.</Text>
+              </>
+            )}
             <FormField label="Description">
               <TextField value={draft.description} onChangeText={(description) => update({ description })} multiline accessibilityLabel="Description" />
             </FormField>
@@ -234,7 +300,14 @@ export default function NewDocScreen() {
             <ReviewRow label="Client" value={draft.client.name || '—'} />
             <ReviewRow label="Contact" value={[draft.client.phone, draft.client.email].filter(Boolean).join(' · ') || '—'} />
             <ReviewRow label="Address" value={draft.client.address || '—'} />
-            <ReviewRow label="Job" value={[draft.jobType, draft.jobDate && formatShortDate(draft.jobDate)].filter(Boolean).join(' · ') || '—'} />
+            <ReviewRow
+              label="Job"
+              value={
+                [draft.jobType, draft.jobDate && formatShortDate(draft.jobDate), isQuote && timeText(draft.jobStart, draft.jobEnd)]
+                  .filter(Boolean)
+                  .join(' · ') || '—'
+              }
+            />
             {draft.description ? <ReviewRow label="Description" value={draft.description} /> : null}
           </Card>
 
@@ -283,7 +356,7 @@ export default function NewDocScreen() {
         </View>
         <View style={styles.flex}>
           {step < 2 ? (
-            <Button label={`Next: ${STEPS[step + 1]}`} onPress={() => setStep(step + 1)} />
+            <Button label={`Next: ${STEPS[step + 1]}`} onPress={() => goToStep(step + 1)} />
           ) : (
             <Button label={`Save & Send ${label.one}`} icon={OwnerIcons.check} onPress={saveAndSend} />
           )}
@@ -309,6 +382,8 @@ export default function NewDocScreen() {
         onConfirm={discard}
         onCancel={() => setConfirmDiscard(false)}
       />
+
+      {noTimeTarget !== null && <NoTimeDialog onAnswer={answerNoTime} />}
 
       <OptionSheet
         visible={jobSheetOpen}
@@ -380,6 +455,79 @@ function OptionalDateField({
       />
       {picker.element}
     </>
+  );
+}
+
+/** "8:00 AM – 12:00 PM", "8:00 AM", or "" with no start time. */
+function timeText(start: string | null, end: string | null) {
+  if (!start) return '';
+  return end ? `${format12h(start)} – ${format12h(end)}` : format12h(start);
+}
+
+function OptionalTimeField({
+  label,
+  value,
+  fallback,
+  onChange,
+  hasError,
+}: {
+  label: string;
+  value: string | null;
+  /** Where the picker starts when no time is set yet. */
+  fallback: string;
+  onChange: (time: string) => void;
+  hasError?: boolean;
+}) {
+  const picker = useNativePicker({
+    mode: 'time',
+    value: timeToDate(value ?? fallback),
+    onChange: (d) => onChange(dateToTime(d)),
+    title: label,
+    theme: OWNER_PICKER_THEME,
+  });
+  return (
+    <>
+      <FieldButton
+        value={value ? format12h(value) : null}
+        placeholder="Select time"
+        icon={OwnerIcons.clock}
+        onPress={picker.open}
+        accessibilityLabel={label}
+        hasError={hasError}
+      />
+      {picker.element}
+    </>
+  );
+}
+
+/** "You haven't selected a time" pop-up, with Yes / No and "Don't show this again". */
+function NoTimeDialog({ onAnswer }: { onAnswer: (moveOn: boolean, dontShowAgain: boolean) => void }) {
+  const [dontShow, setDontShow] = useState(false);
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={() => onAnswer(false, dontShow)}>
+      <View style={styles.dialogBackdrop}>
+        <View style={styles.dialog} accessibilityRole="alert">
+          <Text style={styles.dialogTitle}>You haven&apos;t selected a time for this job.</Text>
+          <Text style={styles.dialogText}>Do you want to continue without a time?</Text>
+          <Pressable
+            onPress={() => setDontShow((v) => !v)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: dontShow }}
+            style={styles.dontShow}>
+            <Checkbox checked={dontShow} />
+            <Text style={styles.dialogText}>Don&apos;t show this again</Text>
+          </Pressable>
+          <View style={styles.dialogButtons}>
+            <View style={styles.flex}>
+              <Button label="No" variant="secondary" onPress={() => onAnswer(false, dontShow)} />
+            </View>
+            <View style={styles.flex}>
+              <Button label="Yes" onPress={() => onAnswer(true, dontShow)} />
+            </View>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -507,6 +655,50 @@ const styles = StyleSheet.create({
   },
   errors: {
     gap: 4,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    gap: Spacing.three - 4,
+  },
+  clearTime: {
+    color: C.accent,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  dialogBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing.four,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+  },
+  dialog: {
+    width: '100%',
+    maxWidth: 400,
+    gap: Spacing.three,
+    padding: Spacing.four - 4,
+    borderRadius: Radius.large,
+    backgroundColor: C.surface,
+  },
+  dialogTitle: {
+    color: C.text,
+    fontSize: 17,
+    fontWeight: '700',
+    lineHeight: 22,
+  },
+  dialogText: {
+    color: C.text,
+    fontSize: 15,
+  },
+  dontShow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    minHeight: 32,
+  },
+  dialogButtons: {
+    flexDirection: 'row',
+    gap: Spacing.two,
   },
   error: {
     color: C.danger,

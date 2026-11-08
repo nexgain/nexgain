@@ -1,14 +1,16 @@
 // The owner's calendar: jobs (kept in step with the Jobs page by the database),
-// material deliveries and other reminders. Stored online ("calendar_events",
-// owner only). Job events are changed through their job, never directly.
+// sent quotes (also kept in step by the database), material deliveries and other
+// reminders. Stored online ("calendar_events", owner only). Job and quote events
+// are changed through their job or quote, never directly.
 import type { SymbolViewProps } from 'expo-symbols';
 
 import { localParts, toTimestamp } from '@/data/business-time';
+import { format12h } from '@/data/employee-roster';
 import { createStore } from '@/data/store';
 import { newId, warnSaveFailed } from '@/lib/ids';
 import { supabase } from '@/lib/supabase';
 
-export const EVENT_TYPES = ['job', 'delivery', 'other'] as const;
+export const EVENT_TYPES = ['job', 'quote', 'delivery', 'other'] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
 export type CalendarEvent = {
@@ -22,6 +24,10 @@ export type CalendarEvent = {
   startsAt: string;
   endsAt: string;
   jobId: string | null;
+  /** Quote events: the quote they show (sent or accepted quotes with a job date). */
+  quoteId: string | null;
+  /** No set time (a quote with a date but no time). */
+  allDay: boolean;
   clientId: string | null;
   address: string;
   notes: string;
@@ -37,6 +43,8 @@ type EventRow = {
   starts_at: string;
   ends_at: string;
   job_id: string | null;
+  quote_id?: string | null;
+  all_day?: boolean;
   client_id: string | null;
   address: string;
   notes: string;
@@ -58,6 +66,8 @@ function fromRow(row: EventRow): CalendarEvent {
     startsAt: row.starts_at,
     endsAt: row.ends_at,
     jobId: row.job_id,
+    quoteId: row.quote_id ?? null,
+    allDay: row.all_day ?? false,
     clientId: row.client_id,
     address: row.address,
     notes: row.notes,
@@ -83,7 +93,7 @@ export async function loadEvents() {
 
 export type EventDraft = {
   id?: string;
-  type: Exclude<EventType, 'job'>;
+  type: Exclude<EventType, 'job' | 'quote'>;
   title: string;
   date: string;
   start: string;
@@ -104,6 +114,8 @@ export function saveEvent(draft: EventDraft, businessId: string) {
     id: draft.id ?? newId(),
     startsAt,
     endsAt,
+    quoteId: null,
+    allDay: false,
     clientId: null,
     status: 'scheduled',
   };
@@ -140,6 +152,12 @@ const icon = (ios: string, android: string) => ({ ios, android, web: android }) 
 /** Each type's colour (fixed, readable on the dark owner theme) and icon. */
 export const EVENT_TYPE_INFO: Record<EventType, { label: string; color: string; icon: SymbolViewProps['name'] }> = {
   job: { label: 'Job', color: '#3987e5', icon: icon('briefcase.fill', 'work') },
+  quote: { label: 'Quote', color: '#1fa898', icon: icon('doc.text.fill', 'request_quote') },
   delivery: { label: 'Delivery', color: '#c98500', icon: icon('shippingbox.fill', 'local_shipping') },
   other: { label: 'Other', color: '#9085e9', icon: icon('note.text', 'sticky_note_2') },
 };
+
+/** "8:00 AM – 12:00 PM", or "All day". */
+export function eventTimeText(e: Pick<CalendarEvent, 'start' | 'end' | 'allDay'>) {
+  return e.allDay ? 'All day' : `${format12h(e.start)} – ${format12h(e.end)}`;
+}

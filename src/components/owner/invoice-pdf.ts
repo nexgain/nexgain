@@ -9,6 +9,7 @@ import {
   docNumberLabel,
   docTotals,
   gstLabel,
+  jobTimeText,
   lineAmount,
   quoteLinkToken,
   type BusinessPayment,
@@ -122,7 +123,7 @@ export function buildDocHtml(doc: SalesDoc, payment: BusinessPayment, { receipt 
       <div>
         <strong>Job</strong><br>
         ${escape(doc.jobType ?? '—')}<br>
-        ${dateText(doc.jobDate)}
+        ${dateText(doc.jobDate)}${doc.kind === 'quote' && jobTimeText(doc) ? `<br>${jobTimeText(doc)}` : ''}
       </div>
     </div>
     ${doc.description ? `<div class="muted">${escape(doc.description)}</div>` : ''}

@@ -7,6 +7,7 @@ import {
   Text,
   View,
   type LayoutChangeEvent,
+  type ScrollViewInstance,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -64,7 +65,7 @@ export function OwnerScreen({
   scrollRef,
 }: {
   children: ReactNode;
-  scrollRef?: React.Ref<ScrollView>;
+  scrollRef?: React.Ref<ScrollViewInstance>;
 }) {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>

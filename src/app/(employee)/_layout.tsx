@@ -17,7 +17,7 @@ const employeeNavigationTheme = {
 };
 
 export const unstable_settings = {
-  initialRouteName: '(tabs)',
+  anchor: '(tabs)',
 };
 
 export default function EmployeeLayout() {

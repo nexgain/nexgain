@@ -2,7 +2,9 @@
 // load their data from the database and listen for live changes. Cleared on log out.
 import { availabilityStore } from '@/data/availability';
 import { businessStore, clearBusiness, loadMyBusiness } from '@/data/business';
+import { clearBusinessApps, loadBusinessApps } from '@/data/business-apps';
 import { eventsStore, loadEvents } from '@/data/calendar';
+import { clearConnectedAccounts, loadConnectedAccounts } from '@/data/connected-accounts';
 import { clientsStore, loadClients } from '@/data/clients';
 import { clearContractorInvoices, loadContractorInvoices } from '@/data/contractor-invoices';
 import { jobsStore, loadJobs, loadMyAssignedJobs } from '@/data/jobs';
@@ -17,6 +19,7 @@ import { clearNotifications, loadNotifications, subscribeToNotifications } from 
 import { loadPayRuns, payRunsStore } from '@/data/pay-runs';
 import { loadPayslips, payslipsStore } from '@/data/payroll';
 import { qualificationsStore } from '@/data/qualifications';
+import { clearReminders, loadReminders } from '@/data/reminders';
 import { loadShifts, shiftsStore } from '@/data/shifts';
 import { loadSuperPayments, superPaymentsStore } from '@/data/super-payments';
 import { supabase } from '@/lib/supabase';
@@ -62,6 +65,8 @@ async function load(userId: string) {
       loadInvites().catch(() => {}),
       loadDocs().catch(() => {}),
       loadBusinessPayment().catch(() => {}),
+      loadBusinessApps().catch(() => {}),
+      loadConnectedAccounts().catch(() => {}),
       loadExpenses().catch(() => {}),
       loadNotifications(null),
       loadShifts().catch(() => {}),
@@ -71,6 +76,7 @@ async function load(userId: string) {
       loadSuperPayments().catch(() => {}),
       loadClients().catch(() => {}),
       loadJobs().catch(() => {}),
+      loadReminders().catch(() => {}),
       loadEvents().catch(() => {}),
       loadContractorInvoices().catch(() => {}),
     ]);
@@ -89,6 +95,8 @@ async function load(userId: string) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'super_payments', filter }, refresh(loadSuperPayments))
       // Jobs change when shifts are linked to them (Assigned) and when they're booked or moved.
       .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs', filter }, refresh(loadJobs))
+      // Reminders sent by the server (Scheduled -> Sent / Couldn't send).
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'job_reminders', filter }, refresh(loadReminders))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_events', filter }, refresh(loadEvents))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'contractor_invoices', filter }, refresh(loadContractorInvoices))
       // Customers accepting or declining quotes online, and quotes being booked as jobs.
@@ -163,6 +171,8 @@ export function endSession() {
   invitesStore.set([]);
   clearDocs();
   clearBusinessPayment();
+  clearBusinessApps();
+  clearConnectedAccounts();
   expensesStore.set([]);
   qualificationsStore.set({});
   currentEmployeeStore.set(null);
@@ -177,5 +187,6 @@ export function endSession() {
   clientsStore.set([]);
   clearContractorInvoices();
   jobsStore.set([]);
+  clearReminders();
   eventsStore.set([]);
 }

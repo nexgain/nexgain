@@ -2,9 +2,10 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Icon, OwnerIcons } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
-import { EVENT_TYPE_INFO, type CalendarEvent } from '@/data/calendar';
+import { EVENT_TYPE_INFO, eventTimeText, type CalendarEvent } from '@/data/calendar';
 import { format12h, formatShortDate, formatWeekday } from '@/data/employee-roster';
 import { employeeFullName, type Employee } from '@/data/employees';
+import { isQuoteExpired, useDocs } from '@/data/invoices';
 import { JOB_STATUS_LABEL, type Job, type JobStatus } from '@/data/jobs';
 import { fromDateKey } from '@/data/shifts';
 
@@ -112,13 +113,17 @@ export function EventRow({
   const info = EVENT_TYPE_INFO[event.type];
   const completed = event.type === 'job' && event.status === 'completed';
   const cancelled = event.type === 'job' && event.status === 'cancelled';
-  const color = completed || cancelled ? C.textSecondary : info.color;
+  // Quotes: "Expired" once the valid-until date passes without an answer (greyed out).
+  const quote = useDocs().find((d) => event.type === 'quote' && d.id === event.quoteId);
+  const expired = !!quote && isQuoteExpired(quote);
+  const accepted = event.type === 'quote' && event.status === 'accepted';
+  const color = completed || cancelled || expired ? C.textSecondary : info.color;
   const date = fromDateKey(event.date);
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${info.label}: ${event.title}${completed ? ', completed' : ''}`}
+      accessibilityLabel={`${info.label}: ${event.title}${completed ? ', completed' : expired ? ', expired' : accepted ? ', accepted' : ''}`}
       style={({ pressed }) => [styles.eventRow, showDivider && styles.divider, pressed && styles.pressed]}>
       <View style={[styles.eventIcon, { backgroundColor: `${color}26` }]}>
         <Icon name={completed ? { ios: 'checkmark', android: 'check', web: 'check' } : info.icon} color={color} size={16} />
@@ -129,7 +134,7 @@ export function EventRow({
         </Text>
         <Text style={styles.muted} numberOfLines={1}>
           {showDate ? `${formatWeekday(date)} ${formatShortDate(date, false)} · ` : ''}
-          {format12h(event.start)} – {format12h(event.end)}
+          {eventTimeText(event)}
           {subtitle ? ` · ${subtitle}` : ''}
         </Text>
       </View>
@@ -137,6 +142,10 @@ export function EventRow({
         <Text style={[styles.tag, { color: C.success }]}>Completed</Text>
       ) : cancelled ? (
         <Text style={styles.tag}>Cancelled</Text>
+      ) : expired ? (
+        <Text style={styles.tag}>Quote expired</Text>
+      ) : accepted ? (
+        <Text style={[styles.tag, { color: C.success }]}>Quote accepted</Text>
       ) : (
         <Text style={[styles.tag, { color: info.color }]}>{info.label}</Text>
       )}

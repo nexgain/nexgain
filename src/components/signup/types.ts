@@ -2,6 +2,7 @@
 // between steps (so going back never loses anything) and saved as the business
 // profile at the end. The password is never saved.
 import type { EmailApp } from '@/data/business';
+import type { ChosenApp } from '@/data/business-apps';
 
 export type SelectedIndustry = {
   name: string;
@@ -45,6 +46,8 @@ export type SignupData = {
   bankAccountName: string;
   bankBsb: string;
   bankAccountNumber: string;
+  /** Apps the owner uses (not connected yet), saved once the business is created. */
+  apps: ChosenApp[];
 };
 
 export const EMPTY_SIGNUP: SignupData = {
@@ -74,6 +77,7 @@ export const EMPTY_SIGNUP: SignupData = {
   bankAccountName: '',
   bankBsb: '',
   bankAccountNumber: '',
+  apps: [],
 };
 
 export type StepProps = {

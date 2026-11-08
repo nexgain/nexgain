@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { DateField, FormField, TextField, TimeField } from '@/components/owner/form';
+import { DateField, FormField, SwitchRow, TextField, TimeField } from '@/components/owner/form';
 import { ConfirmDialog, ScreenHeader, TotalsBlock } from '@/components/owner/invoices-ui';
 import { EventRow, jobWhen, JobStatusPill, staffNames } from '@/components/owner/jobs-ui';
-import { Button, Card, EmptyState, goBack, Icon, OwnerIcons, OwnerScreen } from '@/components/owner/ui';
+import { Badge, Button, Card, EmptyState, goBack, Icon, OwnerIcons, OwnerScreen } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
+import { useBusiness } from '@/data/business';
 import { useCalendarEvents } from '@/data/calendar';
 import { useClients } from '@/data/clients';
 import { useCurrentEmployee } from '@/data/current-employee';
@@ -16,12 +17,14 @@ import { docTotals, lineAmount, useDocs } from '@/data/invoices';
 import {
   emailJobDetails,
   rescheduleJob,
+  setJobReminders,
   setJobStatus,
   updateJobNotes,
   useJobs,
   type JobStatus,
 } from '@/data/jobs';
 import { formatMoney } from '@/data/payroll';
+import { reminderLines, useReminders } from '@/data/reminders';
 import { fromDateKey, toDateKey } from '@/data/shifts';
 import { toMinutes } from '@/data/time';
 
@@ -36,6 +39,8 @@ export default function JobDetailScreen() {
   const employees = useEmployees();
   const quote = useDocs().find((d) => d.id === job?.quoteId);
   const deliveries = useCalendarEvents().filter((e) => e.type === 'delivery' && e.jobId === id);
+  const business = useBusiness();
+  const reminders = useReminders();
 
   const [editing, setEditing] = useState<{ date: Date; start: string; end: string } | null>(null);
   const [askEmail, setAskEmail] = useState(false);
@@ -181,6 +186,45 @@ export default function JobDetailScreen() {
           onPress={() => Linking.openURL(`mailto:${contact.email}`)}
         />
       </Card>
+
+      {business && (
+        <Card title="Reminders" icon={{ ios: 'bell.badge.fill', android: 'notifications_active', web: 'notifications_active' }}>
+          {!business.reminders.enabled ? (
+            <Text style={styles.muted}>Automatic reminders are turned off for your business.</Text>
+          ) : (
+            <>
+              <SwitchRow
+                label="Email the client a reminder"
+                hint="At 9:00 am before the job, from your own email."
+                value={job.remindersEnabled}
+                onChange={async (on) => {
+                  if (!(await setJobReminders(job.id, on))) {
+                    setMessage({ tone: 'error', text: "Couldn't save. Check your internet connection and try again." });
+                  }
+                }}
+              />
+              {!job.remindersEnabled ? (
+                <Text style={styles.muted}>Off for this job: the client won&apos;t get reminders.</Text>
+              ) : (
+                <>
+                  {!contact.email && open && (
+                    <Text style={styles.error}>This client has no email address, so they can&apos;t get reminders.</Text>
+                  )}
+                  {reminderLines(job, business, reminders).map((line) => (
+                    <View key={line.kind} style={styles.reminder}>
+                      <Badge label={line.label} tone={line.tone} />
+                      <Text style={[styles.body, styles.flex, line.tone === 'danger' && { color: C.danger }]}>{line.text}</Text>
+                    </View>
+                  ))}
+                </>
+              )}
+            </>
+          )}
+          <Pressable onPress={() => router.navigate('/reminders')} accessibilityRole="link" hitSlop={6}>
+            <Text style={styles.link}>Reminder settings</Text>
+          </Pressable>
+        </Card>
+      )}
 
       <Card title="Work" icon={OwnerIcons.receipt}>
         <Text style={styles.body}>{job.description || 'No work description.'}</Text>
@@ -370,6 +414,11 @@ const styles = StyleSheet.create({
   },
   itemRow: {
     flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  reminder: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.two,
   },
   contact: {
