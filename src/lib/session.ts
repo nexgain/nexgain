@@ -1,5 +1,7 @@
 // What happens after someone logs in (or reopens the app while logged in):
 // load their data from the database and listen for live changes. Cleared on log out.
+import { clearAiInsights, loadAiInsights } from '@/data/ai-insights';
+import { newChat } from '@/data/ai-chat';
 import { availabilityStore } from '@/data/availability';
 import { businessStore, clearBusiness, loadMyBusiness } from '@/data/business';
 import { clearBusinessApps, loadBusinessApps } from '@/data/business-apps';
@@ -79,6 +81,7 @@ async function load(userId: string) {
       loadReminders().catch(() => {}),
       loadEvents().catch(() => {}),
       loadContractorInvoices().catch(() => {}),
+      loadAiInsights().catch(() => {}),
     ]);
     stopListening.push(subscribeToNotifications(userId, null));
 
@@ -99,6 +102,8 @@ async function load(userId: string) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'job_reminders', filter }, refresh(loadReminders))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_events', filter }, refresh(loadEvents))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'contractor_invoices', filter }, refresh(loadContractorInvoices))
+      // The AI health check finished (every morning, or after Refresh).
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ai_insights', filter }, refresh(loadAiInsights))
       // Customers accepting or declining quotes online, and quotes being booked as jobs.
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_docs', filter }, (payload) =>
         applyRemoteDoc(payload.eventType, (payload.eventType === 'DELETE' ? payload.old : payload.new) as Parameters<typeof applyRemoteDoc>[1]),
@@ -186,6 +191,8 @@ export function endSession() {
   jobReportsStore.set([]);
   clientsStore.set([]);
   clearContractorInvoices();
+  clearAiInsights();
+  newChat();
   jobsStore.set([]);
   clearReminders();
   eventsStore.set([]);

@@ -38,6 +38,7 @@ const ICONS = {
   car: icon('car.fill', 'directions_car'),
   megaphone: icon('megaphone.fill', 'campaign'),
   team: icon('person.3.fill', 'groups'),
+  sparkles: icon('sparkles', 'auto_awesome'),
 };
 
 /** Owner notification types. Categories match the owner's filter pills. */
@@ -58,6 +59,10 @@ export const OWNER_TYPES = {
   payment_overdue: { category: 'Finance', icon: ICONS.dollar, tone: 'red', actions: ['View invoice', 'Send reminder'] },
   roster_published: { category: 'System', icon: ICONS.calendar, tone: 'blue', actions: ['Open roster'] },
   stock_low: { category: 'System', icon: ICONS.box, tone: 'amber', actions: ['Reorder stock'] },
+  // Urgent findings from the AI health check (see src/data/ai-insights.ts).
+  ai_alert_finance: { category: 'Finance', icon: ICONS.sparkles, tone: 'blue', actions: ['Open AI Assistant'] },
+  ai_alert_jobs: { category: 'Jobs', icon: ICONS.sparkles, tone: 'blue', actions: ['Open AI Assistant'] },
+  ai_alert_team: { category: 'Employees', icon: ICONS.sparkles, tone: 'blue', actions: ['Open AI Assistant'] },
 } satisfies Record<string, TypeInfo>;
 
 /** Employee notification types. */

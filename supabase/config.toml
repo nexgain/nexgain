@@ -28,3 +28,13 @@ verify_jwt = true
 
 [functions.integration-data]
 verify_jwt = true
+
+# The AI Assistant chat. Needs the owner's NexGain login. Secret: ANTHROPIC_API_KEY.
+[functions.ai-assistant]
+verify_jwt = true
+
+# The AI health check. Called by its daily timer (pg_cron), which has no NexGain
+# login; the AI_INSIGHTS_CRON_SECRET password (or the owner's login, for Refresh)
+# is checked instead.
+[functions.ai-insights]
+verify_jwt = false

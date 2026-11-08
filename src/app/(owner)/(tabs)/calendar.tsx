@@ -60,8 +60,16 @@ export default function CalendarScreen() {
 
   // Opened from a job's delivery list: open that event.
   const navigation = useNavigation();
-  const params = useLocalSearchParams<{ event?: string }>();
+  const params = useLocalSearchParams<{ event?: string; date?: string }>();
   const [openedParam, setOpenedParam] = useState<string | null>(null);
+  // Opened from an AI Assistant job card ("View in Calendar"): show that day.
+  const [openedDate, setOpenedDate] = useState<string | null>(null);
+  if (params.date && params.date !== openedDate && /^\d{4}-\d{2}-\d{2}$/.test(params.date)) {
+    setOpenedDate(params.date);
+    setSelected(params.date);
+  } else if (!params.date && openedDate !== null) {
+    setOpenedDate(null);
+  }
   if (params.event && params.event !== openedParam) {
     setOpenedParam(params.event);
     const e = events.find((x) => x.id === params.event);
@@ -72,7 +80,7 @@ export default function CalendarScreen() {
   } else if (!params.event && openedParam !== null) {
     setOpenedParam(null);
   }
-  useFocusEffect(useCallback(() => () => navigation.setParams({ event: undefined } as never), [navigation]));
+  useFocusEffect(useCallback(() => () => navigation.setParams({ event: undefined, date: undefined } as never), [navigation]));
 
   if (me) return <Redirect href="/home" />;
 

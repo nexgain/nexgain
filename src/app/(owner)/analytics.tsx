@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { AiInsightsList } from '@/components/owner/ai-ui';
 import { BarChart, DonutChart, LineChart, SeriesColors } from '@/components/owner/charts';
 import {
   Card,
@@ -140,7 +141,7 @@ export default function AnalyticsScreen() {
               <DonutChart segments={topCategories} formatValue={money} />
             </Card>
             <Card title="AI Insights" icon={OwnerIcons.sparkles}>
-              <EmptyState icon={OwnerIcons.sparkles} message="No data yet" />
+              <AiInsightsList placement="analytics" empty="No data yet" />
             </Card>
           </ResponsiveRow>
         </>

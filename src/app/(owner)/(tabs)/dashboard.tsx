@@ -5,7 +5,6 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import {
   ActionRow,
   Card,
-  EmptyState,
   Icon,
   OwnerIcons,
   OwnerScreen,
@@ -14,6 +13,7 @@ import {
   StatCard,
   StatGrid,
 } from '@/components/owner/ui';
+import { AiInsightsList } from '@/components/owner/ai-ui';
 import { NotificationsSection } from '@/components/owner/notifications-section';
 import { UpcomingSection } from '@/components/owner/upcoming';
 import { Colors as C } from '@/constants/theme';
@@ -112,7 +112,7 @@ export default function OwnerDashboardScreen() {
 
       <ResponsiveRow weights={[1.6, 1]}>
         <Card title="AI Insights & Recommendations" icon={OwnerIcons.sparkles}>
-          <EmptyState icon={OwnerIcons.sparkles} message={NO_INSIGHTS} />
+          <AiInsightsList placement="attention" empty={NO_INSIGHTS} />
         </Card>
 
         <Card title="Quick Actions">
@@ -159,7 +159,7 @@ export default function OwnerDashboardScreen() {
       </ResponsiveRow>
 
       <Card title="Other Insights" icon={OwnerIcons.lightbulb}>
-        <EmptyState icon={OwnerIcons.lightbulb} message={NO_INSIGHTS} />
+        <AiInsightsList placement="other" empty={NO_INSIGHTS} emptyIcon={OwnerIcons.lightbulb} />
       </Card>
     </OwnerScreen>
   );
