@@ -11,6 +11,11 @@ verify_jwt = false
 [functions.oauth-callback]
 verify_jwt = false
 
+# Basiq sends the browser here after the bank login, without a NexGain login;
+# the one-time state code is checked instead.
+[functions.bank-callback]
+verify_jwt = false
+
 # Called by the reminders timer (pg_cron), which has no NexGain login; the
 # REMINDERS_CRON_SECRET password (or, for a test, the owner's login) is checked instead.
 [functions.send-reminders]
@@ -27,4 +32,13 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.integration-data]
+verify_jwt = true
+
+[functions.bank-connect]
+verify_jwt = true
+
+[functions.bank-sync]
+verify_jwt = true
+
+[functions.bank-disconnect]
 verify_jwt = true

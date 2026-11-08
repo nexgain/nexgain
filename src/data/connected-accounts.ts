@@ -104,6 +104,13 @@ export function noteOAuthReturn(params: ReturnParams) {
   lastReturn = { params, at: Date.now() };
 }
 
+/** The result of a login that came back as a link since `since` (once only), e.g. the bank login. */
+export function takeOAuthReturn(since: number) {
+  const found = lastReturn && lastReturn.at >= since ? lastReturn.params : null;
+  if (found) lastReturn = null;
+  return found;
+}
+
 export type ConnectResult =
   | { status: 'connected'; email: string }
   | { status: 'cancelled' }

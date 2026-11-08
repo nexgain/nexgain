@@ -57,6 +57,18 @@ export default function OwnerTabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="transactions"
+        options={{
+          title: 'Transactions',
+          tabBarIcon: (props) => (
+            <TabIcon
+              name={{ ios: 'arrow.left.arrow.right', android: 'swap_horiz', web: 'swap_horiz' }}
+              {...props}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="payroll"
         options={{
           title: 'Payroll',

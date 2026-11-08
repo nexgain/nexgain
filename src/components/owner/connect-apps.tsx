@@ -1,7 +1,10 @@
 // The app-connection list, shared by More > Integrations (dark) and owner sign-up
-// (light) so both always look and work the same. Gmail, Outlook and Square really
-// connect (see src/data/connected-accounts.ts); every other app is just marked as
-// used ("Added - coming soon") or requested.
+// (light) so both always look and work the same: Email (Gmail, Outlook, Mail,
+// Other) and Bank account (src/data/bank.ts).
+// The other apps (Xero, Square, Stripe...) are hidden while
+// Features.showExtraIntegrations is off (src/constants/features.ts). When shown,
+// Square really connects (see src/data/connected-accounts.ts); every other app is
+// just marked as used ("Added - coming soon") or requested.
 import { useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,7 +13,17 @@ import { SvgXml } from 'react-native-svg';
 import { Icon, type IconName } from '@/components/owner/ui';
 import { SignupColors } from '@/components/signup/fields';
 import { BrandLogos, BrandTileColors, type BrandLogoName } from '@/constants/brand-logos';
+import { Features } from '@/constants/features';
 import { Colors } from '@/constants/theme';
+import {
+  connectBank,
+  disconnectBank,
+  isBankConnected,
+  syncBank,
+  useBankAccounts,
+  useBankConnection,
+  useBankSyncing,
+} from '@/data/bank';
 import { EMAIL_APP_CHOICES, shownEmailApp, type EmailApp } from '@/data/business';
 import { findChosen, type ChosenApp } from '@/data/business-apps';
 import {
@@ -27,6 +40,7 @@ import {
 } from '@/data/connected-accounts';
 import { format12h, formatShortDate } from '@/data/employee-roster';
 import { APP_CATALOG, CATEGORY_LABEL, findCatalogApp, type AppCategory, type CatalogApp } from '@/data/integration-apps';
+import { formatMoney } from '@/data/payroll';
 import { emailAppHint } from '@/lib/email';
 
 type Palette = Record<'page' | 'card' | 'raised' | 'border' | 'text' | 'sub' | 'accent' | 'accentSoft' | 'success' | 'danger', string>;
@@ -384,34 +398,40 @@ export function ConnectApps({
 
       {optionalNote && <Text style={[styles.note, { color: p.sub }]}>{optionalNote}</Text>}
 
-      <View style={styles.section}>
-        <Text style={[styles.heading, { color: p.text }]}>Payments</Text>
-        <Group p={p}>
-          {PAYMENT_APPS.map(listedRow)}
-          {paymentExtras.map(extraRow)}
-          {openRow('Other', 'payments')}
-        </Group>
-      </View>
+      <BankSection p={p} beforeConnect={beforeConnect} />
 
-      <View style={styles.section}>
-        <Group p={p}>
-          {MORE_APPS.map(listedRow)}
-          {otherExtras.map(extraRow)}
-          {openRow('Other apps', null)}
-        </Group>
-        {appMessage && (
-          <Text
-            accessibilityRole={appMessage.tone === 'error' ? 'alert' : undefined}
-            style={[
-              styles.message,
-              { color: appMessage.tone === 'error' ? p.danger : appMessage.tone === 'ok' ? p.success : p.text },
-            ]}>
-            {appMessage.text}
-          </Text>
-        )}
-      </View>
+      {Features.showExtraIntegrations && (
+        <View style={styles.section}>
+          <Text style={[styles.heading, { color: p.text }]}>Payments</Text>
+          <Group p={p}>
+            {PAYMENT_APPS.map(listedRow)}
+            {paymentExtras.map(extraRow)}
+            {openRow('Other', 'payments')}
+          </Group>
+        </View>
+      )}
 
-      {openApp && CONNECTABLE[openApp] && (
+      {Features.showExtraIntegrations && (
+        <View style={styles.section}>
+          <Group p={p}>
+            {MORE_APPS.map(listedRow)}
+            {otherExtras.map(extraRow)}
+            {openRow('Other apps', null)}
+          </Group>
+          {appMessage && (
+            <Text
+              accessibilityRole={appMessage.tone === 'error' ? 'alert' : undefined}
+              style={[
+                styles.message,
+                { color: appMessage.tone === 'error' ? p.danger : appMessage.tone === 'ok' ? p.success : p.text },
+              ]}>
+              {appMessage.text}
+            </Text>
+          )}
+        </View>
+      )}
+
+      {Features.showExtraIntegrations && openApp && CONNECTABLE[openApp] && (
         <AppDetails
           p={p}
           name={openApp}
@@ -427,12 +447,170 @@ export function ConnectApps({
 
       <AppSearch
         p={p}
-        visible={search !== null}
+        visible={Features.showExtraIntegrations && search !== null}
         category={search?.category ?? null}
         apps={apps}
         onToggleApp={onToggleApp}
         onClose={() => setSearch(null)}
       />
+    </View>
+  );
+}
+
+/** "Synced just now", "Synced 5 min ago", "Synced 3 hours ago", or the date. */
+function syncedText(iso: string | null) {
+  if (!iso) return 'Not synced yet';
+  const minutes = Math.round((Date.now() - Date.parse(iso)) / 60_000);
+  if (minutes < 1) return 'Synced just now';
+  if (minutes < 60) return `Synced ${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `Synced ${hours} hour${hours === 1 ? '' : 's'} ago`;
+  return `Synced ${formatShortDate(new Date(iso))}`;
+}
+
+const BANK_LOGO: Logo = { symbol: { ios: 'building.columns.fill', android: 'account_balance', web: 'account_balance' }, tile: '#2563EB' };
+const SYNC_LOGO = { ios: 'arrow.clockwise', android: 'sync', web: 'sync' } as const;
+const ADD_LOGO = { ios: 'plus', android: 'add', web: 'add' } as const;
+const CHEVRON_ICON = { ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' } as const;
+
+type Message = { tone: 'ok' | 'error' | 'info'; text: string };
+
+/** Bank account: connect the business bank (view only) so its transactions come into NexGain. */
+function BankSection({ p, beforeConnect }: { p: Palette; beforeConnect?: () => Promise<boolean> }) {
+  const connection = useBankConnection();
+  const accounts = useBankAccounts();
+  const syncing = useBankSyncing();
+  const [busy, setBusy] = useState<'connect' | 'disconnect' | null>(null);
+  const [message, setMessage] = useState<Message | null>(null);
+  const connected = isBankConnected(connection);
+  const working = busy !== null || syncing;
+
+  async function connect() {
+    setMessage(null);
+    setBusy('connect');
+    try {
+      if (beforeConnect && !(await beforeConnect())) return;
+      const result = await connectBank();
+      if (result.status === 'connected') {
+        setMessage({ tone: 'ok', text: 'Bank connected. Your transactions are in the Transactions tab.' });
+      } else if (result.status === 'cancelled') {
+        setMessage({ tone: 'info', text: 'The bank login was closed before it finished, so nothing was connected. Tap Connect to try again.' });
+      } else {
+        setMessage({ tone: 'error', text: result.message });
+      }
+    } catch {
+      setMessage({ tone: 'error', text: 'Couldn’t connect your bank. Check your internet connection and try again.' });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function sync() {
+    setMessage(null);
+    const result = await syncBank({ refresh: true });
+    if (!result.ok) setMessage({ tone: 'error', text: result.message });
+    else {
+      const text = result.added === 0 ? 'Up to date. No new transactions.' : `${result.added} new transaction${result.added === 1 ? '' : 's'} added.`;
+      setMessage({ tone: 'ok', text });
+    }
+  }
+
+  async function disconnect() {
+    const ok = await confirmDisconnect(
+      'your bank',
+      'NexGain will stop seeing your bank account, and its transactions will be removed from NexGain. Expenses you added yourself stay.',
+    );
+    if (!ok) return;
+    setMessage(null);
+    setBusy('disconnect');
+    const error = await disconnectBank();
+    setBusy(null);
+    setMessage(error ? { tone: 'error', text: error } : { tone: 'info', text: 'Bank disconnected.' });
+  }
+
+  const spinner = <ActivityIndicator color={p.accent} />;
+
+  return (
+    <View style={styles.section}>
+      <Text style={[styles.heading, { color: p.text }]}>Bank account</Text>
+      <Group p={p}>
+        {!connected ? (
+          <AppRow
+            p={p}
+            logo={BANK_LOGO}
+            name="Business bank account"
+            sub="Your bank transactions come into NexGain automatically. View only: NexGain can never move money."
+            onPress={working ? undefined : connect}
+            accessibilityLabel="Business bank account, not connected. Tap to connect."
+            right={
+              busy === 'connect' ? (
+                spinner
+              ) : (
+                <SmallButton p={p} label="Connect" filled onPress={connect} accessibilityLabel="Connect your business bank account" disabled={working} />
+              )
+            }
+          />
+        ) : (
+          <>
+            {accounts.length === 0 ? (
+              <AppRow
+                p={p}
+                logo={BANK_LOGO}
+                name="Getting your accounts…"
+                sub="Your bank is sending your accounts and transactions. This can take a minute."
+                right={syncing ? spinner : <SmallButton p={p} label="Check" onPress={sync} accessibilityLabel="Check for your bank accounts" />}
+              />
+            ) : (
+              accounts.map((a) => (
+                <AppRow
+                  key={a.id}
+                  p={p}
+                  logo={BANK_LOGO}
+                  name={[a.institution, a.name].filter(Boolean).join(' · ')}
+                  sub={[a.maskedNumber, a.balance !== null ? `Balance ${formatMoney(a.balance)}` : ''].filter(Boolean).join(' · ')}
+                  right={<ConnectedLabel p={p} />}
+                />
+              ))
+            )}
+            <AppRow
+              p={p}
+              logo={{ symbol: SYNC_LOGO, tile: p.accent }}
+              name={syncing ? 'Getting your latest transactions…' : syncedText(connection?.lastSyncedAt ?? null)}
+              sub="NexGain checks for new transactions when you open Transactions."
+              right={syncing ? spinner : <SmallButton p={p} label="Sync now" onPress={sync} accessibilityLabel="Get the latest bank transactions" disabled={working} />}
+            />
+            <AppRow
+              p={p}
+              logo={{ symbol: ADD_LOGO, tile: p.accent }}
+              name="Add another bank"
+              onPress={working ? undefined : connect}
+              accessibilityLabel="Connect another bank account"
+              right={busy === 'connect' ? spinner : <Icon name={CHEVRON_ICON} color={p.sub} size={14} />}
+            />
+          </>
+        )}
+      </Group>
+      {message && (
+        <Text
+          accessibilityRole={message.tone === 'error' ? 'alert' : undefined}
+          style={[styles.message, { color: message.tone === 'error' ? p.danger : message.tone === 'ok' ? p.success : p.text }]}>
+          {message.text}
+        </Text>
+      )}
+      <Text style={[styles.hint, { color: p.sub }]}>
+        You log in on your bank’s own secure page, through Basiq (an accredited open banking provider). NexGain never sees your bank password.
+      </Text>
+      {connected && (
+        <Pressable
+          onPress={disconnect}
+          disabled={working}
+          accessibilityRole="button"
+          accessibilityLabel="Disconnect your bank"
+          hitSlop={8}
+          style={({ pressed }) => [styles.disconnect, (pressed || working) && styles.pressed]}>
+          {busy === 'disconnect' ? <ActivityIndicator color={p.danger} /> : <Text style={[styles.add, { color: p.danger }]}>Disconnect bank</Text>}
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -946,6 +1124,11 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.7,
+  },
+  disconnect: {
+    alignSelf: 'flex-start',
+    minHeight: 44,
+    justifyContent: 'center',
   },
   connectedRow: {
     flexDirection: 'row',

@@ -1,6 +1,7 @@
 // What happens after someone logs in (or reopens the app while logged in):
 // load their data from the database and listen for live changes. Cleared on log out.
 import { availabilityStore } from '@/data/availability';
+import { clearBank, loadBank } from '@/data/bank';
 import { businessStore, clearBusiness, loadMyBusiness } from '@/data/business';
 import { clearBusinessApps, loadBusinessApps } from '@/data/business-apps';
 import { eventsStore, loadEvents } from '@/data/calendar';
@@ -67,6 +68,7 @@ async function load(userId: string) {
       loadBusinessApps().catch(() => {}),
       loadConnectedAccounts().catch(() => {}),
       loadExpenses().catch(() => {}),
+      loadBank().catch(() => {}),
       loadNotifications(null),
       loadShifts().catch(() => {}),
       loadClockSessions().catch(() => {}),
@@ -169,6 +171,7 @@ export function endSession() {
   clearBusinessApps();
   clearConnectedAccounts();
   expensesStore.set([]);
+  clearBank();
   qualificationsStore.set({});
   currentEmployeeStore.set(null);
   clearNotifications();
