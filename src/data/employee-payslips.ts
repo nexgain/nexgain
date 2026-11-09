@@ -3,12 +3,12 @@
 // payslip never changes afterwards. (The database only lets employees read
 // their own payslips.)
 import { formatShortDate } from '@/data/employee-roster';
+import { frequencyForDates } from '@/data/pay-schedule';
 import { usePayslipRecords, type PayslipRecord } from '@/data/payroll';
 import { fromDateKey } from '@/data/shifts';
 import { payrollLabel } from '@/lib/payment-files/types';
 
 /** Pay periods are Monday to Sunday. */
-export const PAY_FREQUENCY = 'Weekly';
 
 export type Payslip = {
   id: string;
@@ -70,7 +70,7 @@ export function payslipView(p: PayslipRecord): PayslipView {
   return {
     id: p.id,
     record: p,
-    frequency: PAY_FREQUENCY,
+    frequency: frequencyForDates(p.periodStart, p.periodEnd),
     rangeLabel: `${formatShortDate(fromDateKey(p.periodStart), false)} – ${formatShortDate(fromDateKey(p.periodEnd))}`,
     fileName: `Payslip_${fileDate(p.periodStart)}_to_${fileDate(p.periodEnd)}.pdf`,
     paid: p.status === 'paid',

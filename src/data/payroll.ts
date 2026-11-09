@@ -11,7 +11,10 @@ import {
   type SuperIncludes,
 } from '@/data/business';
 import { clockStore, type ClockSession } from '@/data/clock-records';
+import { formatShortDate } from '@/data/employee-roster';
 import { employeesStore, getsSuper, isContractor, overtimeRateOf, type Employee, type PayType } from '@/data/employees';
+import { payRunsStore } from '@/data/pay-runs';
+import { paySchedule, schedulePeriods } from '@/data/pay-schedule';
 import { createStore } from '@/data/store';
 import { loadSuperPayments } from '@/data/super-payments';
 import { newId, warnSaveFailed } from '@/lib/ids';
@@ -118,6 +121,29 @@ export function getPayPeriods(now = new Date(), count = 4): Period[] {
       start,
       end,
     };
+  });
+}
+
+/**
+ * The business's pay periods (weekly or fortnightly, from its chosen start
+ * day; see pay-schedule.ts), most recent first. Payroll uses these; weekly
+ * views elsewhere (Analytics, the employee's week) use getPayPeriods().
+ */
+export function getSchedulePayPeriods(now = new Date(), count = 4): Period[] {
+  const schedule = paySchedule();
+  const unit = schedule.frequency === 'weekly' ? 'week' : 'fortnight';
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const past = payRunsStore.get();
+  let full = 0;
+  return schedulePeriods(schedule, now, count, past).map((p) => {
+    const last = new Date(p.end.getFullYear(), p.end.getMonth(), p.end.getDate() - 1);
+    const span = `${formatShortDate(p.start, false)} – ${formatShortDate(last, false)}`;
+    let label: string;
+    if (p.catchUp) label = `Catch-up pay (${span})`;
+    else if (p.start > today) label = `Next ${unit}`;
+    else label = full === 0 ? `This ${unit}` : full === 1 ? `Last ${unit}` : span;
+    if (!p.catchUp && p.start <= today) full++;
+    return { id: toDateId(p.start), label, start: p.start, end: p.end };
   });
 }
 
@@ -450,11 +476,12 @@ export function usePayStatuses(periodId: string): Record<string, PayStatus> {
  * approved), and an Unpaid super record for each person. Nobody is told they've been paid until the owner marks the pay
  * run as paid. Returns the new pay run's id, or throws with a plain message.
  */
-export async function approvePayments(periodId: string, employeeIds: string[], payDate: string) {
+export async function approvePayments(payPeriod: Pick<Period, 'start' | 'end'>, employeeIds: string[], payDate: string) {
   const businessId = businessStore.get()?.id;
-  const [y, m, d] = periodId.split('-').map(Number);
-  const period = { start: new Date(y, m - 1, d), end: new Date(y, m - 1, d + 7) };
-  const lastDay = toDateId(new Date(y, m - 1, d + 6));
+  const periodId = toDateId(payPeriod.start);
+  const period = { start: payPeriod.start, end: payPeriod.end };
+  const lastDay = toDateId(new Date(payPeriod.end.getFullYear(), payPeriod.end.getMonth(), payPeriod.end.getDate() - 1));
+  const weeks = (period.end.getTime() - period.start.getTime()) / WEEK_MS;
   const alreadyPaid = new Set(payslipsStore.get().filter((p) => p.periodStart === periodId).map((p) => p.employeeId));
   const sessions = clockStore.get();
   const rules = overtimeRulesOf(businessStore.get());
@@ -467,7 +494,7 @@ export async function approvePayments(periodId: string, employeeIds: string[], p
     .filter((e) => employeeIds.includes(e.id) && !alreadyPaid.has(e.id) && !isContractor(e))
     // Each employee's current rates and the current overtime rule; the payslip
     // keeps them, so later changes don't affect it.
-    .map((e) => calculatePayLine(e, splitHours(sessions, e.id, period, rules), 'Pending'))
+    .map((e) => calculatePayLine(e, splitHours(sessions, e.id, period, rules), 'Pending', weeks))
     // No pay rate, or tax can't be worked out yet (no brackets or rate for the country).
     .filter((l) => l.rate !== null && l.gross !== null && l.tax !== null);
   // What each person's super was worked out on, for their super record.

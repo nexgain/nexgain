@@ -32,7 +32,6 @@ import {
   useBusiness,
 } from '@/data/business';
 import { useClockSessions } from '@/data/clock-records';
-import { PAY_FREQUENCY } from '@/data/employee-payslips';
 import { formatShortDate } from '@/data/employee-roster';
 import { employeeFullName, formatPayRate, isContractor, useEmployees } from '@/data/employees';
 import {
@@ -40,7 +39,7 @@ import {
   calculatePayLines,
   formatHours,
   formatMoney,
-  getPayPeriods,
+  getSchedulePayPeriods,
   maskAccountNumber,
   payTotals,
   usePayslipRecords,
@@ -50,6 +49,23 @@ import {
   type Period,
 } from '@/data/payroll';
 import { downloadPaymentFile, markPayRunPaid, todayKey, usePayRuns, type PayRun } from '@/data/pay-runs';
+import {
+  DAY_NAMES,
+  daysText,
+  firstPeriod,
+  frequencyForDates,
+  frequencyLabel,
+  lastApprovedDay,
+  paySchedule,
+  periodDays,
+  scheduleFor,
+  setPaySchedule,
+  spanText,
+  START_DAYS,
+  toKey,
+  type PayFrequencyId,
+  type ScheduleChoice,
+} from '@/data/pay-schedule';
 import { fromDateKey } from '@/data/shifts';
 import { TAX_ESTIMATE_NOTE, taxSetupFor, type TaxSetup } from '@/data/tax';
 import { SUPER_STATUS_LABEL, superFor, useSuperPayments, type SuperStatus } from '@/data/super-payments';
@@ -89,7 +105,9 @@ export default function PayrollScreen() {
   const now = new Date();
   const employees = useEmployees();
   const sessions = useClockSessions();
-  const periods = getPayPeriods(now, 4);
+  // Re-worked out when the pay schedule (Payroll Settings) or pay runs change.
+  usePayRuns();
+  const periods = getSchedulePayPeriods(now, 6);
   const [periodId, setPeriodId] = useState(periods[0].id);
   const [tab, setTab] = useState<Tab>('Employees');
   const scrollRef = useRef<ScrollViewInstance>(null);
@@ -110,10 +128,12 @@ export default function PayrollScreen() {
   const lines = calculatePayLines(employees, sessions, period, statuses, now, payslips);
   const totals = payTotals(lines);
 
-  const previousPeriod = getPayPeriods(period.start, 2)[1];
+  const previousPeriod = periods[periodIndex + 1] ?? null;
   const previousTotals = payTotals(
-    calculatePayLines(employees, sessions, previousPeriod, {}, now, payslips),
+    previousPeriod ? calculatePayLines(employees, sessions, previousPeriod, {}, now, payslips) : [],
   );
+  const lastDay = new Date(period.end.getFullYear(), period.end.getMonth(), period.end.getDate() - 1);
+  const frequency = frequencyForDates(toKey(period.start), toKey(lastDay));
 
   const [approveBusy, setApproveBusy] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
@@ -122,7 +142,7 @@ export default function PayrollScreen() {
     setApproveBusy(true);
     setApproveError(null);
     try {
-      await approvePayments(period.id, payable.map((l) => l.employee.id), todayKey());
+      await approvePayments(period, payable.map((l) => l.employee.id), todayKey());
     } catch (e) {
       setApproveError(`Couldn’t approve payroll: ${e instanceof Error ? e.message : 'please try again.'}`);
     } finally {
@@ -134,7 +154,7 @@ export default function PayrollScreen() {
     setReportBusy(true);
     setReportError(null);
     try {
-      await downloadPayrollReport(period, PAY_FREQUENCY, business, lines);
+      await downloadPayrollReport(period, frequency, business, lines);
     } catch {
       setReportError('Sorry, the report PDF couldn’t be made. Please try again.');
     } finally {
@@ -484,6 +504,115 @@ function ManualTaxRateField() {
   );
 }
 
+/** A row of options; the selected one is filled in. */
+function Choices<T extends string | number>({
+  options,
+  value,
+  onChange,
+  label,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+  label: string;
+}) {
+  return (
+    <View style={styles.choiceWrap} accessibilityRole="radiogroup" accessibilityLabel={label}>
+      {options.map((o) => {
+        const selected = o.value === value;
+        return (
+          <Pressable
+            key={String(o.value)}
+            onPress={() => onChange(o.value)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected }}
+            style={[styles.choice, styles.choiceTall, selected && styles.choiceSelected]}>
+            <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>{o.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
+ * How often the business pays and which day pay periods start. Only shows the
+ * choices that matter: "which fortnight are we in" only for fortnightly pay
+ * when nothing has been paid yet (otherwise it follows on from the last pay).
+ */
+function PayScheduleSetting() {
+  const business = useBusiness();
+  usePayRuns();
+  const current = paySchedule(business);
+  const [frequency, setFrequency] = useState<PayFrequencyId>(current.frequency);
+  const [startDay, setStartDay] = useState(current.startDay);
+  const [offset, setOffset] = useState<0 | 1>(0);
+  const lastApproved = lastApprovedDay();
+
+  const choice: ScheduleChoice = { frequency, startDay, fortnightOffset: offset };
+  const next = scheduleFor(choice, new Date(), lastApproved);
+  const changed =
+    frequency !== current.frequency ||
+    startDay !== current.startDay ||
+    (frequency === 'fortnightly' && !lastApproved && next.anchor !== current.anchor);
+  const first = firstPeriod(next);
+  const short = DAY_NAMES.map((d) => d.slice(0, 3));
+
+  // Fortnightly, nothing paid yet: which of the two possible fortnights is this one?
+  const thisWeek = scheduleFor({ frequency: 'fortnightly', startDay, fortnightOffset: 0 }, new Date(), null);
+  const lastWeek = scheduleFor({ frequency: 'fortnightly', startDay, fortnightOffset: 1 }, new Date(), null);
+
+  return (
+    <FormField label="How often do you pay?">
+      <Choices
+        label="How often do you pay"
+        options={[
+          { value: 'weekly', label: 'Weekly' },
+          { value: 'fortnightly', label: 'Fortnightly' },
+        ]}
+        value={frequency}
+        onChange={setFrequency}
+      />
+      <Text style={styles.scheduleQuestion}>Pay periods start on</Text>
+      <Choices
+        label="Pay periods start on"
+        options={START_DAYS.map((d) => ({ value: d, label: short[d] }))}
+        value={startDay}
+        onChange={setStartDay}
+      />
+      <Text style={ownerStyles.mutedText}>
+        {frequency === 'weekly' ? 'Each pay covers' : 'Each pay covers two weeks,'} {daysText(startDay)}.
+      </Text>
+
+      {frequency === 'fortnightly' && !lastApproved && (
+        <>
+          <Text style={styles.scheduleQuestion}>Which fortnight are you in now?</Text>
+          <Choices
+            label="Which fortnight are you in now"
+            options={[
+              { value: 0, label: spanText(firstPeriod(thisWeek)) },
+              { value: 1, label: spanText(firstPeriod(lastWeek)) },
+            ]}
+            value={offset}
+            onChange={(v) => setOffset(v as 0 | 1)}
+          />
+        </>
+      )}
+
+      {changed && (
+        <View style={styles.schedulePreview}>
+          <Text style={styles.schedulePreviewText}>
+            {first.catchUp
+              ? `To line up with your last pay, the first pay is a short one: ${spanText(first)} (${periodDays(first)} day${periodDays(first) === 1 ? '' : 's'}). After that, pay is ${frequencyLabel(frequency).toLowerCase()}, ${daysText(startDay)}.`
+              : `${lastApproved ? 'Your next pay period' : 'This pay period'}: ${spanText(first)}. Then ${frequencyLabel(frequency).toLowerCase()}, ${daysText(startDay)}.`}
+          </Text>
+          <Button label="Save pay schedule" onPress={() => setPaySchedule(choice)} />
+        </View>
+      )}
+    </FormField>
+  );
+}
+
 /** Owner-only payroll settings: when overtime starts. Approved payrolls keep the rule they were paid under. */
 function PayrollSettingsCard() {
   const business = useBusiness();
@@ -501,6 +630,8 @@ function PayrollSettingsCard() {
 
   return (
     <Card title="Payroll Settings" icon={{ ios: 'gearshape.fill', android: 'settings', web: 'settings' }}>
+      <PayScheduleSetting />
+      <View style={styles.divider} />
       <FormField label="Overtime starts after (hours in a day)" error={error ?? undefined}>
         <View style={styles.settingRow}>
           <TextField
@@ -910,6 +1041,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.two,
     paddingVertical: Spacing.one,
+  },
+  choiceWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  choiceTall: {
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  scheduleQuestion: {
+    color: C.text,
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: Spacing.two,
+  },
+  schedulePreview: {
+    gap: Spacing.two,
+    marginTop: Spacing.two,
+    padding: Spacing.three - 4,
+    borderRadius: 12,
+    backgroundColor: C.accentSoft,
+  },
+  schedulePreviewText: {
+    color: C.text,
+    fontSize: 14,
+    lineHeight: 20,
   },
   choiceLabel: {
     flex: 1,

@@ -3,6 +3,7 @@
 // Stored online (Supabase "businesses" table) and loaded after logging in.
 import { Platform } from 'react-native';
 
+import type { PaySchedule } from '@/data/pay-schedule';
 import { createStore } from '@/data/store';
 import { supabase } from '@/lib/supabase';
 
@@ -61,6 +62,8 @@ export type BusinessProfile = {
   manualTaxRate?: number | null;
   /** "Link expenses to jobs" on the Transactions page: NexGain suggests which job each expense was for. Off by default. */
   linkExpensesToJobs?: boolean;
+  /** Weekly or fortnightly, and the day pay periods start (see src/data/pay-schedule.ts). Missing = weekly, Monday to Sunday. */
+  paySchedule?: PaySchedule;
 };
 
 /**
@@ -97,6 +100,14 @@ export const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
 };
 
 export const DEFAULT_OVERTIME_RULES: OvertimeRules = { dailyAfterHours: 8 };
+
+/** The saved pay schedule, or undefined (weekly, Monday to Sunday) when it isn't set or isn't valid. */
+function payScheduleFromRow(v: BusinessRow['pay_schedule']): PaySchedule | undefined {
+  if (!v || (v.frequency !== 'weekly' && v.frequency !== 'fortnightly')) return undefined;
+  const day = Number(v.start_day);
+  if (!Number.isInteger(day) || day < 0 || day > 6 || !/^\d{4}-\d{2}-\d{2}$/.test(v.anchor ?? '')) return undefined;
+  return { frequency: v.frequency, startDay: day, anchor: v.anchor!, from: v.from && /^\d{4}-\d{2}-\d{2}$/.test(v.from) ? v.from : null };
+}
 
 export function overtimeRulesOf(profile: BusinessProfile | null): OvertimeRules {
   return profile?.overtimeRules ?? DEFAULT_OVERTIME_RULES;
@@ -187,6 +198,7 @@ type BusinessRow = {
   pay_item_super?: Partial<SuperIncludes> | null;
   manual_tax_rate?: number | string | null;
   link_expenses_to_jobs?: boolean | null;
+  pay_schedule?: { frequency?: string; start_day?: number; anchor?: string; from?: string | null } | null;
 };
 
 export function fromRow(row: BusinessRow): BusinessProfile {
@@ -234,6 +246,7 @@ export function fromRow(row: BusinessRow): BusinessProfile {
     superIncludes: { ...DEFAULT_SUPER_INCLUDES, ...row.pay_item_super },
     manualTaxRate: row.manual_tax_rate === null || row.manual_tax_rate === undefined ? null : Number(row.manual_tax_rate),
     linkExpensesToJobs: row.link_expenses_to_jobs ?? false,
+    paySchedule: payScheduleFromRow(row.pay_schedule),
   };
 }
 
@@ -261,6 +274,14 @@ function toColumns(p: Partial<BusinessProfile>) {
   if (p.superIncludes !== undefined) cols.pay_item_super = p.superIncludes;
   if (p.manualTaxRate !== undefined) cols.manual_tax_rate = p.manualTaxRate;
   if (p.linkExpensesToJobs !== undefined) cols.link_expenses_to_jobs = p.linkExpensesToJobs;
+  if (p.paySchedule !== undefined) {
+    cols.pay_schedule = {
+      frequency: p.paySchedule.frequency,
+      start_day: p.paySchedule.startDay,
+      anchor: p.paySchedule.anchor,
+      from: p.paySchedule.from,
+    };
+  }
   if (p.emailApp !== undefined) cols.email_app = p.emailApp;
   if (p.businessEmail !== undefined) cols.business_email = p.businessEmail;
   if (p.phone !== undefined) cols.phone = p.phone;
