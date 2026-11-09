@@ -3,15 +3,14 @@ import { router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-ro
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { SwitchRow } from '@/components/owner/form';
-import { GroupRow, NeedsReviewCard } from '@/components/owner/money-review';
+import { NeedsReviewCard } from '@/components/owner/money-review';
 import { ReceiptIcons, useAddReceipt } from '@/components/owner/receipt-ui';
 import { categoryIcon, signedMoney, TransactionRow } from '@/components/owner/transactions-ui';
-import { Button, Card, EmptyState, Icon, OwnerIcons, OwnerScreen, PageHeader, RangeSelect, TabRow } from '@/components/owner/ui';
+import { ActionRow, Button, Card, EmptyState, Icon, OwnerIcons, OwnerScreen, PageHeader, RangeSelect, TabRow } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { categorySections, syncBank, syncBankIfStale, transactionItems, TRANSFERS_CATEGORY, useBankSyncing, type TransactionItem } from '@/data/bank';
 import { useExpenses } from '@/data/finance';
 import {
-  groupSummaries,
   setLinkExpensesToJobs,
   startBankPreview,
   stopBankPreview,
@@ -82,7 +81,6 @@ export default function TransactionsScreen() {
   const counted = inPeriod.filter((i) => i.category !== TRANSFERS_CATEGORY);
   const moneyIn = counted.filter((i) => i.amount > 0).reduce((sum, i) => sum + i.amount, 0);
   const moneyOut = counted.filter((i) => i.amount < 0).reduce((sum, i) => sum - i.amount, 0);
-  const groups = groupSummaries(all, range);
   const recent = inPeriod.slice(0, PREVIEW);
 
   const tabs = [ALL, ...sections.map((s) => s.category)];
@@ -220,18 +218,13 @@ export default function TransactionsScreen() {
       </View>
 
       {all.length > 0 && (
-        <Card title="Expenses by category" icon={OwnerIcons.chart}>
-          <View>
-            {groups.map((g, i) => (
-              <GroupRow
-                key={g.group.id}
-                summary={g}
-                showDivider={i > 0}
-                onPress={() => router.push({ pathname: '/spending/[group]', params: { group: g.group.id, range: range.id } } as Href)}
-              />
-            ))}
-          </View>
-          {range.previous && <Text style={styles.muted}>“Up” compares with the same time {range.previousLabel}.</Text>}
+        // The list, wheel and details are on their own page, to keep this one tidy.
+        <Card>
+          <ActionRow
+            icon={OwnerIcons.chart}
+            label="Expenses by category"
+            onPress={() => router.push({ pathname: '/spending', params: { range: range.id } } as Href)}
+          />
         </Card>
       )}
 

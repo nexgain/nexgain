@@ -29,7 +29,7 @@ import { formatMoney } from '@/data/payroll';
 import { fromDateKey } from '@/data/shifts';
 
 /** Questions shown before "Show all". */
-const FIRST = 3;
+const FIRST = 2;
 
 /** One colour per group, the same everywhere (Materials is always purple, Fuel orange...). */
 export const GROUP_COLORS: Record<SpendGroupId, string> = {
