@@ -1,6 +1,7 @@
 // Everything typed during employee sign-up. Held in memory while moving between
 // steps; sent to the database when "Create Account" is pressed. The password
 // goes to Supabase's login system; bank details and TFN are stored encrypted.
+import { EMPTY_SUPER_FORM, type SuperForm } from '@/data/employee-super';
 import type { BankForm } from '@/lib/payment-files/bank-details';
 
 export type FoundBusiness = {
@@ -71,11 +72,8 @@ export type EmployeeSignupData = {
   bic: string;
   // Step 5
   tfn: string;
-  superFund: string | null;
-  superFundOther: string;
-  /** Optional: the fund's USI or ABN, and the person's member number. */
-  superFundUsi: string;
-  superMemberNumber: string;
+  /** Where their super is paid (employees only; contractors manage their own). */
+  superForm: SuperForm;
   emergencyName: string;
   emergencyPhone: string;
   qualifications: SignupQualification[];
@@ -105,10 +103,7 @@ export const EMPTY_EMPLOYEE_SIGNUP: EmployeeSignupData = {
   iban: '',
   bic: '',
   tfn: '',
-  superFund: null,
-  superFundOther: '',
-  superFundUsi: '',
-  superMemberNumber: '',
+  superForm: EMPTY_SUPER_FORM,
   emergencyName: '',
   emergencyPhone: '',
   qualifications: [],

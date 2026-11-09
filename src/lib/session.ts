@@ -16,6 +16,7 @@ import { currentEmployeeStore } from '@/data/current-employee';
 import { invitesStore, loadInvites } from '@/data/employee-invites';
 import { expensesStore, loadExpenses } from '@/data/finance';
 import { applyRemoteDoc, clearBusinessPayment, clearDocs, loadBusinessPayment, loadDocs } from '@/data/invoices';
+import { clearEmployeeSuper, loadEmployeeSuper, loadSuperSettings } from '@/data/employee-super';
 import { employeesStore, isContractor, loadOwnProfile, loadTeam } from '@/data/employees';
 import { jobReportsStore } from '@/data/job-reports';
 import { clearMoneySorting, processBank } from '@/data/money-sorting';
@@ -81,6 +82,8 @@ async function load(userId: string) {
       loadPayslips().catch(() => {}),
       loadPayRuns().catch(() => {}),
       loadSuperPayments().catch(() => {}),
+      loadEmployeeSuper().catch(() => {}),
+      loadSuperSettings().catch(() => {}),
       loadClients().catch(() => {}),
       loadJobs().catch(() => {}),
       loadReminders().catch(() => {}),
@@ -129,6 +132,8 @@ async function load(userId: string) {
       loadClockSessions().catch(() => {}),
       loadPayslips().catch(() => {}),
       loadSuperPayments().catch(() => {}),
+      loadEmployeeSuper().catch(() => {}),
+      loadSuperSettings().catch(() => {}),
       loadMyAssignedJobs().catch(() => {}),
       // Only contractors can see any (the database returns none for other workers).
       isContractor(me) ? loadContractorInvoices().catch(() => {}) : Promise.resolve(),
@@ -204,6 +209,7 @@ export function endSession() {
   clearAiInsights();
   resetChats();
   clearMoneySorting();
+  clearEmployeeSuper();
   jobsStore.set([]);
   clearReminders();
   eventsStore.set([]);

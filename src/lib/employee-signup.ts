@@ -7,6 +7,7 @@ import {
   type FoundBusiness,
   type SignupQualification,
 } from '@/components/employee-signup/types';
+import { saveMySuper } from '@/data/employee-super';
 import { addQualification } from '@/data/qualifications';
 import { bankFormToColumns } from '@/lib/payment-files/bank-details';
 import { bankFieldSetFor } from '@/lib/payment-files/countries';
@@ -50,7 +51,6 @@ const dateOnly = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad
 
 /** Creates the employee in the business. The person must already be signed in. */
 export async function completeEmployeeSignup(data: EmployeeSignupData) {
-  const superFund = data.superFund === 'Other' ? data.superFundOther.trim() : (data.superFund ?? '');
   const { data: row, error } = await supabase.rpc('complete_employee_signup', {
     p_code: data.businessCode,
     p: {
@@ -64,7 +64,8 @@ export async function completeEmployeeSignup(data: EmployeeSignupData) {
       // Contractors only (the database ignores them for other worker types).
       abn: data.employmentType === 'Contractor' ? data.abn.replace(/\D/g, '') : '',
       gst_registered: data.employmentType === 'Contractor' && data.gstRegistered === true,
-      super_fund: superFund,
+      // Saved with the super choice below.
+      super_fund: '',
       emergency_contact_name: data.emergencyName.trim(),
       emergency_contact_phone: data.emergencyPhone.trim(),
       // Only the boxes for the business's country (see bank-details.ts).
@@ -76,16 +77,12 @@ export async function completeEmployeeSignup(data: EmployeeSignupData) {
   if (error) throw error;
   const created = row as { id: string; business_id: string };
 
-  // Optional super fund USI/ABN and member number. The profile already exists,
-  // so a failure here doesn't stop sign-up (they can add them in My Profile).
-  const usi = data.superFundUsi.trim();
-  const member = data.superMemberNumber.trim();
-  if (data.employmentType !== 'Contractor' && (usi || member)) {
-    const { error: superError } = await supabase
-      .from('employees')
-      .update({ super_fund_usi: usi || null, super_member_number: member || null })
-      .eq('id', created.id);
-    if (superError) console.warn('Could not save super fund details:', superError.message);
+  // Where their super is paid (employees only). The profile already exists, so a
+  // problem here doesn't stop sign-up: they can finish it in My Profile, and the
+  // owner sees "Missing details" until then. Nothing sensitive is logged.
+  if (data.employmentType !== 'Contractor' && data.superForm.choice) {
+    const problem = await saveMySuper(data.superForm, created.id);
+    if (problem) console.warn('Super details were not saved at sign-up; the employee can add them in My Profile.');
   }
   return created;
 }

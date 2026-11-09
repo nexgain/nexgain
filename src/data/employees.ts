@@ -4,6 +4,7 @@
 // whole team, an employee gets only their own profile.
 import { setLoadedAvailability, type WeeklyAvailability } from '@/data/availability';
 import { currentEmployeeStore } from '@/data/current-employee';
+import { employeeSuperStore, superStatusOf } from '@/data/employee-super';
 import { createStore } from '@/data/store';
 import { bankFormToColumns, type BankForm, type SavedBankRow } from '@/lib/payment-files/bank-details';
 import type { BankFieldSet } from '@/lib/payment-files/countries';
@@ -59,6 +60,8 @@ export type Employee = {
   /** Super fund USI or ABN (optional). */
   superFundUsi: string;
   superMemberNumber: string;
+  /** Asked with the super details. null until given. */
+  gender: 'female' | 'male' | 'x' | 'not_said' | null;
   emergencyContactName: string;
   emergencyContactPhone: string;
   /** Hourly rate, or yearly salary when payType is 'salary'. Set by the owner; null until set. */
@@ -98,6 +101,7 @@ type EmployeeRow = {
   super_fund: string | null;
   super_fund_usi?: string | null;
   super_member_number?: string | null;
+  gender?: 'female' | 'male' | 'x' | 'not_said' | null;
   tax_free_threshold?: boolean | null;
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
@@ -134,6 +138,7 @@ export function fromRow(row: EmployeeRow, businessName = '', photoUrl: string | 
     superFund: row.super_fund ?? '',
     superFundUsi: row.super_fund_usi ?? '',
     superMemberNumber: row.super_member_number ?? '',
+    gender: row.gender ?? null,
     emergencyContactName: row.emergency_contact_name ?? '',
     emergencyContactPhone: row.emergency_contact_phone ?? '',
     payRate: row.pay_rate === null ? null : Number(row.pay_rate),
@@ -317,8 +322,17 @@ export function getsSuper(employee: Pick<Employee, 'employmentType'> | null | un
   return !!employee && !isContractor(employee);
 }
 
-/** Super fund details the employee hasn't added yet (all optional for now), e.g. ['Member number']. */
-export function missingSuperDetails(employee: Pick<Employee, 'superFund' | 'superFundUsi' | 'superMemberNumber'>) {
+/**
+ * Super fund details still needed, e.g. ['Member number']. With a super choice
+ * saved (src/data/employee-super.ts), it follows that choice: nothing more for
+ * the employer's default fund, a stapled fund request for "I'm not sure".
+ */
+export function missingSuperDetails(employee: Pick<Employee, 'id' | 'employmentType' | 'superFund' | 'superFundUsi' | 'superMemberNumber'>) {
+  const record = employeeSuperStore.get().find((s) => s.employeeId === employee.id);
+  if (record) {
+    const status = superStatusOf(employee, record);
+    return status === 'Needs stapled fund request' ? ['Stapled fund request'] : status === 'Missing details' ? ['Super details'] : [];
+  }
   const missing: string[] = [];
   if (!employee.superFund.trim()) missing.push('Fund name');
   if (!employee.superFundUsi.trim()) missing.push('Fund USI/ABN');

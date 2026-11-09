@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { comingSoon } from '@/components/auth/auth-screen';
 import { maskLast4, type EmployeeSignupData } from '@/components/employee-signup/types';
 import { Button, fieldStyles, SignupColors as C } from '@/components/signup/fields';
+import { choiceText } from '@/data/employee-super';
 
 export function StepReview({
   data,
@@ -16,7 +17,6 @@ export function StepReview({
   onCreate: () => void;
   busy: boolean;
 }) {
-  const superFund = data.superFund === 'Other' ? data.superFundOther : data.superFund;
   const rows: { label: string; value: string; step: number }[] = [
     { label: 'Full name', value: data.fullName, step: 2 },
     { label: 'Email', value: data.email, step: 0 },
@@ -30,14 +30,15 @@ export function StepReview({
         ]
       : []),
     { label: 'Bank account', value: maskLast4(data.iban.replace(/\D/g, '').slice(-4) || data.accountNumber), step: 3 },
-    {
-      label: 'Superannuation',
-      value:
-        [superFund, data.superFundUsi.trim() && `USI/ABN ${data.superFundUsi.trim()}`, data.superMemberNumber.trim() && `Member ${data.superMemberNumber.trim()}`]
-          .filter(Boolean)
-          .join(' · ') || 'Not provided',
-      step: 4,
-    },
+    ...(data.employmentType === 'Contractor'
+      ? []
+      : [
+          {
+            label: 'Superannuation',
+            value: data.superForm.choice ? choiceText(data.superForm.choice, data.superForm.fundName.trim() || null) : 'Not chosen',
+            step: 4,
+          },
+        ]),
     {
       label: 'Qualifications',
       value: data.qualifications.map((q) => q.name).join(', ') || 'None added',

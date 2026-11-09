@@ -2,13 +2,14 @@ import { useState } from 'react';
 import * as DocumentPicker from 'expo-document-picker';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { SelectField } from '@/components/employee/form-fields';
-import { formatTfn, SUPER_FUNDS, type EmployeeStepProps, type PickedDocument } from '@/components/employee-signup/types';
+import { formatTfn, type EmployeeStepProps, type PickedDocument } from '@/components/employee-signup/types';
 import { useNativePicker } from '@/components/pickers/use-native-picker';
+import { SuperFields, superFormErrors } from '@/components/super-fields';
 import { Button, Field, fieldStyles, Icon, Input, SignupColors as C } from '@/components/signup/fields';
 import { formatShortDate } from '@/data/employee-roster';
 import { MAX_DOCUMENT_BYTES, QUALIFICATION_TYPES } from '@/data/qualifications';
 import { newId } from '@/lib/ids';
+import { tfnError } from '@/lib/super-validation';
 
 const SUGGESTED_QUALIFICATIONS = QUALIFICATION_TYPES.filter((q) => q !== 'Other');
 
@@ -24,90 +25,67 @@ const PICKER_THEME = {
 export function StepAdditional({ data, update, onNext, nextLabel }: EmployeeStepProps) {
   const [tried, setTried] = useState(false);
   const [showTfnInfo, setShowTfnInfo] = useState(false);
+  // Contractors manage their own super (they're paid on their invoices), so only employees choose a fund.
+  const contractor = data.employmentType === 'Contractor';
+  const superErrors = contractor ? {} : superFormErrors(data.superForm, data.tfn);
 
-  const tfnDigits = data.tfn.replace(/\D/g, '');
+  const contractorTfn = contractor ? tfnError(data.tfn) : null;
   const errors = {
-    tfn: tfnDigits.length > 0 && tfnDigits.length !== 9 && 'A tax file number has 9 digits.',
-    superOther: data.superFund === 'Other' && !data.superFundOther.trim() && 'Enter your super fund name.',
+    contractorTfn: !!contractorTfn,
+    ...superErrors,
     emergencyName: !data.emergencyName.trim() && 'Enter an emergency contact name.',
     emergencyPhone: data.emergencyPhone.replace(/\D/g, '').length < 8 && 'Enter a valid emergency contact phone.',
   };
 
   return (
     <>
-      <Field label="Tax file number" optional error={tried && errors.tfn}>
-        <View style={styles.tfnRow}>
-          <View style={fieldStyles.flex}>
-            <Input
-              value={data.tfn}
-              onChangeText={(t) => update({ tfn: formatTfn(t) })}
-              placeholder="123 456 789"
-              keyboardType="number-pad"
-              autoComplete="off"
-              password
-              accessibilityLabel="Tax file number"
-              icon={{ ios: 'lock', android: 'lock', web: 'lock' }}
-              hasError={tried && !!errors.tfn}
-            />
+      {contractor ? (
+        <Field label="Tax file number" optional error={(tried && contractorTfn) || undefined}>
+          <View style={styles.tfnRow}>
+            <View style={fieldStyles.flex}>
+              <Input
+                value={data.tfn}
+                onChangeText={(t) => update({ tfn: formatTfn(t) })}
+                placeholder="123 456 789"
+                keyboardType="number-pad"
+                autoComplete="off"
+                password
+                accessibilityLabel="Tax file number"
+                icon={{ ios: 'lock', android: 'lock', web: 'lock' }}
+                hasError={tried && !!contractorTfn}
+              />
+            </View>
+            <Pressable
+              onPress={() => setShowTfnInfo((s) => !s)}
+              accessibilityRole="button"
+              accessibilityLabel="What is my TFN used for?"
+              hitSlop={8}
+              style={styles.info}>
+              <Icon name={{ ios: 'info.circle', android: 'info', web: 'info' }} color={C.primary} size={20} />
+            </Pressable>
           </View>
-          <Pressable
-            onPress={() => setShowTfnInfo((s) => !s)}
-            accessibilityRole="button"
-            accessibilityLabel="What is my TFN used for?"
-            hitSlop={8}
-            style={styles.info}>
-            <Icon name={{ ios: 'info.circle', android: 'info', web: 'info' }} color={C.primary} size={20} />
-          </Pressable>
-        </View>
-        {showTfnInfo && (
-          <Text style={styles.infoText}>
-            Your TFN is used by your employer for payroll, so the right amount of tax is withheld from your pay. It&apos;s
-            stored encrypted, shown masked, and only your employer can see it. If you don&apos;t provide it, tax may be
-            withheld at the highest rate.
-          </Text>
-        )}
-      </Field>
-
-      <Field label="Superannuation fund" optional>
-        <SelectField
-          title="Superannuation fund"
-          value={data.superFund as (typeof SUPER_FUNDS)[number] | null}
-          options={SUPER_FUNDS}
-          placeholder="Select your super fund"
-          onChange={(superFund) => update({ superFund })}
-        />
-        {data.superFund === 'Other' && (
-          <Input
-            value={data.superFundOther}
-            onChangeText={(superFundOther) => update({ superFundOther })}
-            placeholder="Your super fund's name"
-            autoCapitalize="words"
-            accessibilityLabel="Super fund name"
-            hasError={tried && !!errors.superOther}
+          {showTfnInfo && (
+            <Text style={styles.infoText}>
+              Your TFN is used by your employer for payroll, so the right amount of tax is withheld from your pay. It&apos;s
+              stored encrypted, shown masked, and only your employer can see it. If you don&apos;t provide it, tax may be
+              withheld at the highest rate.
+            </Text>
+          )}
+        </Field>
+      ) : (
+        <>
+          <Text style={styles.sectionHeading}>Super details</Text>
+          <SuperFields
+            form={data.superForm}
+            update={(changes) => update({ superForm: { ...data.superForm, ...changes } })}
+            errors={superErrors}
+            showErrors={tried}
+            tfn={data.tfn}
+            onTfnChange={(tfn) => update({ tfn })}
+            tfnHint="Stored encrypted and shown masked. Only you and your employer can see it, and it's only used for tax and super."
           />
-        )}
-        {tried && errors.superOther ? <Text style={styles.errorText}>{errors.superOther}</Text> : null}
-      </Field>
-      <Field label="Super fund USI or ABN" optional>
-        <Input
-          value={data.superFundUsi}
-          onChangeText={(superFundUsi) => update({ superFundUsi })}
-          placeholder="e.g. STA0100AU"
-          autoCapitalize="characters"
-          maxLength={30}
-          accessibilityLabel="Super fund USI or ABN"
-        />
-      </Field>
-      <Field label="Super member number" optional>
-        <Input
-          value={data.superMemberNumber}
-          onChangeText={(superMemberNumber) => update({ superMemberNumber })}
-          placeholder="Your member number with the fund"
-          autoCapitalize="characters"
-          maxLength={30}
-          accessibilityLabel="Super member number"
-        />
-      </Field>
+        </>
+      )}
 
       <Field label="Emergency contact name" error={tried && errors.emergencyName}>
         <Input
@@ -337,6 +315,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  sectionHeading: {
+    color: C.text,
+    fontSize: 17,
+    fontWeight: '700',
+  },
   tfnRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -357,10 +340,6 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 10,
     backgroundColor: C.primarySoft,
-  },
-  errorText: {
-    color: C.danger,
-    fontSize: 13,
   },
   docRow: {
     flexDirection: 'row',

@@ -4,9 +4,10 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Avatar, sendInvite, StatusBadge, type ListStatus } from '@/components/owner/employee-ui';
 import { ScreenHeader, SummaryTile } from '@/components/owner/invoices-ui';
-import { Button, Card, EmptyState, Icon, OwnerIcons, OwnerScreen, StatGrid } from '@/components/owner/ui';
+import { Badge, Button, Card, EmptyState, Icon, OwnerIcons, OwnerScreen, StatGrid } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { shareInvite, useInvites, type EmployeeInvite } from '@/data/employee-invites';
+import { superStatusOf, useEmployeeSuper } from '@/data/employee-super';
 import { employeeFullName, formatPayRate, useEmployees, type Employee } from '@/data/employees';
 
 type Row =
@@ -129,6 +130,22 @@ export default function EmployeesScreen() {
   );
 }
 
+const SUPER_TONE = { Complete: 'success', 'Missing details': 'warning', 'Needs stapled fund request': 'danger' } as const;
+
+/** Super: Complete, Missing details or Needs stapled fund request (nothing for contractors). */
+function SuperBadge({ employee }: { employee: Employee }) {
+  const record = useEmployeeSuper().find((s) => s.employeeId === employee.id);
+  const status = superStatusOf(employee, record);
+  if (status === 'Not needed') return null;
+  const toAction = status === 'Complete' && record && !record.choiceActionedAt;
+  return (
+    <View style={styles.superLine}>
+      <Badge label={`Super: ${status}`} tone={SUPER_TONE[status]} />
+      {toAction && <Badge label="To action" tone="info" />}
+    </View>
+  );
+}
+
 function EmployeeRow({ row, first }: { row: Row; first: boolean }) {
   const isInvite = row.kind === 'invite';
   const person = isInvite ? row.invite : row.employee;
@@ -156,6 +173,7 @@ function EmployeeRow({ row, first }: { row: Row; first: boolean }) {
           </Text>
           <StatusBadge status={row.status} />
         </View>
+        {!isInvite && <SuperBadge employee={row.employee} />}
         <Text style={styles.meta} numberOfLines={1}>
           {person.role || 'No role set'} · <Text style={styles.rate}>{rate}</Text>
         </Text>
@@ -254,6 +272,12 @@ const styles = StyleSheet.create({
   rowText: {
     flex: 1,
     gap: 2,
+  },
+  superLine: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.one,
+    marginTop: 2,
   },
   nameLine: {
     flexDirection: 'row',

@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { FormField, TextField } from '@/components/owner/form';
 import { ScreenHeader, Segmented } from '@/components/owner/invoices-ui';
+import { SuperSettingsCard } from '@/components/owner/super-settings-card';
 import { Button, Card, OwnerIcons, OwnerScreen } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { EMAIL_APP_CHOICES, shownEmailApp, updateBusiness, useBusiness } from '@/data/business';
@@ -14,7 +15,8 @@ import { updateBusinessPayment, useBusinessPayment } from '@/data/invoices';
 import { emailAppHint } from '@/lib/email';
 
 // Edit the business details set during owner sign-up: name and logo (printed on
-// quotes and invoices), the email app they're sent from, and bank details for invoices.
+// quotes and invoices), the email app they're sent from, bank details for invoices,
+// and super settings.
 export default function BusinessProfileScreen() {
   const business = useBusiness();
   const payment = useBusinessPayment();
@@ -156,6 +158,8 @@ export default function BusinessProfileScreen() {
           </FormField>
         </Card>
       )}
+
+      <SuperSettingsCard />
     </OwnerScreen>
   );
 }

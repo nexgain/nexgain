@@ -3,11 +3,12 @@ import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Card } from '@/components/employee/ui';
+import { Card, Icon } from '@/components/employee/ui';
 import { EmployeeColors as C } from '@/constants/employee-theme';
 import { Radius, Spacing } from '@/constants/theme';
 import { useBusiness } from '@/data/business';
 import { useCurrentEmployee } from '@/data/current-employee';
+import { choiceText, useEmployeeSuper } from '@/data/employee-super';
 import { formatShortDate } from '@/data/employee-roster';
 import { formatAbnInput } from '@/components/employee-signup/types';
 import { employeeFullName, isContractor, updateEmployee, updateMyBankDetails } from '@/data/employees';
@@ -30,13 +31,11 @@ export default function MyProfileScreen() {
   const [position, setPosition] = useState<string | null>(null);
   const [abn, setAbn] = useState<string | null>(null);
   const [gst, setGst] = useState<boolean | null>(null);
-  const [superFund, setSuperFund] = useState<string | null>(null);
-  const [superUsi, setSuperUsi] = useState<string | null>(null);
-  const [superMember, setSuperMember] = useState<string | null>(null);
   const [bank, setBank] = useState<BankForm>(EMPTY_BANK_FORM);
   const [status, setStatus] = useState<'idle' | 'saving' | 'error'>('idle');
   // Bank boxes match the business's country (BSB, routing number, sort code or IBAN).
   const bankSet = bankFieldSetFor(useBusiness()?.country);
+  const mySuper = useEmployeeSuper().find((s) => s.employeeId === me?.id);
 
   if (!me) {
     return (
@@ -51,20 +50,11 @@ export default function MyProfileScreen() {
   const positionValue = position ?? me.role;
   const abnValue = abn ?? formatAbnInput(me.abn);
   const gstValue = gst ?? me.gstRegistered;
-  const superFundValue = superFund ?? me.superFund;
-  const superUsiValue = superUsi ?? me.superFundUsi;
-  const superMemberValue = superMember ?? me.superMemberNumber;
-  const superChanged =
-    !contractor &&
-    (superFundValue.trim() !== me.superFund ||
-      superUsiValue.trim() !== me.superFundUsi ||
-      superMemberValue.trim() !== me.superMemberNumber);
   const bankChanged = !!(bank.accountName.trim() || bank.branchCode.trim() || bank.accountNumber.trim() || bank.iban.trim());
   const changed =
     phoneValue.trim() !== me.phone ||
     positionValue.trim() !== me.role ||
     bankChanged ||
-    superChanged ||
     (contractor && (abnValue.replace(/\D/g, '') !== me.abn || gstValue !== me.gstRegistered));
   const phoneError = phoneValue.replace(/\D/g, '').length < 8 ? 'Enter a valid phone number.' : null;
   const positionError = positionValue.trim() ? null : 'Enter your position.';
@@ -80,9 +70,6 @@ export default function MyProfileScreen() {
       phone: phoneValue.trim(),
       role: positionValue.trim(),
       ...(contractor ? { abn: abnValue.replace(/\D/g, ''), gstRegistered: gstValue } : {}),
-      ...(superChanged
-        ? { superFund: superFundValue.trim(), superFundUsi: superUsiValue.trim(), superMemberNumber: superMemberValue.trim() }
-        : {}),
     });
     if (ok && bankChanged) ok = await updateMyBankDetails(me.id, bankSet, bank);
     if (!ok) {
@@ -231,33 +218,23 @@ export default function MyProfileScreen() {
             <Text style={styles.sectionTitle}>Bank details</Text>
             <Card style={styles.form}>{bankFields}</Card>
 
-            <Text style={styles.sectionTitle}>Super fund</Text>
+            <Text style={styles.sectionTitle}>Super details</Text>
             <Card style={styles.form}>
-              <Text style={styles.hint}>
-                Your employer pays your super into this fund. You&apos;ll find these details on your fund&apos;s website or
-                app, or on a recent statement.
-              </Text>
-              {(
-                [
-                  ['Fund name', superFundValue, setSuperFund, 'e.g. AustralianSuper', 'words', 80],
-                  ['Fund USI or ABN', superUsiValue, setSuperUsi, 'e.g. STA0100AU', 'characters', 30],
-                  ['Member number', superMemberValue, setSuperMember, 'e.g. 123456789', 'characters', 30],
-                ] as const
-              ).map(([label, value, set, placeholder, caps, max]) => (
-                <View key={label} style={styles.field}>
-                  <Text style={styles.fieldLabel}>{label}</Text>
-                  <TextInput
-                    value={value}
-                    onChangeText={set}
-                    placeholder={placeholder}
-                    autoCapitalize={caps}
-                    maxLength={max}
-                    placeholderTextColor={C.textMuted}
-                    accessibilityLabel={label}
-                    style={styles.input}
-                  />
+              <Pressable
+                onPress={() => router.push('/super-details')}
+                accessibilityRole="button"
+                accessibilityHint="Opens your super details"
+                style={({ pressed }) => [styles.superRow, pressed && styles.pressed]}>
+                <View style={styles.superText}>
+                  <Text style={styles.fieldLabel}>{mySuper ? choiceText(mySuper.choice, mySuper.fundName) : 'Not set up yet'}</Text>
+                  <Text style={styles.hint}>
+                    {mySuper
+                      ? `Confirmed ${new Date(mySuper.declaredAt).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })}. Tap to view or change.`
+                      : 'Tell your employer where to pay your super, and add your TFN.'}
+                  </Text>
                 </View>
-              ))}
+                <Icon name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }} color={C.textSecondary} size={14} />
+              </Pressable>
             </Card>
           </>
         )}
@@ -334,6 +311,16 @@ const styles = StyleSheet.create({
   },
   field: {
     gap: 6,
+  },
+  superRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    minHeight: 44,
+  },
+  superText: {
+    flex: 1,
+    gap: 2,
   },
   fieldLabel: {
     color: C.text,
