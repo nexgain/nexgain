@@ -59,6 +59,8 @@ export type BusinessProfile = {
    * tax brackets for the business's country yet (see config/tax-brackets.ts).
    */
   manualTaxRate?: number | null;
+  /** "Link expenses to jobs" on the Transactions page: NexGain suggests which job each expense was for. Off by default. */
+  linkExpensesToJobs?: boolean;
 };
 
 /**
@@ -184,6 +186,7 @@ type BusinessRow = {
   super_rate?: number | string | null;
   pay_item_super?: Partial<SuperIncludes> | null;
   manual_tax_rate?: number | string | null;
+  link_expenses_to_jobs?: boolean | null;
 };
 
 export function fromRow(row: BusinessRow): BusinessProfile {
@@ -230,6 +233,7 @@ export function fromRow(row: BusinessRow): BusinessProfile {
     superRate: row.super_rate === null || row.super_rate === undefined ? DEFAULT_SUPER_RATE : Number(row.super_rate),
     superIncludes: { ...DEFAULT_SUPER_INCLUDES, ...row.pay_item_super },
     manualTaxRate: row.manual_tax_rate === null || row.manual_tax_rate === undefined ? null : Number(row.manual_tax_rate),
+    linkExpensesToJobs: row.link_expenses_to_jobs ?? false,
   };
 }
 
@@ -256,6 +260,7 @@ function toColumns(p: Partial<BusinessProfile>) {
   if (p.overtimeRules !== undefined) cols.overtime_rules = { daily_after_hours: p.overtimeRules.dailyAfterHours };
   if (p.superIncludes !== undefined) cols.pay_item_super = p.superIncludes;
   if (p.manualTaxRate !== undefined) cols.manual_tax_rate = p.manualTaxRate;
+  if (p.linkExpensesToJobs !== undefined) cols.link_expenses_to_jobs = p.linkExpensesToJobs;
   if (p.emailApp !== undefined) cols.email_app = p.emailApp;
   if (p.businessEmail !== undefined) cols.business_email = p.businessEmail;
   if (p.phone !== undefined) cols.phone = p.phone;

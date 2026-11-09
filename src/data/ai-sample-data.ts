@@ -157,5 +157,12 @@ export function buildSampleSnapshot(now = new Date()): BusinessSnapshot {
     ],
     transactions: [...materials, ...detergent, ...fuel, ...subs, ...jobCosts, ...unusual, ...tools],
     transactionsConnected: true,
+    // From receipts: the same 20L chlorine was $20 last month and $24 this week.
+    purchases: [
+      { receiptId: 'sample-receipt-1', date: m(1, 12), supplier: 'Pool Supplies Co', description: 'Liquid Chlorine 20L', quantity: 1, unitPrice: 20 },
+      { receiptId: 'sample-receipt-2', date: addDays(today, -3), supplier: 'Pool Supplies Co', description: 'LIQUID CHLORINE 20 LITRE', quantity: 2, unitPrice: 24 },
+      { receiptId: 'sample-receipt-1', date: m(1, 12), supplier: 'Pool Supplies Co', description: 'Sugar soap 1L', quantity: 1, unitPrice: 9.5 },
+      { receiptId: 'sample-receipt-2', date: addDays(today, -3), supplier: 'Pool Supplies Co', description: 'Sugar Soap 1L', quantity: 1, unitPrice: 9.5 },
+    ],
   };
 }

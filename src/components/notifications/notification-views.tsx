@@ -11,6 +11,8 @@ import {
   fullTime,
   listTime,
   typeInfo,
+  undoNotificationDelete,
+  useLastDeleted,
   type AppNotification,
   type DateGroup,
   type Tone,
@@ -147,10 +149,13 @@ export function NotificationGroups<T extends AppNotification>({
   groups,
   palette,
   onOpen,
+  onDelete,
 }: {
   groups: { group: DateGroup; items: T[] }[];
   palette: Palette;
   onOpen: (n: T) => void;
+  /** Shows a bin on each notification. */
+  onDelete?: (n: T) => void;
 }) {
   return (
     <View style={styles.groups}>
@@ -159,35 +164,64 @@ export function NotificationGroups<T extends AppNotification>({
           <Text style={[styles.groupLabel, { color: palette.textSecondary }]}>{group}</Text>
           <View style={[styles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
             {items.map((n, i) => (
-              <Pressable
-                key={n.id}
-                onPress={() => onOpen(n)}
-                accessibilityRole="button"
-                accessibilityLabel={`${n.read ? '' : 'Unread. '}${n.title}`}
-                style={({ pressed }) => [
-                  styles.row,
-                  i > 0 && { borderTopWidth: 1, borderTopColor: palette.border },
-                  pressed && styles.pressed,
-                ]}>
-                <NotificationIcon n={n} palette={palette} />
-                <View style={styles.rowText}>
-                  <Text style={[styles.rowTitle, { color: palette.text }]} numberOfLines={1}>
-                    {n.title}
-                  </Text>
-                  <Text style={[styles.rowSummary, { color: palette.textSecondary }]} numberOfLines={1}>
-                    {n.summary}
-                  </Text>
-                </View>
-                <View style={styles.rowRight}>
-                  <Text style={[styles.rowTime, { color: palette.textSecondary }]}>{listTime(n.createdAt)}</Text>
-                  {!n.read && <View style={[styles.unread, { backgroundColor: palette.accent }]} />}
-                </View>
-                <Icon name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }} color={palette.textSecondary} size={12} />
-              </Pressable>
+              <View key={n.id} style={[styles.rowWrap, i > 0 && { borderTopWidth: 1, borderTopColor: palette.border }]}>
+                <Pressable
+                  onPress={() => onOpen(n)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${n.read ? '' : 'Unread. '}${n.title}`}
+                  style={({ pressed }) => [styles.row, styles.rowMain, pressed && styles.pressed]}>
+                  <NotificationIcon n={n} palette={palette} />
+                  <View style={styles.rowText}>
+                    <Text style={[styles.rowTitle, { color: palette.text }]} numberOfLines={1}>
+                      {n.title}
+                    </Text>
+                    <Text style={[styles.rowSummary, { color: palette.textSecondary }]} numberOfLines={1}>
+                      {n.summary}
+                    </Text>
+                  </View>
+                  <View style={styles.rowRight}>
+                    <Text style={[styles.rowTime, { color: palette.textSecondary }]}>{listTime(n.createdAt)}</Text>
+                    {!n.read && <View style={[styles.unread, { backgroundColor: palette.accent }]} />}
+                  </View>
+                  <Icon name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }} color={palette.textSecondary} size={12} />
+                </Pressable>
+                {onDelete && (
+                  <Pressable
+                    onPress={() => onDelete(n)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete notification: ${n.title}`}
+                    hitSlop={4}
+                    style={({ pressed }) => [styles.bin, pressed && styles.pressed]}>
+                    <Icon name={{ ios: 'trash', android: 'delete', web: 'delete' }} color={palette.textSecondary} size={16} />
+                  </Pressable>
+                )}
+              </View>
             ))}
           </View>
         </View>
       ))}
+    </View>
+  );
+}
+
+/** "Notification deleted · Undo", for a few seconds after the bin is tapped. */
+export function DeletedBar({ palette }: { palette: Palette }) {
+  const deleted = useLastDeleted();
+  if (!deleted) return null;
+  return (
+    <View accessibilityLiveRegion="polite" style={[styles.deletedBar, { backgroundColor: palette.card, borderColor: palette.border }]}>
+      <Icon name={{ ios: 'trash', android: 'delete', web: 'delete' }} color={palette.textSecondary} size={14} />
+      <Text style={[styles.deletedText, { color: palette.text }]} numberOfLines={1}>
+        Notification deleted
+      </Text>
+      <Pressable
+        onPress={() => undoNotificationDelete(deleted.id)}
+        accessibilityRole="button"
+        accessibilityLabel="Undo delete"
+        hitSlop={8}
+        style={({ pressed }) => [styles.undo, pressed && styles.pressed]}>
+        <Text style={[styles.undoText, { color: palette.accent }]}>Undo</Text>
+      </Pressable>
     </View>
   );
 }
@@ -455,6 +489,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.three - 4,
     padding: Spacing.three - 4,
+  },
+  rowWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  rowMain: {
+    flex: 1,
+    paddingRight: Spacing.one,
+  },
+  bin: {
+    width: 44,
+    height: 44,
+    marginRight: Spacing.one,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deletedBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    minHeight: 48,
+    paddingHorizontal: Spacing.three,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  deletedText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  undo: {
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  undoText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   rowText: {
     flex: 1,

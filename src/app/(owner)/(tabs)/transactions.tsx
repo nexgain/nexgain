@@ -2,68 +2,73 @@ import { useCallback, useState } from 'react';
 import { router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { SwitchRow } from '@/components/owner/form';
+import { GroupRow, NeedsReviewCard } from '@/components/owner/money-review';
 import { ReceiptIcons, useAddReceipt } from '@/components/owner/receipt-ui';
 import { categoryIcon, signedMoney, TransactionRow } from '@/components/owner/transactions-ui';
 import { Button, Card, EmptyState, Icon, OwnerIcons, OwnerScreen, PageHeader, RangeSelect, TabRow } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
+import { categorySections, syncBank, syncBankIfStale, transactionItems, TRANSFERS_CATEGORY, useBankSyncing, type TransactionItem } from '@/data/bank';
+import { useExpenses } from '@/data/finance';
 import {
-  categorySections,
-  isBankConnected,
-  syncBank,
-  syncBankIfStale,
-  transactionItems,
-  TRANSFERS_CATEGORY,
-  useBankAccounts,
-  useBankConnection,
-  useBankSyncing,
-  useBankTransactions,
-  type TransactionItem,
-} from '@/data/bank';
-import { financeRanges, useExpenses } from '@/data/finance';
+  groupSummaries,
+  setLinkExpensesToJobs,
+  startBankPreview,
+  stopBankPreview,
+  transactionRanges,
+  useMoneyFeed,
+} from '@/data/money-sorting';
 import { formatMoney } from '@/data/payroll';
 import { indexReceipts, receiptStatus, unmatchedReceipts, useReceipts } from '@/data/receipts';
 
 const ALL = 'All';
 const FILTERS = ['All', 'Missing receipts'] as const;
 type Filter = (typeof FILTERS)[number];
-/** Rows shown in each section before "Show all". */
+/** Rows shown in each section (and in "Recent") before "Show all". */
 const PREVIEW = 5;
 
 // The Transactions tab: money in and out of the business bank account (and
 // expenses the owner typed in), in sections by category: Income, Fuel,
-// Materials & supplies...
+// Materials & supplies... NexGain sorts each one (see src/data/money-sorting.ts),
+// asks about anything it isn't sure of ("Needs review") and adds up spending
+// in six groups ("Expenses by category").
 export default function TransactionsScreen() {
-  const connection = useBankConnection();
-  const accounts = useBankAccounts();
-  const txns = useBankTransactions();
-  const expenses = useExpenses();
+  const feed = useMoneyFeed();
+  const { accounts, transactions: txns, connected, preview } = feed;
+  const typedExpenses = useExpenses();
+  // The sample preview shows the sample bank only.
+  const expenses = preview ? [] : typedExpenses;
   const syncing = useBankSyncing();
   const receipts = useReceipts();
-  const connected = isBankConnected(connection);
   const params = useLocalSearchParams<{ filter?: string; range?: string }>();
   const { add: addReceipt, busy: addingReceipt, error: receiptError } = useAddReceipt();
 
-  const ranges = financeRanges();
+  const ranges = transactionRanges();
   const [rangeId, setRangeId] = useState(params.range ?? 'this-month');
   const range = ranges.find((r) => r.id === rangeId) ?? ranges[0];
   const [section, setSection] = useState(ALL);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>(params.filter === 'missing' ? 'Missing receipts' : 'All');
+  // "Recent" shows the latest few; "See all" shows every transaction by category.
+  const [seeAll, setSeeAll] = useState(params.filter === 'missing');
 
   // Opened from the Dashboard's "receipts missing" card: show the missing ones.
   const [lastParams, setLastParams] = useState(`${params.filter}|${params.range}`);
   if (`${params.filter}|${params.range}` !== lastParams) {
     setLastParams(`${params.filter}|${params.range}`);
-    if (params.filter === 'missing') setFilter('Missing receipts');
+    if (params.filter === 'missing') {
+      setFilter('Missing receipts');
+      setSeeAll(true);
+    }
     if (params.range) setRangeId(params.range);
   }
 
   // Get the latest from the bank when the tab opens, if it's been a while.
   useFocusEffect(
     useCallback(() => {
-      syncBankIfStale();
-    }, []),
+      if (!preview) syncBankIfStale();
+    }, [preview]),
   );
 
   const all = transactionItems(txns, accounts, expenses);
@@ -77,6 +82,8 @@ export default function TransactionsScreen() {
   const counted = inPeriod.filter((i) => i.category !== TRANSFERS_CATEGORY);
   const moneyIn = counted.filter((i) => i.amount > 0).reduce((sum, i) => sum + i.amount, 0);
   const moneyOut = counted.filter((i) => i.amount < 0).reduce((sum, i) => sum - i.amount, 0);
+  const groups = groupSummaries(all, range);
+  const recent = inPeriod.slice(0, PREVIEW);
 
   const tabs = [ALL, ...sections.map((s) => s.category)];
   const activeTab = tabs.includes(section) ? section : ALL;
@@ -89,6 +96,7 @@ export default function TransactionsScreen() {
 
   async function sync() {
     setMessage(null);
+    if (preview) return;
     const result = await syncBank({ refresh: true });
     if (!result.ok) setMessage(result.message);
   }
@@ -106,7 +114,13 @@ export default function TransactionsScreen() {
     <OwnerScreen>
       <PageHeader
         title="Transactions"
-        subtitle={connected ? 'Money in and out of your business, sorted by category.' : 'Connect your bank to see your transactions here.'}
+        subtitle={
+          preview
+            ? 'Sample data: a preview of how your bank transactions will look. Nothing is saved.'
+            : connected
+              ? 'Money in and out of your business, sorted by category.'
+              : 'Connect your bank to see your transactions here.'
+        }
         right={
           <View style={styles.headerButtons}>
             {connected && (
@@ -131,7 +145,7 @@ export default function TransactionsScreen() {
               accessibilityLabel="Add a receipt"
               hitSlop={8}
               style={({ pressed }) => [styles.iconButton, styles.cameraButton, pressed && styles.pressed]}>
-              {addingReceipt ? <ActivityIndicator color="#FFFFFF" /> : <Icon name={ReceiptIcons.camera} color="#FFFFFF" size={18} />}
+              {addingReceipt ? <ActivityIndicator color={C.onAccent} /> : <Icon name={ReceiptIcons.camera} color={C.onAccent} size={18} />}
             </Pressable>
           </View>
         }
@@ -154,6 +168,8 @@ export default function TransactionsScreen() {
           <Button label="Connect bank" icon={{ ios: 'link', android: 'link', web: 'link' }} onPress={() => router.push('/integrations')} />
         </Card>
       )}
+
+      <NeedsReviewCard feed={feed} />
 
       {syncing && connected && txns.length === 0 && (
         <Card>
@@ -203,30 +219,74 @@ export default function TransactionsScreen() {
         </View>
       </View>
 
-      <View style={styles.filters} accessibilityRole="tablist">
-        {FILTERS.map((f) => {
-          const selected = f === filter;
-          return (
-            <Pressable
-              key={f}
-              onPress={() => setFilter(f)}
-              accessibilityRole="tab"
-              accessibilityState={{ selected }}
-              style={({ pressed }) => [styles.filter, selected && styles.filterSelected, pressed && styles.pressed]}>
-              {f === 'Missing receipts' && missingCount > 0 && (
-                <Icon name={ReceiptIcons.missing} color={selected ? '#FFFFFF' : C.warning} size={13} />
-              )}
-              <Text style={[styles.filterText, selected && styles.filterTextSelected]}>
-                {f === 'Missing receipts' ? `Missing receipts${missingCount > 0 ? ` (${missingCount})` : ''}` : f}
-              </Text>
+      {all.length > 0 && (
+        <Card title="Expenses by category" icon={OwnerIcons.chart}>
+          <View>
+            {groups.map((g, i) => (
+              <GroupRow
+                key={g.group.id}
+                summary={g}
+                showDivider={i > 0}
+                onPress={() => router.push({ pathname: '/spending/[group]', params: { group: g.group.id, range: range.id } } as Href)}
+              />
+            ))}
+          </View>
+          {range.previous && <Text style={styles.muted}>“Up” compares with the same time {range.previousLabel}.</Text>}
+        </Card>
+      )}
+
+      {!seeAll && recent.length > 0 && (
+        <Card
+          title="Recent"
+          icon={OwnerIcons.clock}
+          right={
+            <Pressable onPress={() => setSeeAll(true)} accessibilityRole="button" hitSlop={8} style={({ pressed }) => pressed && styles.pressed}>
+              <Text style={styles.moreText}>See all</Text>
             </Pressable>
-          );
-        })}
-      </View>
+          }>
+          <View>
+            {recent.map((item, i) => (
+              <TransactionRow key={item.id} item={item} showDivider={i > 0} onPress={() => open(item)} receipt={statusOf(item)} />
+            ))}
+          </View>
+        </Card>
+      )}
 
-      {sections.length > 0 && <TabRow tabs={tabs} active={activeTab} onChange={setSection} />}
+      {seeAll && (
+        <View style={styles.allHeader}>
+          <Text style={styles.allTitle}>All transactions</Text>
+          <Pressable onPress={() => setSeeAll(false)} accessibilityRole="button" hitSlop={8} style={({ pressed }) => pressed && styles.pressed}>
+            <Text style={styles.moreText}>Show less</Text>
+          </Pressable>
+        </View>
+      )}
 
-      {items.length === 0 ? (
+      {seeAll && (
+        <View style={styles.filters} accessibilityRole="tablist">
+          {FILTERS.map((f) => {
+            const selected = f === filter;
+            return (
+              <Pressable
+                key={f}
+                onPress={() => setFilter(f)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected }}
+                style={({ pressed }) => [styles.filter, selected && styles.filterSelected, pressed && styles.pressed]}>
+                {f === 'Missing receipts' && missingCount > 0 && (
+                  <Icon name={ReceiptIcons.missing} color={selected ? C.onAccent : C.warning} size={13} />
+                )}
+                <Text style={[styles.filterText, selected && styles.filterTextSelected]}>
+                  {f === 'Missing receipts' ? `Missing receipts${missingCount > 0 ? ` (${missingCount})` : ''}` : f}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+
+      {seeAll && sections.length > 0 && <TabRow tabs={tabs} active={activeTab} onChange={setSection} />}
+
+      {(seeAll || recent.length === 0) && (items.length === 0 ? (
         <Card>
           <EmptyState
             icon={filter === 'Missing receipts' ? OwnerIcons.check : OwnerIcons.card}
@@ -271,6 +331,26 @@ export default function TransactionsScreen() {
             </Card>
           );
         })
+      ))}
+
+      {connected && (
+        <Card title="Settings" icon={OwnerIcons.info}>
+          <SwitchRow
+            label="Link expenses to jobs"
+            hint="NexGain asks which job a purchase was for (like Bunnings the day before a deck job), so you can see what each job really cost."
+            value={feed.linkExpensesToJobs}
+            onChange={setLinkExpensesToJobs}
+          />
+        </Card>
+      )}
+
+      {__DEV__ && (
+        <Button
+          label={preview ? 'Stop the sample preview' : 'Preview with sample data'}
+          icon={OwnerIcons.play}
+          variant="secondary"
+          onPress={preview ? stopBankPreview : startBankPreview}
+        />
       )}
 
       {receipts.length === 0 && all.length > 0 && (
@@ -286,7 +366,8 @@ export default function TransactionsScreen() {
 
       {items.length > 0 && (
         <Text style={styles.footnote}>
-          NexGain sorts each transaction into a category for you. Tap one to change it or add its receipt. A green tick means
+          NexGain sorts each transaction into a category for you and asks when it isn’t sure. Tap one to change it or add its
+          receipt; NexGain remembers your choice for that shop next time. A green tick means
           the receipt is saved; an orange warning means an expense over $82.50 has no receipt yet (you need one to claim the
           GST). Transfers between your own accounts aren’t counted in Money in or Money out.
         </Text>
@@ -316,9 +397,9 @@ const styles = StyleSheet.create({
     gap: Spacing.three - 4,
     padding: Spacing.three,
     borderRadius: Radius.large - 4,
-    backgroundColor: 'rgba(79, 140, 255, 0.10)',
+    backgroundColor: C.accentSoft,
     borderWidth: 1,
-    borderColor: 'rgba(79, 140, 255, 0.35)',
+    borderColor: C.infoBorder,
   },
   bannerTitle: {
     color: C.text,
@@ -350,7 +431,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   filterTextSelected: {
-    color: '#FFFFFF',
+    color: C.onAccent,
+  },
+  allHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  allTitle: {
+    color: C.text,
+    fontSize: 17,
+    fontWeight: '700',
   },
   iconButton: {
     width: 44,
@@ -373,7 +464,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.medium,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(79, 140, 255, 0.14)',
+    backgroundColor: C.accentSoft,
   },
   connectTitle: {
     color: C.text,

@@ -93,9 +93,12 @@ describe('the questions owners ask', () => {
     const r = tool('get_spending_trends', { group_by: 'category', category: 'materials', period: 'last_month' });
     expect(r.groups[0].name).toBe('Materials');
     expect(r.groups[0].change_percent).toBeGreaterThan(10);
-    const insight = runHealthCheck(sample, NOW).find((i) => i.check === 'spending_category_increase' && i.metrics.category === 'Materials');
-    expect(insight?.title).toMatch(/^Materials up 11%, about \$310 more a month$/);
-    expect(insight?.suggestion).toMatch(/compare prices with another supplier/i);
+    // Materials rises come from the same product costing more (receipts), not total spending.
+    const found = runHealthCheck(sample, NOW);
+    expect(found.some((i) => i.check === 'spending_category_increase' && i.metrics.category === 'Materials')).toBe(false);
+    const insight = found.find((i) => i.check === 'product_price_increase');
+    expect(insight?.title).toMatch(/chlorine 20 litre up 20%/i);
+    expect(insight?.suggestion).toMatch(/compare another supplier/i);
   });
 
   it('finds overdue invoices and unstaffed jobs, with cards that open the real screens', () => {
@@ -150,7 +153,7 @@ describe('the business health check', () => {
 });
 
 describe('before the Transactions page exists', () => {
-  const noBank = { ...buildSampleSnapshot(NOW), transactions: [], transactionsConnected: false };
+  const noBank = { ...buildSampleSnapshot(NOW), transactions: [], transactionsConnected: false, purchases: [] };
 
   it('says so politely instead of erroring', () => {
     for (const name of ['search_transactions', 'get_spend_by_supplier', 'get_spending_trends']) {
@@ -190,7 +193,9 @@ describe('the free AI Assistant (no paid AI)', () => {
     expect(ask('How much did job #4521 cost me in materials?').text).toBe(
       "House Wash (Q-4521) has cost you $86.40 in materials across 1 purchase. The job is worth $495.00, so that's 17% of its price.",
     );
-    expect(ask('Have material costs increased?').text).toMatch(/^Yes\. You spent \$3,169\.00 on materials in October 2026, 13% more than September 2026 \(\$2,800\.00\)\./);
+    // By product (from receipts), not total spending.
+    expect(ask('Have material costs increased?').text).toMatch(/^Yes, 1 product costs more than last time: LIQUID CHLORINE 20 LITRE up 20%: \$20\.00 → \$24\.00\./);
+    expect(ask('has chlorine gone up?').text).toMatch(/CHLORINE 20 LITRE up 20%/);
   });
 
   it('understands casual wording and dates', () => {

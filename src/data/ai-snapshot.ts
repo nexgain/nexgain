@@ -15,10 +15,12 @@ import { expensesStore } from '@/data/finance';
 import { docsStore, docTotals, type SalesDoc } from '@/data/invoices';
 import { jobsStore } from '@/data/jobs';
 import { payslipsStore } from '@/data/payroll';
+import { receiptsStore } from '@/data/receipts';
 import { shiftsStore } from '@/data/shifts';
 import { superPaymentsStore } from '@/data/super-payments';
 import { supabase } from '@/lib/supabase';
 
+import { purchasesFromReceipts } from '../../supabase/functions/_shared/ai/products';
 import { loadTransactions } from '../../supabase/functions/_shared/ai/transactions-adapter';
 import type { BusinessSnapshot, JobReportInfo, QualificationInfo } from '../../supabase/functions/_shared/ai/types';
 
@@ -222,5 +224,6 @@ export async function appSnapshot(): Promise<BusinessSnapshot> {
     })),
     transactions: transactions.transactions,
     transactionsConnected: transactions.connected,
+    purchases: purchasesFromReceipts(receiptsStore.get()),
   };
 }

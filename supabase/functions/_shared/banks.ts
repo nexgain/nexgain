@@ -15,6 +15,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
 import { basiq } from './basiq.ts';
 import { rematchReceipts } from './receipts.ts';
+import { RULES, type Category } from './ai/sorting.ts';
 
 export type BankProviderId = 'basiq' | 'saltedge';
 
@@ -102,56 +103,7 @@ export async function ownerBusiness(req: Request, db: SupabaseClient) {
 // Categories
 // ---------------------------------------------------------------------------
 
-// Must match the names in the app (src/data/bank.ts and EXPENSE_CATEGORIES in src/data/finance.ts).
-type Category =
-  | 'Income'
-  | 'Transfers'
-  | 'Fuel'
-  | 'Materials & supplies'
-  | 'Equipment & tools'
-  | 'Vehicle'
-  | 'Rent'
-  | 'Utilities'
-  | 'Insurance'
-  | 'Phone & internet'
-  | 'Software & subscriptions'
-  | 'Advertising'
-  | 'Wages & super'
-  | 'Bank fees'
-  | 'Tax'
-  | 'Other';
-
-// Checked in order: the first match wins (so "google ads" is Advertising, not Software).
-const RULES: [Category, RegExp][] = [
-  ['Tax', /\b(ato|australian taxation|tax office|bas payment)\b/],
-  ['Wages & super', /\b(wages?|salary|payroll|superannuation|super fund|clearing house|australiansuper|rest super|hostplus|cbus)\b/],
-  ['Advertising', /\b(google\s*\*?\s*ads|facebk|facebook|meta ads|instagram|hipages|airtasker|oneflare|service seeking|yellow pages|advertis\w*|marketing)\b/],
-  [
-    'Fuel',
-    /\b(fuel|petrol|diesel|service station|bp|shell|caltex|ampol|7-eleven|7 eleven|united petroleum|puma energy|metro petroleum|liberty oil|mobil|eg fuel|on the run|otr)\b/,
-  ],
-  [
-    'Materials & supplies',
-    /\b(bunnings|mitre 10|home timber|hardware|timber|reece|tradelink|middys|rexel|lawrence and hanson|l&h|beacon lighting|plumbing|electrical wholesal\w*|building supplies|bowens|dulux|taubmans|paint|concrete|cement|boral|officeworks|supplies|materials)\b/,
-  ],
-  ['Equipment & tools', /\b(total tools|sydney tools|tools?|kennards|coates|equipment|machinery)\b/],
-  [
-    'Vehicle',
-    /\b(rego|registration|service nsw|vicroads|tmr|mechanic|tyres?|tyrepower|bob jane|repco|supercheap|autobarn|car wash|linkt|e-?toll|tolls?|parking|wilson parking|secure parking|motor vehicle|automotive)\b/,
-  ],
-  ['Insurance', /\b(insurance|insure|nrma|allianz|suncorp|qbe|aami|gio|racv|racq|budget direct|youi|cgu|zurich)\b/],
-  ['Phone & internet', /\b(telstra|optus|vodafone|tpg|aussie broadband|belong|iinet|dodo|amaysim|boost mobile|internet|broadband|nbn)\b/],
-  [
-    'Utilities',
-    /\b(agl|origin energy|energyaustralia|energy australia|red energy|alinta|simply energy|electricity|power|gas|water|sydney water|yarra valley water|council rates)\b/,
-  ],
-  ['Rent', /\b(rent|rental|lease|real estate|property management)\b/],
-  [
-    'Software & subscriptions',
-    /\b(xero|myob|quickbooks|adobe|microsoft|google|apple\.com|dropbox|canva|zoom|slack|software|subscription|app store|itunes)\b/,
-  ],
-  ['Bank fees', /\b(account fee|monthly fee|bank fee|merchant fee|dishonour fee|overdrawn fee|international transaction fee|fee)\b/],
-];
+// The categories and known-merchant rules live in ./ai/sorting.ts (shared with the app).
 
 /** NexGain's category for a bank transaction, from its description, merchant and the bank's own labels. */
 export function categorise(txn: Pick<BankTxn, 'amount' | 'description' | 'merchant' | 'bankCategory' | 'bankClass'>): Category {

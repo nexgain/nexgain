@@ -2,22 +2,26 @@
 // transactions from. Both the free AI Assistant in the app and the daily
 // health check on the server use what this returns.
 //
-// Right now there is no Transactions page, so this returns "not connected" and
-// no transactions. The spending checks then skip quietly and the AI says
-// "Your Transactions page isn't connected yet, so I can't see spending data."
+// It reads the Transactions page's bank feed (bank_transactions, filled by the
+// bank connection and sorted by src/data/money-sorting.ts). Only spending is
+// passed on: money in and transfers between the owner's own accounts are left
+// out, and amounts are turned positive ("money spent is positive").
 //
-// TO CONNECT IT (see TRANSACTIONS_AI_LINK.md in the project folder):
-//   1. Set TRANSACTIONS_TABLE to the name of the new table (e.g. 'transactions').
-//   2. If its columns are named differently, adjust COLUMNS / toTransaction().
-//   3. Deploy the ai-insights function again (the app picks it up straight away).
+// With no bank connected there are no rows, so the spending checks skip quietly
+// and the AI says it can't see spending data yet.
 import { toTransaction } from './transactions.ts';
 import type { Transaction } from './types.ts';
 
 /** The table the Transactions page saves to. null = not built yet. */
-export const TRANSACTIONS_TABLE: string | null = null;
+export const TRANSACTIONS_TABLE: string | null = 'bank_transactions';
 
 /** Columns read (see toTransaction() in transactions.ts for how they're used). */
-const COLUMNS = 'id, date, amount, raw_merchant, merchant, category, job_id, description';
+const COLUMNS = 'id, date, amount, merchant, category, job_id, description';
+/** Before the AI sorting database file (job links) has been run. */
+const BASIC_COLUMNS = 'id, date, amount, merchant, category, description';
+
+/** Not spending: left out. */
+const NOT_SPENDING = new Set(['Income', 'Transfers']);
 
 /** How far back the AI looks (enough for "this financial year" and month-on-month trends). */
 const MONTHS_BACK = 18;
@@ -47,19 +51,26 @@ export async function loadTransactions(db: Db, businessId: string): Promise<Tran
 
   const since = new Date();
   since.setMonth(since.getMonth() - MONTHS_BACK);
-  const { data, error } = await (db.from(TRANSACTIONS_TABLE) as Query)
-    .select(COLUMNS)
-    .eq('business_id', businessId)
-    .gte('date', since.toISOString().slice(0, 10))
-    .order('date', { ascending: false })
-    .limit(5000);
+  const read = (columns: string) =>
+    (db.from(TRANSACTIONS_TABLE!) as Query)
+      .select(columns)
+      .eq('business_id', businessId)
+      .gte('date', since.toISOString().slice(0, 10))
+      .order('date', { ascending: false })
+      .limit(5000);
+  let { data, error } = await read(COLUMNS);
+  if (error) ({ data, error } = await read(BASIC_COLUMNS));
   if (error) {
     // Don't break the AI if the table isn't ready: behave as not connected.
     console.warn('Transactions could not be loaded:', error.message);
     return { connected: false, transactions: [] };
   }
-  const transactions = (data ?? [])
-    .map((row) => toTransaction(row as Record<string, unknown>))
+  const rows = (data ?? []) as Record<string, unknown>[];
+  const transactions = rows
+    .filter((row) => Number(row.amount) < 0 && !NOT_SPENDING.has(String(row.category)))
+    // The bank feed has money out as negative; the AI counts spending as positive.
+    .map((row) => toTransaction({ ...row, amount: -Number(row.amount) }))
     .filter((t): t is Transaction => t !== null);
-  return { connected: true, transactions };
+  // Connected once the bank has sent anything at all.
+  return { connected: rows.length > 0, transactions };
 }

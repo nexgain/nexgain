@@ -5,6 +5,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
 import { dateKeyOf } from './dates.ts';
+import { purchasesFromReceipts } from './products.ts';
 import { loadTransactions } from './transactions-adapter.ts';
 import type { BusinessSnapshot } from './types.ts';
 
@@ -44,7 +45,7 @@ export async function loadSnapshot(db: SupabaseClient, businessId: string): Prom
   if (error || !business) return null;
 
   const sixMonthsAgo = new Date(Date.now() - 183 * 24 * 3600_000).toISOString();
-  const [docs, jobs, clients, employees, shifts, payslips, superPayments, expenses, clock, qualifications, reports, events, contractorInvoices, transactions] = await Promise.all([
+  const [docs, jobs, clients, employees, shifts, payslips, superPayments, expenses, clock, qualifications, reports, events, contractorInvoices, transactions, receipts] = await Promise.all([
     rows(db, 'sales_docs', 'id, kind, number, status, client, client_id, job_type, job_date, items, gst_rate, due_date, paid_at, created_at, responded_at, source_quote_id', businessId),
     rows(db, 'jobs', 'id, title, address, client_id, quote_id, status, scheduled_start, scheduled_end, assigned_employee_ids', businessId),
     rows(db, 'clients', 'id, name, email, phone, address', businessId),
@@ -63,6 +64,7 @@ export async function loadSnapshot(db: SupabaseClient, businessId: string): Prom
     ),
     rows(db, 'contractor_invoices', 'id, employee_id, number, invoice_date, due_date, status, total, gst, paid_at', businessId),
     loadTransactions(db, businessId),
+    rows(db, 'receipts', 'id, status, supplier, receipt_date, line_items, created_at', businessId).catch(() => [] as Row[]),
   ]);
 
   const clientName = (r: Row) => s((r.client as Row | null)?.name) || '';
@@ -210,5 +212,6 @@ export async function loadSnapshot(db: SupabaseClient, businessId: string): Prom
     })),
     transactions: transactions.transactions,
     transactionsConnected: transactions.connected,
+    purchases: purchasesFromReceipts(receipts as Parameters<typeof purchasesFromReceipts>[0]),
   };
 }

@@ -2,24 +2,55 @@ import { useState } from 'react';
 import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { OptionSheet } from '@/components/owner/form';
 import { ScreenHeader } from '@/components/owner/invoices-ui';
 import { ReadingNote, ReceiptIcons, ReceiptPreview, useAddReceipt } from '@/components/owner/receipt-ui';
 import { amountColor, categoryIcon, signedMoney } from '@/components/owner/transactions-ui';
 import { Button, Card, EmptyState, goBack, Icon, OwnerIcons, OwnerScreen } from '@/components/owner/ui';
 import { Colors as C, Spacing } from '@/constants/theme';
-import { setTransactionCategory, TRANSACTION_CATEGORIES, useBankAccounts, useBankTransactions } from '@/data/bank';
+import { INCOME_CATEGORY, TRANSACTION_CATEGORIES, type BankTransaction } from '@/data/bank';
+import {
+  answerJob,
+  chooseCategory,
+  invoiceLabel,
+  jobLabel,
+  linkInvoice,
+  undoInvoiceMatch,
+  useMoneyFeed,
+} from '@/data/money-sorting';
 import { formatMoney } from '@/data/payroll';
 import { needsReceipt, useReceipts } from '@/data/receipts';
 import { fromDateKey } from '@/data/shifts';
 
-// One bank transaction: its details, and the category it's sorted into (the owner can change it).
+/** How NexGain picked the category, in plain English. */
+function sortedBy(t: BankTransaction) {
+  switch (t.categoryMethod) {
+    case 'owner':
+      return 'Chosen by you.';
+    case 'learned':
+      return 'You picked this category for this shop before, so NexGain used it again.';
+    case 'ai':
+      return `NexGain’s best guess (${Math.round((t.confidence ?? 0) * 100)}% sure). Tap another one if it’s wrong.`;
+    default:
+      return t.categorySource === 'owner' ? 'Chosen by you.' : 'NexGain knows this shop or payee. Tap another one if it’s wrong.';
+  }
+}
+
+type Sheet = { title: string; options: { label: string; onPick: () => void }[] };
+
+// One bank transaction: its details, the category it's sorted into (the owner
+// can change it), and the job or invoice it's linked to.
 export default function TransactionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const txn = useBankTransactions().find((t) => t.id === id);
-  const account = useBankAccounts().find((a) => a.id === txn?.accountId);
+  const feed = useMoneyFeed();
+  const txn = feed.transactions.find((t) => t.id === id);
+  const account = feed.accounts.find((a) => a.id === txn?.accountId);
   const receipt = useReceipts().find((r) => r.bankTransactionId === id);
   const { add: addReceipt, busy: adding, error: addError } = useAddReceipt();
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [sheet, setSheet] = useState<Sheet | null>(null);
 
   if (!txn) {
     return (
@@ -38,11 +69,55 @@ export default function TransactionDetailScreen() {
   async function choose(category: string) {
     if (!txn || category === txn.category) return;
     setError(null);
+    setNote(null);
     try {
-      await setTransactionCategory(txn.id, category);
+      const moved = await chooseCategory(txn.id, category);
+      setNote(`NexGain will sort ${title} as ${category} from now on${moved > 0 ? ` (${moved} more moved too)` : ''}.`);
     } catch {
       setError('Couldn’t change the category. Check your internet connection and try again.');
     }
+  }
+
+  async function link(action: () => Promise<string | null>) {
+    setLinkError(null);
+    try {
+      const failed = await action();
+      if (failed) setLinkError('Couldn’t save that. Check your internet connection and try again.');
+    } catch {
+      setLinkError('Couldn’t save that. Check your internet connection and try again.');
+    }
+  }
+
+  const invoice = invoiceLabel(txn.invoiceId, feed);
+  const job = jobLabel(txn.jobId, feed);
+  const moneyIn = txn.amount > 0 && txn.category === INCOME_CATEGORY;
+  const showJob = txn.amount < 0 && (feed.linkExpensesToJobs || txn.jobId !== null);
+
+  function pickInvoice() {
+    setSheet({
+      title: 'Which invoice is it for?',
+      options: feed.invoices.map((inv) => ({
+        label: `${inv.number} · ${inv.clientName} · ${formatMoney(inv.total)}`,
+        onPick: () => link(() => linkInvoice(txn!.id, inv.id)),
+      })),
+    });
+  }
+
+  function pickJob() {
+    setSheet({
+      title: 'Which job was it for?',
+      options: [
+        ...feed.jobs
+          .filter((j) => j.status !== 'cancelled')
+          .sort((a, b) => b.date.localeCompare(a.date))
+          .slice(0, 20)
+          .map((j) => ({
+            label: `${j.label} · ${fromDateKey(j.date).toLocaleDateString([], { day: 'numeric', month: 'short' })}`,
+            onPick: () => link(async () => ((await answerJob(txn!.id, j.id)) ? null : 'failed')),
+          })),
+        { label: 'Not for a job', onPick: () => link(async () => ((await answerJob(txn!.id, null)) ? null : 'failed')) },
+      ],
+    });
   }
 
   return (
@@ -90,20 +165,62 @@ export default function TransactionDetailScreen() {
                 {addError}
               </Text>
             )}
-            <Button
-              label={adding ? 'Saving…' : 'Add receipt'}
-              icon={ReceiptIcons.camera}
-              onPress={() => addReceipt({ bankTransactionId: txn.id })}
-              disabled={adding}
-            />
+            {feed.preview ? (
+              <Text style={styles.muted}>Receipts can’t be added to sample transactions.</Text>
+            ) : (
+              <Button
+                label={adding ? 'Saving…' : 'Add receipt'}
+                icon={ReceiptIcons.camera}
+                onPress={() => addReceipt({ bankTransactionId: txn.id })}
+                disabled={adding}
+              />
+            )}
           </>
         )}
       </Card>
 
+      {moneyIn && (
+        <Card title="Invoice" icon={OwnerIcons.receipt}>
+          {invoice ? (
+            <>
+              <Text style={styles.detailValue}>
+                Paid invoice {invoice.number} ({invoice.clientName})
+              </Text>
+              <Text style={styles.muted}>
+                {txn.invoiceMatchedBy === 'auto' ? 'NexGain matched this payment and marked the invoice as paid.' : 'You linked this payment to the invoice.'}{' '}
+                If that’s wrong, tap Undo and the invoice goes back to unpaid.
+              </Text>
+              <Button label="Undo" variant="secondary" onPress={() => link(() => undoInvoiceMatch(txn.id))} />
+            </>
+          ) : (
+            <>
+              <Text style={styles.muted}>Not linked to an invoice. Saved as income.</Text>
+              {feed.invoices.length > 0 && <Button label="Link to an invoice" icon={{ ios: 'link', android: 'link', web: 'link' }} onPress={pickInvoice} />}
+            </>
+          )}
+          {linkError && (
+            <Text accessibilityRole="alert" style={styles.error}>
+              {linkError}
+            </Text>
+          )}
+        </Card>
+      )}
+
+      {showJob && (
+        <Card title="Job" icon={OwnerIcons.calendar}>
+          <Text style={styles.detailValue}>{job ? `For the ${job} job` : 'Not linked to a job'}</Text>
+          <Button label={job ? 'Change job' : 'Pick a job'} variant="secondary" onPress={pickJob} />
+          {linkError && !moneyIn && (
+            <Text accessibilityRole="alert" style={styles.error}>
+              {linkError}
+            </Text>
+          )}
+        </Card>
+      )}
+
       <Card title="Category" icon={categoryIcon(txn.category)}>
-        <Text style={styles.muted}>
-          {txn.categorySource === 'owner' ? 'Chosen by you.' : 'NexGain picked this for you. Tap another one if it’s wrong.'}
-        </Text>
+        <Text style={styles.muted}>{sortedBy(txn)}</Text>
+        {note && <Text style={styles.note}>{note}</Text>}
         {error && (
           <Text accessibilityRole="alert" style={styles.error}>
             {error}
@@ -127,6 +244,19 @@ export default function TransactionDetailScreen() {
           })}
         </View>
       </Card>
+
+      <OptionSheet
+        visible={sheet !== null}
+        title={sheet?.title ?? ''}
+        options={sheet?.options.map((o) => o.label) ?? []}
+        value={null}
+        onSelect={(label) => {
+          const option = sheet?.options.find((o) => o.label === label);
+          setSheet(null);
+          option?.onPick();
+        }}
+        onClose={() => setSheet(null)}
+      />
     </OwnerScreen>
   );
 }
@@ -172,6 +302,12 @@ const styles = StyleSheet.create({
     color: C.danger,
     fontSize: 13,
     fontWeight: '600',
+  },
+  note: {
+    color: C.success,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
   },
   flex: {
     flex: 1,

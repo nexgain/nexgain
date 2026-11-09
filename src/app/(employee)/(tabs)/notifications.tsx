@@ -4,6 +4,7 @@ import { Pressable, StyleSheet } from 'react-native';
 
 import { EmployeeScreen, Icon } from '@/components/employee/ui';
 import {
+  DeletedBar,
   EMPLOYEE_PALETTE,
   FilterPills,
   NotificationGroups,
@@ -12,6 +13,7 @@ import {
 import { EmployeeColors as C } from '@/constants/employee-theme';
 import { useCurrentEmployee } from '@/data/current-employee';
 import {
+  deleteNotification,
   EMPLOYEE_FILTERS,
   employeeNotifications,
   groupByDate,
@@ -41,6 +43,7 @@ export default function EmployeeNotificationsScreen() {
         </Pressable>
       }>
       <FilterPills filters={EMPLOYEE_FILTERS} counts={counts} active={filter} onChange={setFilter} palette={EMPLOYEE_PALETTE} />
+      <DeletedBar palette={EMPLOYEE_PALETTE} />
 
       {mine.length === 0 ? (
         <NotificationsEmpty
@@ -53,6 +56,7 @@ export default function EmployeeNotificationsScreen() {
         <NotificationGroups
           groups={groups}
           palette={EMPLOYEE_PALETTE}
+          onDelete={(n) => deleteNotification(n.id)}
           onOpen={(n) => router.push({ pathname: '/notification/[id]', params: { id: n.id } })}
         />
       )}

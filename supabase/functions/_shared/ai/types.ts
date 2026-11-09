@@ -2,6 +2,9 @@
 // Edge Functions (Deno), the app and the tests, so it must not import anything
 // Deno- or React-specific. The server fills it from Supabase (see snapshot.ts),
 // always for a single business.
+import type { ProductPurchase } from './products.ts';
+
+export type { ProductPurchase };
 
 /** "YYYY-MM-DD" in the business's time zone. */
 export type DateKey = string;
@@ -204,6 +207,8 @@ export type BusinessSnapshot = {
   transactions: Transaction[];
   /** False until the Transactions page is connected (see transactions-adapter.ts). */
   transactionsConnected: boolean;
+  /** Products bought, from receipt line items (see products.ts), for price rises. */
+  purchases: ProductPurchase[];
 };
 
 // ---------------------------------------------------------------------------

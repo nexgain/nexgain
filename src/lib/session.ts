@@ -18,6 +18,7 @@ import { expensesStore, loadExpenses } from '@/data/finance';
 import { applyRemoteDoc, clearBusinessPayment, clearDocs, loadBusinessPayment, loadDocs } from '@/data/invoices';
 import { employeesStore, isContractor, loadOwnProfile, loadTeam } from '@/data/employees';
 import { jobReportsStore } from '@/data/job-reports';
+import { clearMoneySorting, processBank } from '@/data/money-sorting';
 import { clearReceipts, loadReceipts } from '@/data/receipts';
 import { clearNotifications, loadNotifications, subscribeToNotifications } from '@/data/notifications';
 import { loadPayRuns, payRunsStore } from '@/data/pay-runs';
@@ -88,6 +89,8 @@ async function load(userId: string) {
       loadAiInsights().catch(() => {}),
       loadSavedChats(userId),
     ]);
+    // Sort new bank transactions and match payments to invoices (needs the invoices and team loaded first).
+    processBank().catch(() => {});
     stopListening.push(subscribeToNotifications(userId, null));
 
     // Changes made on employees' phones (joining, availability, clock in/out) appear straight away.
@@ -200,6 +203,7 @@ export function endSession() {
   clearContractorInvoices();
   clearAiInsights();
   resetChats();
+  clearMoneySorting();
   jobsStore.set([]);
   clearReminders();
   eventsStore.set([]);

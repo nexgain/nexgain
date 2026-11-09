@@ -63,6 +63,8 @@ export default function OwnerNotificationDetail() {
     onPress:
       label === 'Review contractor invoice'
         ? openInvoice
+        : label === 'View transaction' && n.relatedId
+          ? () => router.navigate({ pathname: '/transaction/[id]', params: { id: n.relatedId! } })
         : label === 'View quote' && n.relatedDocId
           ? () => router.navigate({ pathname: '/invoices/[id]', params: { id: n.relatedDocId! } })
           : ACTION_ROUTES[label] === '/roster'

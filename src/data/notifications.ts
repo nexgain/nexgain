@@ -55,6 +55,8 @@ export const OWNER_TYPES = {
   employee_added: { category: 'Employees', icon: ICONS.personAdd, tone: 'blue', actions: ['View employee'] },
   document_uploaded: { category: 'Employees', icon: ICONS.document, tone: 'purple', actions: ['View document'] },
   invoice_paid: { category: 'Finance', icon: ICONS.dollar, tone: 'green', actions: ['View invoice'] },
+  // A bank payment matched to an invoice (see src/data/money-sorting.ts); the transaction has Undo.
+  payment_matched: { category: 'Finance', icon: ICONS.dollar, tone: 'green', actions: ['View transaction'] },
   contractor_invoice: { category: 'Finance', icon: ICONS.document, tone: 'blue', actions: ['Review contractor invoice'] },
   payment_overdue: { category: 'Finance', icon: ICONS.dollar, tone: 'red', actions: ['View invoice', 'Send reminder'] },
   roster_published: { category: 'System', icon: ICONS.calendar, tone: 'blue', actions: ['Open roster'] },
@@ -235,7 +237,8 @@ export async function loadNotifications(employeeId: string | null) {
     .order('created_at', { ascending: false })
     .limit(200);
   if (error) throw error;
-  notificationsStore.set(await withPhotoLinks((data as NotificationRow[]).map((row) => fromRow(row, employeeId))));
+  const rows = (data as NotificationRow[]).filter((row) => !isPendingDelete(row.id));
+  notificationsStore.set(await withPhotoLinks(rows.map((row) => fromRow(row, employeeId))));
 }
 
 /**
@@ -249,7 +252,7 @@ export function subscribeToNotifications(userId: string, employeeId: string | nu
       'postgres_changes',
       { event: '*', schema: 'public', table: 'notifications', filter: `recipient_id=eq.${userId}` },
       async (payload) => {
-        if (payload.eventType === 'DELETE') return;
+        if (payload.eventType === 'DELETE' || isPendingDelete((payload.new as NotificationRow).id)) return;
         const [n] = await withPhotoLinks([fromRow(payload.new as NotificationRow, employeeId)]);
         notificationsStore.set((all) => [n, ...all.filter((x) => x.id !== n.id)].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
         if (payload.eventType === 'INSERT') onNew?.(n);
@@ -335,3 +338,57 @@ export function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+// ---------------------------------------------------------------------------
+// Deleting (the bin on each notification)
+// ---------------------------------------------------------------------------
+
+/** How long "Undo" is offered before a deleted notification is gone for good. */
+export const UNDO_DELETE_MS = 5000;
+
+/** Deleted but still undoable: id -> the notification and its timer. */
+const pendingDeletes = new Map<string, { n: AppNotification; timer: ReturnType<typeof setTimeout> }>();
+
+/** The last deleted notification, while it can still be undone (for the "Undo" bar). */
+export const lastDeletedStore = createStore<AppNotification | null>(null);
+export const useLastDeleted = () => lastDeletedStore.use();
+
+/**
+ * Removes a notification from the list straight away. It's deleted from the
+ * database after a few seconds, unless undoNotificationDelete() is called first.
+ */
+export function deleteNotification(id: string) {
+  const n = notificationsStore.get().find((x) => x.id === id);
+  if (!n) return;
+  notificationsStore.set((all) => all.filter((x) => x.id !== id));
+  const timer = setTimeout(() => {
+    pendingDeletes.delete(id);
+    if (lastDeletedStore.get()?.id === id) lastDeletedStore.set(null);
+    // Notifications made in the app (not UUIDs) only live in memory.
+    if (!/^[0-9a-f]{8}-/.test(id)) return;
+    supabase
+      .from('notifications')
+      .delete()
+      .eq('id', id)
+      .then(({ error }) => {
+        if (!error) return;
+        // Couldn't delete it (offline, or the database file isn't run yet): put it back.
+        console.warn('Could not delete notification:', error.message);
+        notificationsStore.set((all) => [n, ...all.filter((x) => x.id !== id)].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+      });
+  }, UNDO_DELETE_MS);
+  pendingDeletes.set(id, { n, timer });
+  lastDeletedStore.set(n);
+}
+
+/** Puts a just-deleted notification back. */
+export function undoNotificationDelete(id: string) {
+  const pending = pendingDeletes.get(id);
+  if (!pending) return;
+  clearTimeout(pending.timer);
+  pendingDeletes.delete(id);
+  if (lastDeletedStore.get()?.id === id) lastDeletedStore.set(null);
+  notificationsStore.set((all) => [pending.n, ...all.filter((x) => x.id !== id)].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+}
+
+const isPendingDelete = (id: string) => pendingDeletes.has(id);

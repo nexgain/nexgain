@@ -292,9 +292,39 @@ function biggestSupplierAnswer(s: BusinessSnapshot, now: Date, period: string | 
   };
 }
 
-function increaseAnswer(s: BusinessSnapshot, now: Date, supplier: string | null, category: string | null, period: string | null): FreeAnswer {
-  if (!s.transactionsConnected) return notConnected();
+function increaseAnswer(s: BusinessSnapshot, now: Date, supplier: string | null, category: string | null, period: string | null, q = ''): FreeAnswer {
   const insights = runHealthCheck(s, now);
+
+  // Materials and products: the same product costing more than last time (from receipts), not total spending.
+  const productRises = insights.filter((i) => i.check === 'product_price_increase');
+  const named = productRises.filter((i) =>
+    String(i.metrics.product ?? '')
+      .toLowerCase()
+      .split(/[^a-z]+/)
+      .some((w) => w.length >= 4 && q.includes(w)),
+  );
+  if (named.length > 0 || (category === 'materials' && !supplier)) {
+    const list = named.length > 0 ? named : productRises;
+    const cards = list.slice(0, 6).map((i) => ({ type: 'insight' as const, id: i.key, title: i.title, summary: i.summary, severity: i.severity }));
+    if (list.length === 0) {
+      return {
+        understood: true,
+        text:
+          (s.purchases ?? []).length > 0
+            ? 'No. The products on your recent receipts cost the same as last time, or less.'
+            : 'I check material prices product by product from your receipts, and there aren’t any yet. Add receipts with the camera button on the Transactions page and I’ll compare what you pay for the same product each time.',
+        cards: [],
+      };
+    }
+    const first = list[0]!;
+    return {
+      understood: true,
+      text: `Yes, ${plural(list.length, 'product')} cost${list.length === 1 ? 's' : ''} more than last time: ${list.map((i) => i.title).join('; ')}. ${first.suggestion}`,
+      cards,
+    };
+  }
+
+  if (!s.transactionsConnected) return notConnected();
   if (supplier || category) {
     const r: Result = runTool(s, 'get_spending_trends', { group_by: 'category', category, supplier, period: period ?? 'last_month' }, now).result as Result;
     if (r.error) return { understood: true, text: r.error, cards: [] };
@@ -330,7 +360,9 @@ function increaseAnswer(s: BusinessSnapshot, now: Date, supplier: string | null,
     };
   }
   // "Have my costs gone up?" without saying which: list what has.
-  const rises = insights.filter((i) => ['spending_category_increase', 'same_item_costs_more', 'supplier_costs_more'].includes(i.check));
+  const rises = insights.filter((i) =>
+    ['product_price_increase', 'spending_category_increase', 'same_item_costs_more', 'supplier_costs_more'].includes(i.check),
+  );
   if (rises.length === 0) return { understood: true, text: "I can't see any costs that have gone up noticeably lately.", cards: [] };
   return {
     understood: true,
@@ -1191,7 +1223,7 @@ function answerOne(s: BusinessSnapshot, question: string, now: Date, context: An
 
   // Costs or prices going up.
   if (has(q, /\b(increas\w*|gone up|went up|going up|risen|rising|rise|more expensive|cost(ing)? more|price (rise|hike|increase)|prices? (up|higher)|dearer|higher)\b/)) {
-    return increaseAnswer(s, now, supplier, category, period);
+    return increaseAnswer(s, now, supplier, category, period, q);
   }
 
   // Overdue / unpaid invoices.

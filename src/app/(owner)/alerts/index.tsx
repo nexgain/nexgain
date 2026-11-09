@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import {
+  DeletedBar,
   FilterPills,
   NotificationGroups,
   NotificationsEmpty,
@@ -11,6 +12,7 @@ import {
 import { ScreenHeader } from '@/components/owner/invoices-ui';
 import { OwnerScreen } from '@/components/owner/ui';
 import {
+  deleteNotification,
   groupByDate,
   markRead,
   matchesFilter,
@@ -36,6 +38,7 @@ export default function OwnerNotificationsScreen() {
       <ScreenHeader title="Notifications" onBack={() => router.navigate(from === 'dashboard' ? '/dashboard' : '/menu')} />
       <SearchBar value={query} onChange={setQuery} palette={OWNER_PALETTE} placeholder="Search notifications..." />
       <FilterPills filters={OWNER_FILTERS} counts={counts} active={filter} onChange={setFilter} palette={OWNER_PALETTE} />
+      <DeletedBar palette={OWNER_PALETTE} />
 
       {all.length === 0 ? (
         <NotificationsEmpty
@@ -48,6 +51,7 @@ export default function OwnerNotificationsScreen() {
         <NotificationGroups
           groups={groups}
           palette={OWNER_PALETTE}
+          onDelete={(n) => deleteNotification(n.id)}
           onOpen={(n) => {
             // A customer accepting or declining a quote opens that quote.
             if (n.relatedDocId) {

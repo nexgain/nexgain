@@ -5,6 +5,8 @@
 // AI chat can run it too, so there's only one set of rules.
 // Pure functions only: no database, so it's easy to test with sample data.
 import { addDays, addMonths, daysBetween, dateKeyOf, formatDate, monthName, startOfMonth, startOfWeek, todayKey } from './dates.ts';
+import { productPriceRises } from './products.ts';
+import { suburbOf, travelCosts } from './sorting.ts';
 import { categoryKey, merchantOf, monthlyTotals, percentChange, totalOf } from './transactions.ts';
 import type { BusinessSnapshot, DateKey, Insight, InsightArea, Placement, Severity, Transaction } from './types.ts';
 
@@ -448,7 +450,8 @@ function categoryIncreases(s: BusinessSnapshot, today: DateKey): Insight[] {
   const families = new Map<string, string>();
   for (const t of spend(s.transactions)) families.set(categoryKey(t.category), t.category?.trim() || 'Uncategorised');
   for (const [key, label] of families) {
-    if (key === 'uncategorised') continue;
+    // Materials: product prices (productPriceIncreases) say more than total spending, which goes up with busy months.
+    if (key === 'uncategorised' || key === 'materials') continue;
     const months = monthlyTotals(spend(s.transactions), today, 4, { category: label });
     const last = months[3].total;
     const earlier = months.slice(0, 3).filter((m) => m.total > 0);
@@ -550,6 +553,30 @@ function supplierPriceIncreases(s: BusinessSnapshot, today: DateKey): Insight[] 
   return out;
 }
 
+/** The same product costing more than last time, from receipt line items (e.g. 20L chlorine $20 -> $24). */
+function productPriceIncreases(s: BusinessSnapshot, today: DateKey): Insight[] {
+  return productPriceRises(s.purchases ?? [], today)
+    .slice(0, 5)
+    .map((r) => {
+      const extra = r.now.unitPrice - r.before.unitPrice;
+      const sameSupplier = !r.before.supplier || !r.now.supplier || r.before.supplier.toLowerCase() === r.now.supplier.toLowerCase();
+      const at = (supplier: string | null) => (supplier ? ` at ${supplier}` : '');
+      return insight({
+        key: `product_price:${shortHash(r.key)}:${r.now.date}`,
+        check: 'product_price_increase',
+        area: 'spending',
+        severity: r.changePercent >= 10 ? 'medium' : 'low',
+        title: `${r.product} up ${r.changePercent}%: ${money(r.before.unitPrice)} → ${money(r.now.unitPrice)}`,
+        summary: `You paid ${money(r.before.unitPrice)} for ${r.product}${at(r.before.supplier)} on ${formatDate(r.before.date)}, and ${money(r.now.unitPrice)}${at(r.now.supplier)} on ${formatDate(r.now.date)}: ${money(extra)} more each.`,
+        suggestion: sameSupplier
+          ? `Ask ${r.now.supplier ?? 'the supplier'} about the price rise or compare another supplier, and update your quote prices so the extra cost is covered.`
+          : `${r.before.supplier} was cheaper. Buy it there next time, or update your quote prices so the extra cost is covered.`,
+        estimatedSaving: extra * r.now.quantity,
+        metrics: { product: r.product, old_price: round(r.before.unitPrice), new_price: round(r.now.unitPrice), change_percent: r.changePercent },
+      });
+    });
+}
+
 function recurringCosts(s: BusinessSnapshot, today: DateKey): Insight[] {
   const from = addMonths(startOfMonth(today), -4);
   const bySupplier = new Map<string, Transaction[]>();
@@ -610,6 +637,36 @@ function jobMargins(s: BusinessSnapshot): Insight[] {
   return out;
 }
 
+/** Fuel for trips to jobs further away, e.g. "Two jobs in Ipswich added about $120 in fuel". */
+function travelCharges(s: BusinessSnapshot, today: DateKey): Insight[] {
+  const from = addDays(today, -30);
+  const jobs = s.jobs
+    .map((j) => ({ date: dateKeyOf(j.startsAt), status: j.status, suburb: suburbOf(j.address) }))
+    .filter((j) => j.date >= from && j.date <= today);
+  const fuel = s.transactions
+    .filter((t) => t.date >= addDays(from, -2) && categoryKey(t.category) === categoryKey('Fuel'))
+    .map((t) => ({ amount: -t.amount, description: [t.rawMerchant, t.description].filter(Boolean).join(' '), date: t.date }));
+  return travelCosts(fuel, jobs)
+    .filter((c) => c.fuel >= 50)
+    .slice(0, 2)
+    .map((c) => {
+      const about = Math.max(10, Math.round(c.fuel / 10) * 10);
+      const jobsText = c.jobs === 1 ? 'One job' : c.jobs === 2 ? 'Two jobs' : `${c.jobs} jobs`;
+      return insight({
+        key: `travel:${c.suburb.toLowerCase()}:${today.slice(0, 7)}`,
+        check: 'travel_charges',
+        area: 'spending',
+        severity: 'low',
+        placements: ['attention', 'analytics'],
+        title: `Fuel for ${c.suburb} jobs: about ${money(about, false)}`,
+        summary: `${jobsText} in ${c.suburb} added about ${money(about, false)} in fuel in the last 30 days.`,
+        suggestion: `Add a travel charge to your quotes for ${c.suburb} jobs.`,
+        estimatedSaving: c.fuel,
+        metrics: { suburb: c.suburb, jobs: c.jobs, fuel: c.fuel },
+      });
+    });
+}
+
 function unusualSpending(s: BusinessSnapshot, today: DateKey): Insight[] {
   const out: Insight[] = [];
   const recentFrom = addDays(today, -14);
@@ -663,6 +720,8 @@ export function runHealthCheck(s: BusinessSnapshot, now = new Date()): Insight[]
     ...expiringQualifications(s, today),
     ...unassignedJobs(s, now, today),
     ...scheduleClashes(s, today),
+    // From receipts, so it works with or without a bank connected.
+    ...productPriceIncreases(s, today),
   ];
   if (s.transactionsConnected && s.transactions.length > 0) {
     found.push(
@@ -670,6 +729,7 @@ export function runHealthCheck(s: BusinessSnapshot, now = new Date()): Insight[]
       ...supplierPriceIncreases(s, today),
       ...recurringCosts(s, today),
       ...jobMargins(s),
+      ...travelCharges(s, today),
       ...unusualSpending(s, today),
     );
   }

@@ -41,6 +41,21 @@ export type BankTransaction = {
   merchant: string | null;
   category: string;
   categorySource: 'auto' | 'owner';
+  /** The bank's own label for the kind of spending (a clue for sorting). */
+  bankCategory: string | null;
+  /** How sure NexGain is about the category (0 to 1); null until sorted. */
+  confidence: number | null;
+  /** How it was sorted: rule, learned (the owner's earlier choice), ai (best guess) or owner. */
+  categoryMethod: 'rule' | 'learned' | 'ai' | 'owner' | null;
+  /** The job it was for (when "Link expenses to jobs" is on). */
+  jobId: string | null;
+  /** Money in: the invoice it paid. */
+  invoiceId: string | null;
+  invoiceMatchedBy: 'auto' | 'owner' | null;
+  /** The owner has answered (or skipped) these "Needs review" questions. */
+  categoryReviewDone: boolean;
+  jobReviewDone: boolean;
+  invoiceReviewDone: boolean;
 };
 
 export const INCOME_CATEGORY = 'Income';
@@ -84,9 +99,21 @@ type TxnRow = {
   merchant: string | null;
   category: string;
   category_source: 'auto' | 'owner';
+  bank_category?: string | null;
+  confidence?: number | string | null;
+  category_method?: BankTransaction['categoryMethod'];
+  job_id?: string | null;
+  invoice_id?: string | null;
+  invoice_matched_by?: 'auto' | 'owner' | null;
+  category_review_done?: boolean;
+  job_review_done?: boolean;
+  invoice_review_done?: boolean;
 };
 
 const TXN_COLUMNS = 'id, account_id, date, description, amount, merchant, category, category_source';
+/** Added by the AI sorting (20261110000200_transaction_sorting.sql). */
+const SORTING_COLUMNS =
+  'bank_category, confidence, category_method, job_id, invoice_id, invoice_matched_by, category_review_done, job_review_done, invoice_review_done';
 
 const txnFromRow = (r: TxnRow): BankTransaction => ({
   id: r.id,
@@ -97,6 +124,15 @@ const txnFromRow = (r: TxnRow): BankTransaction => ({
   merchant: r.merchant,
   category: r.category,
   categorySource: r.category_source,
+  bankCategory: r.bank_category ?? null,
+  confidence: r.confidence === null || r.confidence === undefined ? null : Number(r.confidence),
+  categoryMethod: r.category_method ?? (r.category_source === 'owner' ? 'owner' : null),
+  jobId: r.job_id ?? null,
+  invoiceId: r.invoice_id ?? null,
+  invoiceMatchedBy: r.invoice_matched_by ?? null,
+  categoryReviewDone: r.category_review_done ?? false,
+  jobReviewDone: r.job_review_done ?? false,
+  invoiceReviewDone: r.invoice_review_done ?? false,
 });
 
 /** Loads the connection, accounts and transactions saved in NexGain. */
@@ -131,17 +167,21 @@ export async function loadBank() {
   );
 
   // The database hands back at most 1,000 rows at a time, so read in pages.
+  // (Without the AI sorting columns if that database file hasn't been run yet.)
+  const page = (columns: string, from: number) =>
+    supabase.from('bank_transactions').select(columns).order('date', { ascending: false }).order('id').range(from, from + 999);
   const all: BankTransaction[] = [];
+  let columns = `${TXN_COLUMNS}, ${SORTING_COLUMNS}`;
   for (let from = 0; from < 20_000; from += 1000) {
-    const { data, error: txnError } = await supabase
-      .from('bank_transactions')
-      .select(TXN_COLUMNS)
-      .order('date', { ascending: false })
-      .order('id')
-      .range(from, from + 999);
+    let { data, error: txnError } = await page(columns, from);
+    if (txnError?.code === '42703' && columns !== TXN_COLUMNS) {
+      columns = TXN_COLUMNS;
+      ({ data, error: txnError } = await page(columns, from));
+    }
     if (txnError) throw txnError;
-    all.push(...(data as TxnRow[]).map(txnFromRow));
-    if (data.length < 1000) break;
+    const rows = (data ?? []) as unknown as TxnRow[];
+    all.push(...rows.map(txnFromRow));
+    if (rows.length < 1000) break;
   }
   bankTransactionsStore.set(all);
 }
@@ -246,8 +286,17 @@ export async function disconnectBank(): Promise<string | null> {
 /** The owner picks a different category for a bank transaction. Throws if it couldn't be saved. */
 export async function setTransactionCategory(id: string, category: string) {
   const before = bankTransactionsStore.get();
-  bankTransactionsStore.set((all) => all.map((t) => (t.id === id ? { ...t, category, categorySource: 'owner' } : t)));
-  const { error } = await supabase.from('bank_transactions').update({ category, category_source: 'owner' }).eq('id', id);
+  bankTransactionsStore.set((all) =>
+    all.map((t) => (t.id === id ? { ...t, category, categorySource: 'owner', categoryMethod: 'owner', confidence: 1, categoryReviewDone: true } : t)),
+  );
+  let { error } = await supabase
+    .from('bank_transactions')
+    .update({ category, category_source: 'owner', category_method: 'owner', confidence: 1, category_review_done: true })
+    .eq('id', id);
+  // Before the AI sorting database file is run, only the category can be saved.
+  if (error?.code === '42703' || error?.code === '42501') {
+    ({ error } = await supabase.from('bank_transactions').update({ category, category_source: 'owner' }).eq('id', id));
+  }
   if (error) {
     bankTransactionsStore.set(before);
     throw error;
