@@ -166,14 +166,37 @@ export default function TransactionDetailScreen() {
               </Text>
             )}
             {feed.preview ? (
-              <Text style={styles.muted}>Receipts can’t be added to sample transactions.</Text>
+              <Text style={styles.muted}>Receipts can’t be added to sample transactions. On your real transactions you can take or choose a photo here.</Text>
             ) : (
-              <Button
-                label={adding ? 'Saving…' : 'Add receipt'}
-                icon={ReceiptIcons.camera}
-                onPress={() => addReceipt({ bankTransactionId: txn.id })}
-                disabled={adding}
-              />
+              <>
+                <View style={styles.receiptButtons}>
+                  <View style={styles.flex}>
+                    <Button
+                      label={adding ? 'Saving…' : 'Take photo'}
+                      icon={ReceiptIcons.camera}
+                      onPress={() => addReceipt({ bankTransactionId: txn.id }, 'camera')}
+                      disabled={adding}
+                    />
+                  </View>
+                  <View style={styles.flex}>
+                    <Button
+                      label="Choose photo"
+                      icon={{ ios: 'photo.on.rectangle', android: 'photo_library', web: 'photo_library' }}
+                      variant="secondary"
+                      onPress={() => addReceipt({ bankTransactionId: txn.id }, 'library')}
+                      disabled={adding}
+                    />
+                  </View>
+                </View>
+                <Pressable
+                  onPress={() => addReceipt({ bankTransactionId: txn.id }, 'pdf')}
+                  disabled={adding}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  style={({ pressed }) => [styles.pdfLink, pressed && styles.pressed]}>
+                  <Text style={styles.link}>Or upload a PDF receipt</Text>
+                </Pressable>
+              </>
             )}
           </>
         )}
@@ -317,6 +340,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.two,
     minHeight: 44,
+  },
+  receiptButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  pdfLink: {
+    alignSelf: 'flex-start',
+    minHeight: 44,
+    justifyContent: 'center',
   },
   receiptText: {
     flex: 1,

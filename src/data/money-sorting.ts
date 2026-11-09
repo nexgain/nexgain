@@ -673,3 +673,18 @@ export function groupInsight(summary: GroupSummary, range: MoneyRange, jobs: Job
   }
   return `${summary.items.length} ${name} transaction${summary.items.length === 1 ? '' : 's'} so far, about the same as usual.`;
 }
+
+/**
+ * Spending by group (Materials, Labour, Fuel...) between two dates, biggest
+ * first, from the same transactions as the Transactions page (bank + typed-in
+ * expenses). `extraLabour` adds wages paid through payroll when there's no
+ * bank feed to see them.
+ */
+export function spendingByGroup(items: TransactionItem[], start: Date, end: Date, extraLabour = 0) {
+  return SPEND_GROUPS.map((group) => ({
+    group,
+    total: total(spending(items, start, end, group.id)) + (group.id === 'labour' ? extraLabour : 0),
+  }))
+    .filter((g) => g.total > 0)
+    .sort((a, b) => b.total - a.total);
+}

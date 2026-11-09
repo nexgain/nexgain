@@ -271,11 +271,14 @@ export function DonutChart({
   formatValue,
   size = 160,
   emptyMessage = 'No data yet',
+  showPercent = false,
 }: {
   segments: { name: string; color: string; value: number }[];
   formatValue: (value: number) => string;
   size?: number;
   emptyMessage?: string;
+  /** Adds each slice's share to the legend, e.g. "Materials · $1,200 (34%)". */
+  showPercent?: boolean;
 }) {
   const total = segments.reduce((sum, s) => sum + s.value, 0);
   const stroke = 20;
@@ -324,6 +327,7 @@ export function DonutChart({
               <View style={[styles.swatch, { backgroundColor: s.color }]} />
               <Text style={styles.legendText}>
                 {s.name} · {formatValue(s.value)}
+                {showPercent ? ` (${Math.round((s.value / total) * 100)}%)` : ''}
               </Text>
             </View>
           ))}

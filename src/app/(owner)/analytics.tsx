@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { AiInsightsList } from '@/components/owner/ai-ui';
 import { BarChart, DonutChart, LineChart, SeriesColors } from '@/components/owner/charts';
+import { GROUP_COLORS } from '@/components/owner/money-review';
 import {
   Card,
   EmptyState,
@@ -15,11 +16,13 @@ import {
   StatGrid,
   TabRow,
 } from '@/components/owner/ui';
+import { transactionItems } from '@/data/bank';
 import { useClockSessions } from '@/data/clock-records';
 import { formatShortDate } from '@/data/employee-roster';
 import { useEmployees } from '@/data/employees';
-import { byCategory, expenseEntries, inRange, revenueEntries, sumEntries, useExpenses } from '@/data/finance';
+import { expenseEntries, inRange, revenueEntries, sumEntries, useExpenses } from '@/data/finance';
 import { useDocs } from '@/data/invoices';
+import { spendingByGroup, useMoneyFeed } from '@/data/money-sorting';
 import { formatMoney, getPayPeriods, labourCost, usePayslipRecords } from '@/data/payroll';
 
 const TABS = ['Overview', 'Labour Costs', 'Finance', 'Productivity', 'Suppliers', 'Custom'] as const;
@@ -63,17 +66,28 @@ export default function AnalyticsScreen() {
   const labourByBucket = buckets.map((b) => labourCost(employees, sessions, b, now));
   const totalLabour = labourByBucket.reduce((sum, v) => sum + v, 0);
 
-  // Revenue = paid invoices; expenses = approved payroll + entered expenses.
+  // Revenue = paid invoices. Expenses = money spent, from the Transactions page
+  // (bank + typed-in expenses; not income or transfers). Without a bank feed,
+  // wages paid through payroll are added, as the bank isn't there to show them.
   const revenue = revenueEntries(useDocs());
-  const expenses = expenseEntries(useExpenses(), usePayslipRecords(), employees);
+  const typedExpenses = useExpenses();
+  const feed = useMoneyFeed();
+  const payrollEntries = expenseEntries([], usePayslipRecords(), employees);
+  const spendItems = transactionItems(feed.transactions, feed.accounts, feed.preview ? [] : typedExpenses);
+  const wagesIn = (range: { start: Date; end: Date }) => (feed.connected ? 0 : sumEntries(inRange(payrollEntries, range)));
+  const spentIn = (range: { start: Date; end: Date }) =>
+    spendingByGroup(spendItems, range.start, range.end, wagesIn(range)).reduce((sum, g) => sum + g.total, 0);
   const revenueByBucket = buckets.map((b) => sumEntries(inRange(revenue, b)));
-  const expensesByBucket = buckets.map((b) => sumEntries(inRange(expenses, b)));
+  const expensesByBucket = buckets.map((b) => Math.round(spentIn(b) * 100) / 100);
   const totalRevenue = revenueByBucket.reduce((sum, v) => sum + v, 0);
   const totalExpenses = expensesByBucket.reduce((sum, v) => sum + v, 0);
-  const periodExpenses = inRange(expenses, { start: buckets[0].start, end: buckets[buckets.length - 1].end });
-  const topCategories = byCategory(periodExpenses)
-    .slice(0, SeriesColors.length)
-    .map((c, i) => ({ name: c.category, value: c.amount, color: SeriesColors[i] }));
+  // The wheel: the same spending, by group (Materials, Labour, Fuel...).
+  const whole = { start: buckets[0].start, end: buckets[buckets.length - 1].end };
+  const topCategories = spendingByGroup(spendItems, whole.start, whole.end, wagesIn(whole)).map((g) => ({
+    name: g.group.name,
+    value: g.total,
+    color: GROUP_COLORS[g.group.id],
+  }));
   const labourPercent = totalRevenue > 0 ? Math.round((totalLabour / totalRevenue) * 100) : 0;
 
   return (
@@ -138,7 +152,7 @@ export default function AnalyticsScreen() {
 
           <ResponsiveRow>
             <Card title="Top Expense Categories" icon={OwnerIcons.card}>
-              <DonutChart segments={topCategories} formatValue={money} />
+              <DonutChart segments={topCategories} formatValue={money} showPercent emptyMessage="No spending yet" />
             </Card>
             <Card title="AI Insights" icon={OwnerIcons.sparkles}>
               <AiInsightsList placement="analytics" empty="No data yet" />

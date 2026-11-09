@@ -31,6 +31,16 @@ import { fromDateKey } from '@/data/shifts';
 /** Questions shown before "Show all". */
 const FIRST = 3;
 
+/** One colour per group, the same everywhere (Materials is always purple, Fuel orange...). */
+export const GROUP_COLORS: Record<SpendGroupId, string> = {
+  materials: '#8b5cf6',
+  labour: '#3987e5',
+  tools: '#199e70',
+  fuel: '#f97316',
+  vehicle: '#c98500',
+  other: '#94a3b8',
+};
+
 /** One icon per group, from the category icons. */
 export const GROUP_ICONS: Record<SpendGroupId, IconName> = {
   materials: categoryIcon('Materials & supplies'),

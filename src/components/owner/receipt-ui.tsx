@@ -19,7 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Icon, OwnerIcons } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { addReceipt, receiptFileUrl, type Receipt, type ReceiptLink } from '@/data/receipts';
-import { CaptureError, captureReceipt, chooseReceiptSource } from '@/lib/receipt-capture';
+import { CaptureError, captureReceipt, chooseReceiptSource, type ReceiptSource } from '@/lib/receipt-capture';
 
 export const ReceiptIcons = {
   camera: { ios: 'camera.fill', android: 'photo_camera', web: 'photo_camera' },
@@ -200,9 +200,10 @@ export function useAddReceipt() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function add(link?: ReceiptLink) {
+  /** Without `from`, asks where the receipt comes from (camera, photos or a PDF). */
+  async function add(link?: ReceiptLink, from?: ReceiptSource) {
     setError(null);
-    const source = await chooseReceiptSource();
+    const source = from ?? (await chooseReceiptSource());
     if (!source) return;
     try {
       const file = await captureReceipt(source);

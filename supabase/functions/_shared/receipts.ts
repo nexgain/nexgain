@@ -1,24 +1,30 @@
 // Matching receipts to bank transactions. Used by read-receipt (straight after
 // the AI reads a receipt) and bank-sync (when new transactions come in).
 //
-// A receipt matches a bank transaction with exactly the same amount (money
-// out) and a date close to the receipt's (banks usually show a purchase on
-// the same day or a few days later). One clear match is linked automatically;
-// several possible ones are saved as suggestions for the owner to pick.
+// A receipt matches a bank transaction by what the AI read off it: the same
+// amount (money out), a date close to the receipt's (banks usually show a
+// purchase the same day or a few days later) and the supplier's name in the
+// bank line. One clear match is linked automatically; several possible ones
+// are saved as suggestions for the owner to pick. See pickReceiptMatch().
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
+
+import { pickReceiptMatch, type MatchCandidate } from './receipt-match.ts';
+
+export { pickReceiptMatch, sameSupplier, type MatchCandidate, type MatchPick } from './receipt-match.ts';
 
 /** Categories a receipt never changes (they aren't purchases). */
 const KEEP_CATEGORY = new Set(['Income', 'Transfers', 'Wages & super', 'Tax']);
 
 const DAY = 24 * 60 * 60 * 1000;
 const dateKey = (ms: number) => new Date(ms).toISOString().slice(0, 10);
-const daysBetween = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / DAY);
 
 export type ReceiptRow = {
   id: string;
   business_id: string;
   status: 'reading' | 'ready' | 'failed';
   receipt_date: string | null;
+  /** As the AI read it off the receipt, e.g. "Bunnings Warehouse". */
+  supplier?: string | null;
   total: number | string | null;
   category: string | null;
   bank_transaction_id: string | null;
@@ -28,7 +34,7 @@ export type ReceiptRow = {
 };
 
 export const RECEIPT_COLUMNS =
-  'id, business_id, status, receipt_date, total, category, bank_transaction_id, expense_id, match_status, matched_by';
+  'id, business_id, status, receipt_date, supplier, total, category, bank_transaction_id, expense_id, match_status, matched_by';
 
 /** Uses the receipt's category for its bank transaction, unless the owner chose one themselves. */
 export async function applyReceiptCategory(db: SupabaseClient, transactionId: string, category: string | null) {
@@ -47,11 +53,14 @@ export async function matchReceipt(db: SupabaseClient, receipt: ReceiptRow): Pro
   // From 3 days before the receipt to 10 days after (or the last 60 days if it had no date).
   const from = receipt.receipt_date ? dateKey(Date.parse(receipt.receipt_date) - 3 * DAY) : dateKey(Date.now() - 60 * DAY);
   const to = receipt.receipt_date ? dateKey(Date.parse(receipt.receipt_date) + 10 * DAY) : dateKey(Date.now() + DAY);
+  const cents = Math.round(total * 100) / 100;
   const { data: found, error } = await db
     .from('bank_transactions')
-    .select('id, date')
+    .select('id, date, amount, merchant, description')
     .eq('business_id', receipt.business_id)
-    .eq('amount', -Math.round(total * 100) / 100)
+    // The receipt's total, up to 3% more (a card surcharge).
+    .lte('amount', -cents)
+    .gte('amount', -Math.round(cents * 1.03 * 100) / 100)
     .gte('date', from)
     .lte('date', to);
   if (error) throw error;
@@ -62,33 +71,25 @@ export async function matchReceipt(db: SupabaseClient, receipt: ReceiptRow): Pro
     ? await db.from('receipts').select('bank_transaction_id').in('bank_transaction_id', ids).neq('id', receipt.id)
     : { data: [] };
   const takenIds = new Set((taken ?? []).map((r) => r.bank_transaction_id as string));
-
-  // Closest date first; a bank date before the receipt date counts as further away.
-  const distance = (date: string) => {
-    if (!receipt.receipt_date) return 0;
-    const days = daysBetween(receipt.receipt_date, date);
-    return days >= 0 ? days : -days * 2;
-  };
-  const candidates = (found ?? [])
+  const candidates: MatchCandidate[] = (found ?? [])
     .filter((t) => !takenIds.has(t.id))
-    .map((t) => ({ id: t.id as string, distance: distance(t.date as string) }))
-    .sort((a, b) => a.distance - b.distance);
+    .map((t) => ({ id: t.id, date: t.date, amount: Number(t.amount), merchant: t.merchant ?? null, description: t.description ?? null }));
 
-  const [best, next] = candidates;
-  const clearWinner = best && best.distance <= 5 && (!next || next.distance - best.distance >= 3) && !!receipt.receipt_date;
-  const update = clearWinner
-    ? { bank_transaction_id: best.id, match_status: 'matched', matched_by: 'auto', suggestions: [] }
-    : candidates.length > 0
-      ? { match_status: 'suggested', suggestions: candidates.slice(0, 3).map((c) => c.id) }
-      : { match_status: 'unmatched', suggestions: [] };
+  const pick = pickReceiptMatch({ total: cents, date: receipt.receipt_date, supplier: receipt.supplier ?? null }, candidates);
+  const update =
+    pick.kind === 'match'
+      ? { bank_transaction_id: pick.id, match_status: 'matched', matched_by: 'auto', suggestions: [] }
+      : pick.kind === 'suggest'
+        ? { match_status: 'suggested', suggestions: pick.ids }
+        : { match_status: 'unmatched', suggestions: [] };
   const { error: saveError } = await db
     .from('receipts')
     .update({ ...update, updated_at: new Date().toISOString() })
     .eq('id', receipt.id)
     .eq('match_status', receipt.match_status);
   if (saveError) throw saveError;
-  if (clearWinner) await applyReceiptCategory(db, best.id, receipt.category);
-  return !!clearWinner;
+  if (pick.kind === 'match') await applyReceiptCategory(db, pick.id, receipt.category);
+  return pick.kind === 'match';
 }
 
 /** Tries again for every receipt still waiting for its bank transaction (new transactions just came in). */
