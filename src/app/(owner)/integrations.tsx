@@ -4,9 +4,9 @@ import { updateBusiness, useBusiness } from '@/data/business';
 import { toggleBusinessApp, useBusinessApps } from '@/data/business-apps';
 import { useRefreshConnectedAccountsOnFocus } from '@/data/connected-accounts';
 
-// More > Integrations. Gmail and Outlook can be connected so emails send straight
-// from the owner's address; other apps are saved as ones the business uses or has
-// asked for, so we know which connections to build first.
+// More > Integrations: Email (Gmail and Outlook can be connected so emails send
+// straight from the owner's address) and Bank account (transactions come into the
+// Transactions tab). Other apps are hidden for now (src/constants/features.ts).
 export default function IntegrationsScreen() {
   const business = useBusiness();
   const apps = useBusinessApps();
@@ -17,7 +17,7 @@ export default function IntegrationsScreen() {
       <PageHeader
         onBack={() => goBack()}
         title="Integrations"
-        subtitle="Connect Gmail or Outlook to send quotes and invoices straight from your own email address. Add the other apps you use and we'll let you know when they can connect."
+        subtitle="Send quotes and invoices from your own email address, and bring your business bank transactions into NexGain."
       />
       <ConnectApps
         theme="dark"

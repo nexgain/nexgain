@@ -17,6 +17,7 @@ import {
   callbackUrl,
   CORS,
   env,
+  isAppAddress,
   isProvider,
   ownerBusinessId,
   PROVIDERS,
@@ -24,21 +25,6 @@ import {
   reply,
   type ProviderId,
 } from '../_shared/connections.ts';
-
-/**
- * Only send owners back into the NexGain app: its own scheme, Expo Go while
- * developing, or the web app on this computer.
- */
-function isAppAddress(value: unknown): value is string {
-  if (typeof value !== 'string' || value.length > 500) return false;
-  try {
-    const url = new URL(value);
-    if (url.protocol === 'nexgain:' || url.protocol === 'exp:' || url.protocol === 'exps:') return true;
-    return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname === 'localhost';
-  } catch {
-    return false;
-  }
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });

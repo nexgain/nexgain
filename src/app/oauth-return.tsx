@@ -4,6 +4,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { Colors } from '@/constants/theme';
+import { loadBank } from '@/data/bank';
 import { loadConnectedAccounts, noteOAuthReturn } from '@/data/connected-accounts';
 
 // Web: this page loads in the login pop-up; hand the result back to the app window.
@@ -23,7 +24,8 @@ export default function OAuthReturnScreen() {
     // for the in-app login, and refresh what's connected.
     if (params.status) {
       noteOAuthReturn(params);
-      loadConnectedAccounts().catch(() => {});
+      if (params.kind === 'bank') loadBank().catch(() => {});
+      else loadConnectedAccounts().catch(() => {});
     }
     if (router.canGoBack()) router.back();
     else router.replace('/');

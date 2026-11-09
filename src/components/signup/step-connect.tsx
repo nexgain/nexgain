@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { comingSoon } from '@/components/auth/auth-screen';
 import { ConnectApps } from '@/components/owner/connect-apps';
-import { Button, Field, fieldStyles, Icon, Input, Note, SignupColors as C } from '@/components/signup/fields';
+import { Button, Field, fieldStyles, Input, Note, SignupColors as C } from '@/components/signup/fields';
 import type { StepProps } from '@/components/signup/types';
 import { toggleChosen } from '@/data/business-apps';
 import { formatBsb } from '@/components/employee-signup/types';
@@ -59,7 +58,7 @@ export function StepConnect({
             </Field>
           </View>
         }
-        optionalNote="Everything below is optional. You can add these later in More › Integrations."
+        optionalNote="Connecting your bank is optional. You can do it later in More › Integrations."
         apps={data.apps}
         onToggleApp={(app) => update({ apps: toggleChosen(data.apps, app, (a) => a) })}
       />
@@ -105,32 +104,7 @@ export function StepConnect({
         </View>
       </View>
 
-      <Text style={styles.sectionTitle}>
-        Bank connection <Text style={styles.optional}>(optional)</Text>
-      </Text>
-      <View style={fieldStyles.card}>
-        <View style={styles.headerRow}>
-          <View style={styles.bigIcon}>
-            <Icon name={{ ios: 'building.columns.fill', android: 'account_balance', web: 'account_balance' }} color={C.primary} size={22} />
-          </View>
-          <View style={fieldStyles.flex}>
-            <Text style={styles.cardTitle}>Connect your business bank account</Text>
-            <Text style={styles.cardText}>See payments and transactions in NexGain automatically.</Text>
-          </View>
-        </View>
-        <NotConnected />
-        <Button
-          label="Connect Bank Account"
-          icon={{ ios: 'link', android: 'link', web: 'link' }}
-          onPress={() => {
-            // TODO(bank): open a secure bank connection here (e.g. an open banking /
-            // CDR provider). Never ask for or store bank login details in the app.
-            comingSoon('Bank connection');
-          }}
-        />
-      </View>
-
-      <Note>You can change your email and bank details later in Business Profile, and connect apps from More › Integrations.</Note>
+      <Note>You can change your email and bank details later in Business Profile, and connect your bank from More › Integrations.</Note>
       <Button
         label="Next"
         arrow
@@ -143,59 +117,11 @@ export function StepConnect({
   );
 }
 
-function NotConnected() {
-  return (
-    <View style={styles.badge}>
-      <View style={styles.dot} />
-      <Text style={styles.badgeText}>Not connected</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  bigIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: C.primarySoft,
-  },
-  cardTitle: {
-    color: C.text,
-    fontSize: 16,
-    fontWeight: '700',
-  },
   cardText: {
     color: C.textSecondary,
     fontSize: 13,
     marginTop: 2,
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: C.track,
-  },
-  dot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: C.muted,
-  },
-  badgeText: {
-    color: C.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
   },
   sectionTitle: {
     color: C.text,

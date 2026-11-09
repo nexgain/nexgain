@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { router, type Href } from 'expo-router';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   ActionRow,
@@ -16,7 +16,8 @@ import {
 import { AiInsightsList } from '@/components/owner/ai-ui';
 import { NotificationsSection } from '@/components/owner/notifications-section';
 import { UpcomingSection } from '@/components/owner/upcoming';
-import { Colors as C } from '@/constants/theme';
+import { Colors as C, Radius, Spacing } from '@/constants/theme';
+import { transactionItems, useBankAccounts, useBankTransactions } from '@/data/bank';
 import { ownerFirstName, useBusiness } from '@/data/business';
 import { useEmployees } from '@/data/employees';
 import {
@@ -30,6 +31,7 @@ import {
 } from '@/data/finance';
 import { useDocs } from '@/data/invoices';
 import { formatMoney, usePayslipRecords } from '@/data/payroll';
+import { indexReceipts, receiptStatus, useReceipts } from '@/data/receipts';
 
 const NO_INSIGHTS = 'No insights yet — check back once you have more activity data.';
 
@@ -52,6 +54,13 @@ export default function OwnerDashboardScreen() {
   const expenses = expenseEntries(useExpenses(), usePayslipRecords(), useEmployees());
   const revenueNow = sumEntries(inRange(revenue, thisMonth));
   const expensesNow = sumEntries(inRange(expenses, thisMonth));
+
+  // Expenses over $82.50 this financial year with no receipt (needed to claim the GST).
+  const thisFy = financeRanges(now)[2];
+  const receiptIndex = indexReceipts(useReceipts());
+  const missingReceipts = transactionItems(useBankTransactions(), useBankAccounts(), useExpenses()).filter(
+    (i) => i.date >= thisFy.start && i.date < thisFy.end && receiptStatus(i, receiptIndex) === 'missing',
+  ).length;
 
   return (
     <OwnerScreen>
@@ -105,6 +114,25 @@ export default function OwnerDashboardScreen() {
           />
         </Pressable>
       </StatGrid>
+
+      {missingReceipts > 0 && (
+        <Pressable
+          onPress={() => router.navigate({ pathname: '/transactions', params: { filter: 'missing', range: 'this-fy' } } as Href)}
+          accessibilityRole="button"
+          accessibilityLabel={`${missingReceipts} receipts missing this financial year. Open the list.`}
+          style={({ pressed }) => [styles.receiptsCard, pressed && styles.pressed]}>
+          <View style={styles.receiptsIcon}>
+            <Icon name={{ ios: 'exclamationmark.triangle.fill', android: 'warning', web: 'warning' }} color={C.warning} size={18} />
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.receiptsTitle}>
+              {missingReceipts} receipt{missingReceipts === 1 ? '' : 's'} missing
+            </Text>
+            <Text style={styles.receiptsText}>Expenses over $82.50 this financial year. Add them to claim the GST.</Text>
+          </View>
+          <Icon name={OwnerIcons.chevron} color={C.textSecondary} size={12} />
+        </Pressable>
+      )}
 
       <UpcomingSection />
 
@@ -166,6 +194,37 @@ export default function OwnerDashboardScreen() {
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
+  receiptsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three - 4,
+    padding: Spacing.three,
+    borderRadius: Radius.large - 4,
+    backgroundColor: 'rgba(245, 158, 11, 0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+  },
+  receiptsIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(245, 158, 11, 0.16)',
+  },
+  receiptsTitle: {
+    color: C.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  receiptsText: {
+    color: C.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+  },
   bell: {
     width: 42,
     height: 42,
