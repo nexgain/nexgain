@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react';
-import { router, useFocusEffect, useLocalSearchParams, useNavigation, type Href } from 'expo-router';
+import { useState } from 'react';
+import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -33,6 +33,7 @@ import {
   useShifts,
   type RosterShift,
 } from '@/data/shifts';
+import { useClearParamsOnLeave } from '@/lib/clear-params';
 
 const VIEWS = ['Week', 'Day', 'Month'] as const;
 type RosterView = (typeof VIEWS)[number];
@@ -104,7 +105,6 @@ export default function OwnerRosterScreen() {
 
   // Opened from a notification ("View full job details") or a job: show that
   // job's day. Leaving the screen clears this, so next time it opens normally.
-  const navigation = useNavigation();
   const params = useLocalSearchParams<{ from?: string; date?: string }>();
   // Also opened from a job's "Open Roster" (from=job).
   const fromNotification = params.from === 'notification' || params.from === 'job';
@@ -116,12 +116,7 @@ export default function OwnerRosterScreen() {
   } else if (!fromNotification && shownDate !== null) {
     setShownDate(null);
   }
-  useFocusEffect(
-    useCallback(
-      () => () => navigation.setParams({ from: undefined, date: undefined } as never),
-      [navigation],
-    ),
-  );
+  useClearParamsOnLeave({ from: params.from, date: params.date });
   const [draft, setDraft] = useState<ShiftDraft | null>(null);
   const [showAvailability, setShowAvailability] = useState(false);
   const [message, setMessage] = useState<string | null>(null);

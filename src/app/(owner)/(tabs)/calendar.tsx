@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react';
-import { Redirect, router, useFocusEffect, useLocalSearchParams, useNavigation } from 'expo-router';
+import { useState } from 'react';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { EventEditor } from '@/components/owner/event-editor';
@@ -16,6 +16,7 @@ import { formatShortDate, formatWeekday } from '@/data/employee-roster';
 import { useDocs } from '@/data/invoices';
 import { useJobs, type Job } from '@/data/jobs';
 import { fromDateKey } from '@/data/shifts';
+import { useClearParamsOnLeave } from '@/lib/clear-params';
 
 const VIEWS = ['Month', 'Week', 'Day'] as const;
 type View_ = (typeof VIEWS)[number];
@@ -59,7 +60,6 @@ export default function CalendarScreen() {
   const [draft, setDraft] = useState<EventDraft | null>(null);
 
   // Opened from a job's delivery list: open that event.
-  const navigation = useNavigation();
   const params = useLocalSearchParams<{ event?: string; date?: string }>();
   const [openedParam, setOpenedParam] = useState<string | null>(null);
   // Opened from an AI Assistant job card ("View in Calendar"): show that day.
@@ -80,7 +80,7 @@ export default function CalendarScreen() {
   } else if (!params.event && openedParam !== null) {
     setOpenedParam(null);
   }
-  useFocusEffect(useCallback(() => () => navigation.setParams({ event: undefined, date: undefined } as never), [navigation]));
+  useClearParamsOnLeave({ event: params.event, date: params.date });
 
   if (me) return <Redirect href="/home" />;
 

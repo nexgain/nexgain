@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View, type ScrollViewInstance, type TextInputInstance } from 'react-native';
 
-import { AI_ACCENT, AI_ACCENT_SOFT, AiInsightsList, ResultCardView, RosterPicker, SampleNote } from '@/components/owner/ai-ui';
+import { AI_ACCENT, AI_ACCENT_SOFT, ResultCardView, RosterPicker, SampleNote } from '@/components/owner/ai-ui';
 import { ConfirmDialog } from '@/components/owner/confirm-dialog';
 import { Button, Card, Icon, OwnerIcons, OwnerScreen, ownerStyles, PageHeader, type IconName } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
@@ -19,7 +19,7 @@ import {
   type Chat,
   type ChatMessage,
 } from '@/data/ai-chat';
-import { closeSamplePreview, previewSampleInsights, refreshAiInsights, useSampleSnapshot } from '@/data/ai-insights';
+import { closeSamplePreview, previewSampleInsights, useSampleSnapshot } from '@/data/ai-insights';
 import { formatShortDate } from '@/data/employee-roster';
 
 const SUGGESTIONS: { label: string; question: string; icon: IconName }[] = [
@@ -52,13 +52,11 @@ const MIC_TIP =
 /** Previous chats shown before "See all". */
 const SHOWN_CHATS = 5;
 
-// The owner's AI Assistant: ask anything about the business, see what needs
-// attention, and tap through to the real jobs, invoices and people.
+// The owner's AI Assistant: ask anything about the business and tap through
+// to the real jobs, invoices and people.
 export default function AiAssistantScreen() {
   const { current, saved, sending } = useAiChat();
   const sample = useSampleSnapshot() !== null;
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<'clear' | 'delete-all' | null>(null);
   const scrollRef = useRef<ScrollViewInstance>(null);
   const chatOpen = current.messages.length > 0;
@@ -81,42 +79,6 @@ export default function AiAssistantScreen() {
     setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, chatY.current + chatHeight.current - 520), animated: true }), 150);
   }, [count, sending]);
 
-  async function refresh() {
-    setRefreshing(true);
-    setRefreshError(null);
-    setRefreshError(await refreshAiInsights());
-    setRefreshing(false);
-  }
-
-  const attention = (
-    <Card
-      title="Things that need your attention"
-      icon={OwnerIcons.bell}
-      right={
-        <Pressable onPress={refresh} disabled={refreshing} accessibilityRole="button" accessibilityLabel="Run the health check now" hitSlop={8}>
-          {refreshing ? (
-            <ActivityIndicator color={C.accent} size="small" />
-          ) : (
-            <Icon name={{ ios: 'arrow.clockwise', android: 'refresh', web: 'refresh' }} color={C.accent} size={16} />
-          )}
-        </Pressable>
-      }>
-      <AiInsightsList
-        placement="attention"
-        empty="Nothing needs your attention right now. NexGain checks your business every morning."
-        emptyIcon={OwnerIcons.check}
-      />
-      {refreshError && <Text style={styles.error}>{refreshError}</Text>}
-      {__DEV__ && (
-        // Development only: see the insights with made-up data (never saved).
-        <Button
-          label={sample ? 'Close sample preview' : 'Preview with sample data'}
-          variant="secondary"
-          onPress={sample ? closeSamplePreview : previewSampleInsights}
-        />
-      )}
-    </Card>
-  );
 
   return (
     <OwnerScreen scrollRef={scrollRef}>
@@ -189,8 +151,6 @@ export default function AiAssistantScreen() {
             <ChatInput placeholder="Ask anything about your business" disabled={sending} />
           </Card>
 
-          {attention}
-
           <View style={styles.suggestions}>
             <Text style={styles.sectionTitle}>Try asking...</Text>
             <View style={styles.grid}>
@@ -213,7 +173,14 @@ export default function AiAssistantScreen() {
 
       <PreviousChats chats={saved} disabled={sending} onDeleteAll={() => setConfirm('delete-all')} />
 
-      {chatOpen && attention}
+      {__DEV__ && (
+        // Development only: try the AI with made-up data (never saved).
+        <Button
+          label={sample ? 'Close sample preview' : 'Preview with sample data'}
+          variant="secondary"
+          onPress={sample ? closeSamplePreview : previewSampleInsights}
+        />
+      )}
 
       <ConfirmDialog
         visible={confirm !== null}
@@ -477,10 +444,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     marginBottom: 2,
-  },
-  error: {
-    color: C.warning,
-    fontSize: 13,
   },
   clear: {
     flexDirection: 'row',
