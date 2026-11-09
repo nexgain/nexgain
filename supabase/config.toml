@@ -42,3 +42,6 @@ verify_jwt = true
 
 [functions.bank-disconnect]
 verify_jwt = true
+
+[functions.read-receipt]
+verify_jwt = true

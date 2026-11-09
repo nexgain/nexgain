@@ -1,12 +1,15 @@
 import { useState } from 'react';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ScreenHeader } from '@/components/owner/invoices-ui';
+import { ReadingNote, ReceiptIcons, ReceiptPreview, useAddReceipt } from '@/components/owner/receipt-ui';
 import { amountColor, categoryIcon, signedMoney } from '@/components/owner/transactions-ui';
-import { Card, EmptyState, goBack, Icon, OwnerIcons, OwnerScreen } from '@/components/owner/ui';
+import { Button, Card, EmptyState, goBack, Icon, OwnerIcons, OwnerScreen } from '@/components/owner/ui';
 import { Colors as C, Spacing } from '@/constants/theme';
 import { setTransactionCategory, TRANSACTION_CATEGORIES, useBankAccounts, useBankTransactions } from '@/data/bank';
+import { formatMoney } from '@/data/payroll';
+import { needsReceipt, useReceipts } from '@/data/receipts';
 import { fromDateKey } from '@/data/shifts';
 
 // One bank transaction: its details, and the category it's sorted into (the owner can change it).
@@ -14,6 +17,8 @@ export default function TransactionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const txn = useBankTransactions().find((t) => t.id === id);
   const account = useBankAccounts().find((a) => a.id === txn?.accountId);
+  const receipt = useReceipts().find((r) => r.bankTransactionId === id);
+  const { add: addReceipt, busy: adding, error: addError } = useAddReceipt();
   const [error, setError] = useState<string | null>(null);
 
   if (!txn) {
@@ -52,6 +57,47 @@ export default function TransactionDetailScreen() {
           <Detail label="Account" value={[account.institution, account.name, account.maskedNumber].filter(Boolean).join(' · ')} />
         )}
         {txn.merchant && txn.description && txn.description !== txn.merchant && <Detail label="Bank description" value={txn.description} />}
+      </Card>
+
+      <Card title="Receipt" icon={ReceiptIcons.receipt}>
+        {receipt ? (
+          <>
+            {receipt.status === 'reading' ? <ReadingNote /> : <ReceiptPreview receipt={receipt} />}
+            <Pressable
+              onPress={() => router.push({ pathname: '/receipt/[id]', params: { id: receipt.id } } as Href)}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.receiptRow, pressed && styles.pressed]}>
+              <Icon name={ReceiptIcons.attached} color={C.success} size={18} />
+              <Text style={styles.receiptText} numberOfLines={1}>
+                {receipt.supplier ?? 'Receipt'}
+                {receipt.gst !== null ? ` · GST ${formatMoney(receipt.gst)}` : ''}
+              </Text>
+              <Text style={styles.link}>Details</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            {needsReceipt(txn) ? (
+              <View style={styles.receiptRow}>
+                <Icon name={ReceiptIcons.missing} color={C.warning} size={18} />
+                <Text style={[styles.muted, styles.flex]}>Over $82.50: keep the receipt to claim the GST.</Text>
+              </View>
+            ) : (
+              <Text style={styles.muted}>No receipt yet.</Text>
+            )}
+            {addError && (
+              <Text accessibilityRole="alert" style={styles.error}>
+                {addError}
+              </Text>
+            )}
+            <Button
+              label={adding ? 'Saving…' : 'Add receipt'}
+              icon={ReceiptIcons.camera}
+              onPress={() => addReceipt({ bankTransactionId: txn.id })}
+              disabled={adding}
+            />
+          </>
+        )}
       </Card>
 
       <Card title="Category" icon={categoryIcon(txn.category)}>
@@ -126,6 +172,26 @@ const styles = StyleSheet.create({
     color: C.danger,
     fontSize: 13,
     fontWeight: '600',
+  },
+  flex: {
+    flex: 1,
+  },
+  receiptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    minHeight: 44,
+  },
+  receiptText: {
+    flex: 1,
+    color: C.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  link: {
+    color: C.accent,
+    fontSize: 14,
+    fontWeight: '700',
   },
   option: {
     flexDirection: 'row',

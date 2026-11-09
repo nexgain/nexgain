@@ -1,6 +1,7 @@
 // Pieces shared by the Transactions tab and the transaction detail page.
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { ReceiptStatusIcon } from '@/components/owner/receipt-ui';
 import { Icon, OwnerIcons, type IconName } from '@/components/owner/ui';
 import { Colors as C, Spacing } from '@/constants/theme';
 import { INCOME_CATEGORY, TRANSFERS_CATEGORY, type TransactionItem } from '@/data/bank';
@@ -41,13 +42,25 @@ export function signedMoney(amount: number) {
   return `${amount > 0 ? '+' : amount < 0 ? '-' : ''}${formatMoney(Math.abs(amount))}`;
 }
 
-export function TransactionRow({ item, showDivider, onPress }: { item: TransactionItem; showDivider: boolean; onPress: () => void }) {
+export function TransactionRow({
+  item,
+  showDivider,
+  onPress,
+  receipt = 'none',
+}: {
+  item: TransactionItem;
+  showDivider: boolean;
+  onPress: () => void;
+  /** Green tick (attached) or orange warning (missing, over $82.50). */
+  receipt?: 'attached' | 'missing' | 'none';
+}) {
   const moneyIn = item.amount > 0;
+  const receiptText = receipt === 'attached' ? ', receipt attached' : receipt === 'missing' ? ', receipt missing' : '';
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${item.title}, ${moneyIn ? 'money in' : 'money out'} ${formatMoney(Math.abs(item.amount))}, ${formatShortDate(item.date)}`}
+      accessibilityLabel={`${item.title}, ${moneyIn ? 'money in' : 'money out'} ${formatMoney(Math.abs(item.amount))}, ${formatShortDate(item.date)}${receiptText}`}
       style={({ pressed }) => [styles.row, showDivider && styles.divider, pressed && styles.pressed]}>
       <View style={[styles.icon, moneyIn ? styles.iconIn : styles.iconOut]}>
         <Icon
@@ -69,6 +82,7 @@ export function TransactionRow({ item, showDivider, onPress }: { item: Transacti
         </Text>
       </View>
       <Text style={[styles.amount, { color: amountColor(item) }]}>{signedMoney(item.amount)}</Text>
+      <ReceiptStatusIcon status={receipt} />
       <Icon name={OwnerIcons.chevron} color={C.textSecondary} size={12} />
     </Pressable>
   );

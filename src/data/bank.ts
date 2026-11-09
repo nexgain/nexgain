@@ -62,6 +62,8 @@ export const bankAccountsStore = createStore<BankAccount[]>([]);
 export const bankTransactionsStore = createStore<BankTransaction[]>([]);
 /** True while the latest transactions are being fetched from the bank. */
 export const bankSyncingStore = createStore(false);
+/** Run after new bank transactions come in (e.g. receipts reload, as some may now be matched). */
+export const bankSyncListeners = new Set<() => void>();
 
 export const useBankConnection = () => bankConnectionStore.use();
 export const useBankAccounts = () => bankAccountsStore.use();
@@ -216,6 +218,7 @@ async function runSync(refresh: boolean): Promise<{ ok: true; added: number } | 
     }
     if (data.status === 'synced') {
       await loadBank().catch(() => {});
+      bankSyncListeners.forEach((listener) => listener());
       return { ok: true, added: data.added ?? 0 };
     }
   }

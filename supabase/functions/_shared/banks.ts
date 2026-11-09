@@ -14,6 +14,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
 import { basiq } from './basiq.ts';
+import { rematchReceipts } from './receipts.ts';
 
 export type BankProviderId = 'basiq' | 'saltedge';
 
@@ -227,5 +228,16 @@ export async function saveLatest(db: SupabaseClient, provider: BankProvider, con
   }
 
   await db.from('bank_connections').update({ status: 'active', pending_job_ids: [], last_synced_at: now }).eq('id', connection.id);
-  return { accounts: accounts.length, added };
+
+  // New transactions may be the ones receipts were waiting for. (A problem here
+  // shouldn't stop the transactions from showing, so it's only logged.)
+  let receiptsMatched = 0;
+  if (added > 0) {
+    try {
+      receiptsMatched = await rematchReceipts(db, connection.business_id);
+    } catch (e) {
+      console.error('receipt matching:', e instanceof Error ? e.message : e);
+    }
+  }
+  return { accounts: accounts.length, added, receiptsMatched };
 }

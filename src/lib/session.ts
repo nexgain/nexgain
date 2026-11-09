@@ -16,6 +16,7 @@ import { expensesStore, loadExpenses } from '@/data/finance';
 import { applyRemoteDoc, clearBusinessPayment, clearDocs, loadBusinessPayment, loadDocs } from '@/data/invoices';
 import { employeesStore, isContractor, loadOwnProfile, loadTeam } from '@/data/employees';
 import { jobReportsStore } from '@/data/job-reports';
+import { clearReceipts, loadReceipts } from '@/data/receipts';
 import { clearNotifications, loadNotifications, subscribeToNotifications } from '@/data/notifications';
 import { loadPayRuns, payRunsStore } from '@/data/pay-runs';
 import { loadPayslips, payslipsStore } from '@/data/payroll';
@@ -69,6 +70,7 @@ async function load(userId: string) {
       loadConnectedAccounts().catch(() => {}),
       loadExpenses().catch(() => {}),
       loadBank().catch(() => {}),
+      loadReceipts().catch(() => {}),
       loadNotifications(null),
       loadShifts().catch(() => {}),
       loadClockSessions().catch(() => {}),
@@ -172,6 +174,7 @@ export function endSession() {
   clearConnectedAccounts();
   expensesStore.set([]);
   clearBank();
+  clearReceipts();
   qualificationsStore.set({});
   currentEmployeeStore.set(null);
   clearNotifications();
