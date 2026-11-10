@@ -10,3 +10,12 @@ export function businessUsesSuper(business: { country?: string | null } | null |
   const country = business?.country ?? null;
   return country === null || country.toUpperCase() === 'AU';
 }
+
+/**
+ * THE rule for whether GST features show (the GST page, dashboard tile, GST on
+ * new quotes and invoices): Australian businesses registered for GST. Older
+ * businesses with no country set count as Australian.
+ */
+export function businessUsesGst(business: { country?: string | null; gstRegistered?: boolean } | null | undefined) {
+  return !!business && businessUsesSuper(business) && business.gstRegistered !== false;
+}

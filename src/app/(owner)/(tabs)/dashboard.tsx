@@ -32,6 +32,7 @@ import {
 import { useDocs } from '@/data/invoices';
 import { formatMoney, usePayslipRecords } from '@/data/payroll';
 import { indexReceipts, receiptStatus, useReceipts } from '@/data/receipts';
+import { GstTile } from '@/components/owner/gst-tile';
 
 const NO_INSIGHTS = 'No insights yet — check back once you have more activity data.';
 
@@ -114,6 +115,8 @@ export default function OwnerDashboardScreen() {
           />
         </Pressable>
       </StatGrid>
+
+      <GstTile />
 
       {missingReceipts > 0 && (
         <Pressable

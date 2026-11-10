@@ -109,11 +109,18 @@ export function StepFinancial({ data, update, onNext }: StepProps) {
         />
       </Field>
 
-      <Field
-        label="Are you registered for GST?"
-        hint={data.gstRegistered ? 'GST (10%) will be added to your quotes and invoices.' : "GST won't be added to your quotes and invoices."}>
-        <YesNo label="Registered for GST" value={data.gstRegistered} onChange={(gstRegistered) => update({ gstRegistered })} />
-      </Field>
+      {/* GST is Australian: only asked there (businessUsesGst). */}
+      {usesSuper && (
+        <Field
+          label="Is your business registered for GST?"
+          hint={
+            data.gstRegistered
+              ? 'GST (10%) is added to your quotes and invoices, and NexGain tracks your GST each quarter.'
+              : "GST won't be added to your quotes and invoices."
+          }>
+          <YesNo label="Registered for GST" value={data.gstRegistered} onChange={(gstRegistered) => update({ gstRegistered })} />
+        </Field>
+      )}
 
       <Field label="Default currency">
         <SelectField
@@ -125,9 +132,11 @@ export function StepFinancial({ data, update, onNext }: StepProps) {
         />
       </Field>
 
-      <Field label="Do you want to track GST in reports?">
-        <YesNo label="Track GST in reports" value={data.trackGstInReports} onChange={(trackGstInReports) => update({ trackGstInReports })} />
-      </Field>
+      {usesSuper && data.gstRegistered && (
+        <Field label="Do you want to track GST in reports?">
+          <YesNo label="Track GST in reports" value={data.trackGstInReports} onChange={(trackGstInReports) => update({ trackGstInReports })} />
+        </Field>
+      )}
 
       <Button
         label="Next"

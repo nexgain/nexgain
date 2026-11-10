@@ -12,6 +12,7 @@ const ACTION_ROUTES: Record<string, Href> = {
   'View full job details': '/roster',
   'Open roster': '/roster',
   'Open AI Assistant': '/ai-assistant',
+  'Open GST': '/gst',
   'View invoice': '/invoices' as Href,
   'Create quote': { pathname: '/invoices/new', params: { kind: 'quote' } },
 };

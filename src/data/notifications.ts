@@ -57,6 +57,8 @@ export const OWNER_TYPES = {
   invoice_paid: { category: 'Finance', icon: ICONS.dollar, tone: 'green', actions: ['View invoice'] },
   // A bank payment matched to an invoice (see src/data/money-sorting.ts); the transaction has Undo.
   payment_matched: { category: 'Finance', icon: ICONS.dollar, tone: 'green', actions: ['View transaction'] },
+  // GST quarter and BAS due reminders (sent every morning by the database, see the GST migration).
+  gst_reminder: { category: 'Finance', icon: ICONS.dollar, tone: 'amber', actions: ['Open GST'] },
   contractor_invoice: { category: 'Finance', icon: ICONS.document, tone: 'blue', actions: ['Review contractor invoice'] },
   payment_overdue: { category: 'Finance', icon: ICONS.dollar, tone: 'red', actions: ['View invoice', 'Send reminder'] },
   roster_published: { category: 'System', icon: ICONS.calendar, tone: 'blue', actions: ['Open roster'] },

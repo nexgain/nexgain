@@ -61,7 +61,8 @@ function toProfile(data: SignupData): Omit<BusinessProfile, 'id' | 'inviteCode' 
     services: data.services,
     plan: 'basic',
     financialYearStartMonth: data.financialYearStartMonth,
-    gstRegistered: data.gstRegistered,
+    // GST only applies to Australian businesses.
+    gstRegistered: businessUsesSuper({ country: data.country }) && data.gstRegistered,
     currency: data.currency,
     country: data.country,
     trackGstInReports: data.trackGstInReports,

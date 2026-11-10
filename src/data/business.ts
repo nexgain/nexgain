@@ -4,6 +4,7 @@
 import { Platform } from 'react-native';
 
 import type { PaySchedule } from '@/data/pay-schedule';
+import { businessUsesGst } from '@/data/super-rules';
 import { createStore } from '@/data/store';
 import { supabase } from '@/lib/supabase';
 
@@ -384,7 +385,8 @@ export function ownerFirstName(profile: BusinessProfile | null) {
 
 /** GST rate for new quotes and invoices: none if the business isn't GST registered. */
 export function currentGstRate() {
-  return businessStore.get()?.gstRegistered === false ? 0 : GST_RATE;
+  // Only Australian GST-registered businesses add GST (see businessUsesGst).
+  return businessUsesGst(businessStore.get()) ? GST_RATE : 0;
 }
 
 /** Letters the invite code starts with: the owner's surname, or the business name. */

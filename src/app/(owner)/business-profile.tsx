@@ -3,7 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { FormField, TextField } from '@/components/owner/form';
+import { FormField, SwitchRow, TextField } from '@/components/owner/form';
 import { ScreenHeader, Segmented } from '@/components/owner/invoices-ui';
 import { SuperSettingsCard } from '@/components/owner/super-settings-card';
 import { Button, Card, OwnerIcons, OwnerScreen } from '@/components/owner/ui';
@@ -13,6 +13,7 @@ import { formatBsb } from '@/components/employee-signup/types';
 import { EMAIL_PROVIDER, findAccount, useConnectedAccounts } from '@/data/connected-accounts';
 import { updateBusinessPayment, useBusinessPayment } from '@/data/invoices';
 import { emailAppHint } from '@/lib/email';
+import { businessUsesSuper } from '@/data/super-rules';
 
 // Edit the business details set during owner sign-up: name and logo (printed on
 // quotes and invoices), the email app they're sent from, bank details for invoices,
@@ -156,6 +157,23 @@ export default function BusinessProfileScreen() {
               accessibilityLabel="Bank"
             />
           </FormField>
+        </Card>
+      )}
+
+      {/* GST: Australian businesses only. Turning it off hides every GST feature. */}
+      {business && businessUsesSuper(business) && (
+        <Card title="GST" icon={OwnerIcons.receipt}>
+          <SwitchRow
+            label="Registered for GST"
+            hint={
+              business.gstRegistered
+                ? 'GST (10%) is added to new quotes and invoices, and the GST page tracks each quarter.'
+                : 'No GST on quotes and invoices, and the GST page and reminders are hidden.'
+            }
+            value={business.gstRegistered}
+            onChange={(gstRegistered) => updateBusiness({ gstRegistered })}
+          />
+          <Text style={styles.muted}>Quotes and invoices already made keep the GST they were made with.</Text>
         </Card>
       )}
 
