@@ -17,10 +17,10 @@ import {
   OwnerScreen,
   ownerStyles,
   PageHeader,
+  IconBadge,
   RangeSelect,
   StatCard,
   StatGrid,
-  TabRow,
 } from '@/components/owner/ui';
 import { Colors as C, Spacing } from '@/constants/theme';
 import {
@@ -33,18 +33,15 @@ import {
 } from '@/data/business';
 import { useClockSessions } from '@/data/clock-records';
 import { formatShortDate } from '@/data/employee-roster';
-import { employeeFullName, formatPayRate, isContractor, useEmployees } from '@/data/employees';
+import { employeeFullName, useEmployees } from '@/data/employees';
 import {
   approvePayments,
   calculatePayLines,
-  formatHours,
   formatMoney,
   getSchedulePayPeriods,
-  maskAccountNumber,
   payTotals,
   usePayslipRecords,
   usePayStatuses,
-  type PayLine,
   type PayslipRecord,
   type Period,
 } from '@/data/payroll';
@@ -72,15 +69,9 @@ import { SUPER_STATUS_LABEL, superFor, useSuperPayments, type SuperStatus } from
 import { countryName, getPayrollFileFormat, payrollLabel, payrollReference } from '@/lib/payment-files';
 import { businessUsesSuper } from '@/data/super-rules';
 
-const TABS = ['Employees', 'Summary', 'Tax & Super', 'Bank Accounts'] as const;
-/** Outside Australia there's no super, so the tax tab is just "Tax". */
-const TABS_NO_SUPER = ['Employees', 'Summary', 'Tax', 'Bank Accounts'] as const;
-type Tab = (typeof TABS)[number] | (typeof TABS_NO_SUPER)[number];
 
 /** e.g. "12%" */
 const percentText = (rate: number) => `${Math.round(rate * 10000) / 100}%`;
-
-const moneyOrDash = (amount: number | null) => (amount === null ? '—' : formatMoney(amount));
 
 /** The note shown next to tax amounts: estimated from brackets, or the rate the owner entered. */
 function taxNoteFor(setup: TaxSetup, country: string | null | undefined) {
@@ -112,18 +103,13 @@ export default function PayrollScreen() {
   usePayRuns();
   const periods = getSchedulePayPeriods(now, 6);
   const [periodId, setPeriodId] = useState(periods[0].id);
-  const [chosenTab, setTab] = useState<Tab>('Employees');
   const scrollRef = useRef<ScrollViewInstance>(null);
   const approveCardY = useRef(0);
   const business = useBusiness();
   // Super only for Australian businesses (see businessUsesSuper): elsewhere payroll is pay and tax only.
   const usesSuper = businessUsesSuper(business);
-  const tabs: readonly Tab[] = usesSuper ? TABS : TABS_NO_SUPER;
-  const tab: Tab = tabs.includes(chosenTab) ? chosenTab : chosenTab === 'Tax' || chosenTab === 'Tax & Super' ? tabs[2] : 'Employees';
-  const superPercent = percentText(superRateOf(business));
   const taxSetup = taxSetupFor(business);
   const taxNote = taxNoteFor(taxSetup, business?.country);
-  const superRecords = useSuperPayments();
   const [reportBusy, setReportBusy] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
 
@@ -173,114 +159,9 @@ export default function PayrollScreen() {
   const payable = lines.filter((l) => l.gross !== null && l.tax !== null && l.status === 'Pending');
   const missingRate = lines.filter((l) => l.rate === null);
   const missingBank = lines.filter((l) => !l.employee.bankAccount);
-  const paidCount = lines.filter((l) => l.status === 'Paid').length;
   // Approved (in a pay run) or already paid.
   const approvedCount = lines.filter((l) => l.status !== 'Pending').length;
   const allPaid = lines.length > 0 && approvedCount === lines.length;
-  // Super records for this period's approved payslips.
-  const periodSuper = payslips
-    .filter((p) => p.periodStart === period.id)
-    .map((p) => superFor(superRecords, p.payRunId, p.employeeId))
-    .filter((s) => s !== null);
-  const superDueCount = periodSuper.length;
-  const superPaidCount = periodSuper.filter((s) => s.status === 'paid').length;
-
-  const nameColumn: Column<PayLine> = {
-    key: 'name',
-    label: 'Name',
-    width: 170,
-    render: (l) => employeeFullName(l.employee),
-  };
-
-  const employeeColumns: Column<PayLine>[] = [
-    nameColumn,
-    { key: 'hours', label: 'Hours', width: 70, align: 'right', render: (l) => formatHours(l.ordinaryHours) },
-    {
-      key: 'overtime',
-      label: 'OT Hours',
-      width: 80,
-      align: 'right',
-      render: (l) => formatHours(l.overtimeHours),
-    },
-    {
-      key: 'rate',
-      label: 'Rate',
-      width: 100,
-      align: 'right',
-      render: (l) =>
-        l.rate === null ? <Badge label="Not set" tone="warning" /> : formatPayRate(l.rate, l.employee.payType),
-    },
-    {
-      key: 'otRate',
-      label: 'OT Rate',
-      width: 90,
-      align: 'right',
-      render: (l) => (l.overtimeRate === null ? '—' : `${formatMoney(l.overtimeRate)}/hr`),
-    },
-    { key: 'gross', label: 'Gross Pay', width: 100, align: 'right', render: (l) => moneyOrDash(l.gross) },
-    { key: 'tax', label: 'Tax', width: 90, align: 'right', render: (l) => moneyOrDash(l.tax) },
-    { key: 'net', label: 'Net Pay', width: 100, align: 'right', render: (l) => moneyOrDash(l.net) },
-    {
-      key: 'status',
-      label: 'Status',
-      width: 90,
-      render: (l) => (
-        <Badge label={l.status} tone={l.status === 'Paid' ? 'success' : l.status === 'Approved' ? 'info' : 'warning'} />
-      ),
-    },
-  ];
-
-  const taxColumns: Column<PayLine>[] = [
-    nameColumn,
-    { key: 'gross', label: 'Gross Pay', width: 110, align: 'right', render: (l) => moneyOrDash(l.gross) },
-    {
-      key: 'tax',
-      label: 'Tax (estimate)',
-      width: 120,
-      align: 'right',
-      render: (l) => (isContractor(l.employee) ? 'None - contractor' : moneyOrDash(l.tax)),
-    },
-    ...(usesSuper
-      ? [
-          {
-            key: 'super',
-            label: `Super (${superPercent})`,
-            width: 130,
-            align: 'right' as const,
-            render: (l: PayLine) => (isContractor(l.employee) ? 'N/A - contractor' : moneyOrDash(l.super)),
-          },
-        ]
-      : []),
-  ];
-
-  const bankColumns: Column<PayLine>[] = [
-    nameColumn,
-    {
-      key: 'accountName',
-      label: 'Account Name',
-      width: 160,
-      render: (l) => l.employee.bankAccount?.accountName ?? '—',
-    },
-    {
-      key: 'account',
-      label: 'Account',
-      width: 120,
-      render: (l) => (l.employee.bankAccount ? maskAccountNumber(l.employee.bankAccount.accountNumber) : '—'),
-    },
-    {
-      key: 'status',
-      label: 'Status',
-      width: 120,
-      render: (l) =>
-        l.employee.bankAccount ? (
-          <Badge label="Connected" tone="success" />
-        ) : (
-          <Badge label="Not connected" tone="neutral" />
-        ),
-    },
-  ];
-
-  const noEmployees = 'No employees yet. They will appear here once they have been added.';
 
   return (
     <OwnerScreen scrollRef={scrollRef}>
@@ -337,81 +218,23 @@ export default function PayrollScreen() {
         )}
       </StatGrid>
 
-      <TabRow tabs={tabs} active={tab} onChange={setTab} />
-
-      <Card>
-        {tab === 'Employees' && (
-          <Table
-            columns={employeeColumns}
-            rows={lines}
-            rowKey={(l) => l.employee.id}
-            emptyMessage={noEmployees}
-            footer={{
-              name: 'Total',
-              hours: formatHours(totals.ordinaryHours),
-              overtime: formatHours(totals.overtimeHours),
-              gross: formatMoney(totals.gross),
-              tax: formatMoney(totals.tax),
-              net: formatMoney(totals.net),
-            }}
-          />
-        )}
-
-        {tab === 'Summary' && (
-          <View style={styles.summary}>
-            {[
-              ['Pay period', periodSpan(period)],
-              ['Employees', `${lines.length}`],
-              ['Normal hours', formatHours(totals.ordinaryHours)],
-              ['Overtime hours', formatHours(totals.overtimeHours)],
-              ['Total gross pay', formatMoney(totals.gross)],
-              ['Tax withheld (estimate)', formatMoney(totals.tax)],
-              ['Total net pay', formatMoney(totals.net)],
-              ...(usesSuper ? [[`Total super (${superPercent})`, formatMoney(totals.super)]] : []),
-              ['Approved', `${approvedCount} of ${lines.length}`],
-              ['Wages paid', `${paidCount} of ${lines.length}`],
-              ...(usesSuper ? [['Super paid', `${superPaidCount} of ${superDueCount}`]] : []),
-            ].map(([label, value], i) => (
-              <View key={label} style={[styles.summaryRow, i > 0 && styles.summaryDivider]}>
-                <Text style={styles.summaryLabel}>{label}</Text>
-                <Text style={styles.summaryValue}>{value}</Text>
-              </View>
-            ))}
+      {/* Everyone's hours, pay, tax and super for this pay period, on its own screen. */}
+      <Pressable
+        onPress={() => router.push({ pathname: '/employee-status', params: { period: period.id } })}
+        accessibilityRole="button"
+        accessibilityLabel="View Employee Status. Hours, pay, tax and super by employee"
+        style={({ pressed }) => pressed && styles.pressed}>
+        <Card>
+          <View style={styles.statusLink}>
+            <IconBadge name={OwnerIcons.people} />
+            <View style={styles.flex}>
+              <Text style={styles.statusTitle}>View Employee Status</Text>
+              <Text style={styles.statusSubtitle}>Hours, pay, tax and super by employee</Text>
+            </View>
+            <Icon name={OwnerIcons.chevron} color={C.textSecondary} size={14} />
           </View>
-        )}
-
-        {(tab === 'Tax & Super' || tab === 'Tax') && (
-          <View style={styles.tabContent}>
-            <Table
-              columns={taxColumns}
-              rows={lines}
-              rowKey={(l) => l.employee.id}
-              emptyMessage={noEmployees}
-              footer={{
-                name: 'Total',
-                gross: formatMoney(totals.gross),
-                tax: formatMoney(totals.tax),
-                ...(usesSuper ? { super: formatMoney(totals.super) } : {}),
-              }}
-            />
-            <Text style={ownerStyles.mutedText}>
-              {taxNote}
-              {usesSuper
-                ? ` Super is the ${superPercent} Superannuation Guarantee on qualifying earnings (the pay items set to count towards super in Payroll Settings; not overtime by default), paid by you on top of gross pay.`
-                : ''}
-            </Text>
-          </View>
-        )}
-
-        {tab === 'Bank Accounts' && (
-          <View style={styles.tabContent}>
-            <Table columns={bankColumns} rows={lines} rowKey={(l) => l.employee.id} emptyMessage={noEmployees} />
-            <Text style={ownerStyles.mutedText}>
-              Bank details come from each employee&apos;s Payment section in their own profile.
-            </Text>
-          </View>
-        )}
-      </Card>
+        </Card>
+      </Pressable>
 
       <View
         onLayout={(e) => {
@@ -431,7 +254,15 @@ export default function PayrollScreen() {
           </Text>
 
           {missingRate.length > 0 && (
-            <Warning text={`${missingRate.length} employee(s) have no pay rate set and can't be paid yet.`} />
+            // Tap to set it: straight to that employee, or to Employee Status when there are several.
+            <Warning
+              text={`${missingRate.length} employee(s) have no pay rate set and can't be paid yet. Tap to set ${missingRate.length === 1 ? 'it' : 'them'}.`}
+              onPress={() =>
+                missingRate.length === 1
+                  ? router.push({ pathname: '/employee/[id]', params: { id: missingRate[0].employee.id } })
+                  : router.push({ pathname: '/employee-status', params: { period: period.id } })
+              }
+            />
           )}
           {taxSetup.kind === 'missing' && <Warning text={taxNote} />}
           {missingBank.length > 0 && (
@@ -465,9 +296,9 @@ export default function PayrollScreen() {
         </Card>
       </View>
 
-      {usesSuper && <SuperCard />}
-
       <PayRunsCard />
+
+      {usesSuper && <SuperCard />}
 
       <PayrollSettingsCard />
     </OwnerScreen>
@@ -995,16 +826,39 @@ function RunBreakdown({ run }: { run: PayRun }) {
   );
 }
 
-function Warning({ text }: { text: string }) {
-  return (
-    <View style={styles.warning}>
+function Warning({ text, onPress }: { text: string; onPress?: () => void }) {
+  const body = (
+    <>
       <Icon name={OwnerIcons.info} color={C.warning} size={14} />
       <Text style={styles.warningText}>{text}</Text>
-    </View>
+      {onPress && <Icon name={OwnerIcons.chevron} color={C.warning} size={12} />}
+    </>
+  );
+  return onPress ? (
+    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [styles.warning, pressed && styles.pressed]}>
+      {body}
+    </Pressable>
+  ) : (
+    <View style={styles.warning}>{body}</View>
   );
 }
 
 const styles = StyleSheet.create({
+  statusLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three - 4,
+  },
+  statusTitle: {
+    color: C.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  statusSubtitle: {
+    color: C.textSecondary,
+    fontSize: 13,
+    marginTop: 2,
+  },
   tabContent: {
     gap: Spacing.three - 4,
   },

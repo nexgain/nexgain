@@ -84,9 +84,6 @@ export type PayTotals = {
 };
 
 const HOUR_MS = 60 * 60 * 1000;
-const DAY_MS = 24 * HOUR_MS;
-/** Days are counted in Brisbane time (UTC+10, no daylight saving). */
-const BUSINESS_UTC_OFFSET_MS = 10 * HOUR_MS;
 
 function roundCents(amount: number) {
   return Math.round(amount * 100) / 100;
@@ -166,11 +163,20 @@ export function hoursInPeriod(
 
 export type HoursSplit = { total: number; ordinary: number; overtime: number };
 
+/** The shifts that belong to a pay period: the ones that STARTED in it (a shift is never split between two pay periods). */
+export function shiftsInPeriod(sessions: ClockSession[], employeeId: string | null, period: Pick<Period, 'start' | 'end'>) {
+  return sessions.filter(
+    (s) => s.employeeId === employeeId && s.start.getTime() >= period.start.getTime() && s.start.getTime() < period.end.getTime(),
+  );
+}
+
 /**
  * Splits an employee's clocked hours into normal and overtime hours, day by day
- * (Brisbane days): hours up to the daily limit are normal, the rest overtime.
- * Time between clocking out and back in (e.g. an unpaid break) isn't counted.
- * A shift that crosses midnight is split between the two days.
+ * (the business's local days, i.e. the owner's phone's time): hours up to the
+ * daily limit are normal, the rest overtime. A shift counts in the pay period
+ * it started in; a shift that crosses midnight is split between the two days
+ * for overtime. Time between clocking out and back in (e.g. an unpaid break)
+ * isn't counted. A shift still going counts up to `now`.
  */
 export function splitHours(
   sessions: ClockSession[],
@@ -180,15 +186,15 @@ export function splitHours(
   now = new Date(),
 ): HoursSplit {
   const msPerDay = new Map<number, number>();
-  for (const s of sessions) {
-    if (s.employeeId !== employeeId) continue;
-    let from = Math.max(s.start.getTime(), period.start.getTime());
-    const to = Math.min((s.end ?? now).getTime(), period.end.getTime());
+  for (const s of shiftsInPeriod(sessions, employeeId, period)) {
+    let from = s.start.getTime();
+    const to = Math.max(from, (s.end ?? now).getTime());
     while (from < to) {
-      const day = Math.floor((from + BUSINESS_UTC_OFFSET_MS) / DAY_MS);
-      const dayEnd = (day + 1) * DAY_MS - BUSINESS_UTC_OFFSET_MS;
+      const d = new Date(from);
+      const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+      const dayEnd = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
       const chunk = Math.min(to, dayEnd) - from;
-      msPerDay.set(day, (msPerDay.get(day) ?? 0) + chunk);
+      msPerDay.set(dayStart, (msPerDay.get(dayStart) ?? 0) + chunk);
       from += chunk;
     }
   }
