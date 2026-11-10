@@ -143,8 +143,10 @@ export function fromRow(row: EmployeeRow, businessName = '', photoUrl: string | 
     gender: row.gender ?? null,
     emergencyContactName: row.emergency_contact_name ?? '',
     emergencyContactPhone: row.emergency_contact_phone ?? '',
-    payRate: row.pay_rate === null ? null : Number(row.pay_rate),
-    payType: row.pay_type ?? 'hourly',
+    // "Salary" workers are always paid a yearly salary. If they joined as Salary
+    // before the owner set one, an hourly rate isn't a salary: treat it as not set yet.
+    payRate: row.pay_rate === null || (row.employment_type === SALARY && row.pay_type !== 'salary') ? null : Number(row.pay_rate),
+    payType: row.employment_type === SALARY ? 'salary' : (row.pay_type ?? 'hourly'),
     overtimeRate: row.overtime_rate === null || row.overtime_rate === undefined ? null : Number(row.overtime_rate),
     status: row.status ?? 'active',
     startDate: row.start_date ?? null,
@@ -313,6 +315,13 @@ export async function updateMyBankDetails(employeeId: string, set: BankFieldSet,
 
 /** The one value that decides whether someone gets the contractor features. */
 export const CONTRACTOR = 'Contractor';
+
+/** Salaried workers get a fixed yearly salary, paid in equal parts each pay run whatever hours they clock. */
+export const SALARY = 'Salary';
+
+export function isSalaried(employee: Pick<Employee, 'employmentType' | 'payType'> | null | undefined) {
+  return !!employee && (employee.employmentType === SALARY || employee.payType === 'salary');
+}
 
 /** Contractors invoice the business instead of getting payslips. */
 export function isContractor(employee: Pick<Employee, 'employmentType'> | null | undefined) {

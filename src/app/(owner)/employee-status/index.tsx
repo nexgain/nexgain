@@ -7,7 +7,7 @@ import { ScreenHeader } from '@/components/owner/invoices-ui';
 import { Badge, Card, EmptyState, Icon, OwnerIcons, OwnerScreen, RangeSelect } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { useBusiness } from '@/data/business';
-import { employeeFullName } from '@/data/employees';
+import { employeeFullName, isSalaried } from '@/data/employees';
 import { periodDates, usePeriodPay } from '@/data/payroll-period';
 import { formatMoney, type PayLine } from '@/data/payroll';
 import { shiftHours, shiftsInRange, useShifts } from '@/data/shifts';
@@ -167,6 +167,8 @@ function EmployeeRow({
         <Text style={styles.email} numberOfLines={1}>
           {line.employee.email}
         </Text>
+        {/* Salaried workers are paid the same each pay run; their hours are just attendance. */}
+        {isSalaried(line.employee) && <Text style={styles.salary}>Salary – fixed</Text>}
         <Text style={styles.hours}>
           {hoursText(line.hours)}
           {expected > 0 ? <Text style={styles.expected}>{` of ${hoursText(expected)} rostered`}</Text> : null}
@@ -178,7 +180,7 @@ function EmployeeRow({
         )}
       </View>
       <View style={styles.rowRight}>
-        {line.gross === null ? <Badge label="No pay rate" tone="warning" /> : <Text style={styles.pay}>{formatMoney(line.gross)}</Text>}
+        {line.gross === null ? <Badge label={isSalaried(line.employee) ? 'No salary set' : 'No pay rate'} tone="warning" /> : <Text style={styles.pay}>{formatMoney(line.gross)}</Text>}
         <Icon name={OwnerIcons.chevron} color={C.textSecondary} size={14} />
       </View>
     </Pressable>
@@ -266,6 +268,11 @@ const styles = StyleSheet.create({
     color: C.text,
     fontSize: 13,
     fontWeight: '600',
+  },
+  salary: {
+    color: C.accent,
+    fontSize: 12,
+    fontWeight: '700',
   },
   expected: {
     color: C.textSecondary,

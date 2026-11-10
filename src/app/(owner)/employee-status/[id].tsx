@@ -6,7 +6,7 @@ import { ScreenHeader } from '@/components/owner/invoices-ui';
 import { Badge, Button, Card, EmptyState, OwnerIcons, OwnerScreen } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { useBusiness } from '@/data/business';
-import { employeeFullName, formatPayRate, isContractor, useEmployees } from '@/data/employees';
+import { employeeFullName, formatPayRate, isContractor, isSalaried, useEmployees } from '@/data/employees';
 import { periodDates, usePeriodPay } from '@/data/payroll-period';
 import { formatMoney, shiftsInPeriod } from '@/data/payroll';
 import { businessUsesSuper } from '@/data/super-rules';
@@ -42,6 +42,7 @@ export default function EmployeeStatusDetailScreen() {
   const onShift = shifts.some((s) => s.end === null);
   const setRate = () => router.push({ pathname: '/employee/[id]', params: { id: employee.id } });
   const bank = employee.bankAccount;
+  const salaried = isSalaried(employee);
 
   return (
     <OwnerScreen>
@@ -59,8 +60,12 @@ export default function EmployeeStatusDetailScreen() {
 
       {employee.payRate === null && !isContractor(employee) && (
         <View style={styles.warning}>
-          <Text style={styles.warningText}>{name} has no pay rate set, so their pay can&apos;t be worked out or paid yet.</Text>
-          <Button label="Set pay rate" onPress={setRate} />
+          <Text style={styles.warningText}>
+            {salaried
+              ? `Set salary for ${name}. They're left out of pay runs until it's set.`
+              : `${name} has no pay rate set, so their pay can't be worked out or paid yet.`}
+          </Text>
+          <Button label={salaried ? 'Set salary' : 'Set pay rate'} onPress={setRate} />
         </View>
       )}
 
@@ -95,9 +100,10 @@ export default function EmployeeStatusDetailScreen() {
       <Card title="Pay" icon={OwnerIcons.wallet}>
         <Rows
           rows={[
-            ['Pay rate', formatPayRate(employee.payRate, employee.payType)],
+            [salaried ? 'Yearly salary' : 'Pay rate', formatPayRate(employee.payRate, employee.payType)],
             ...(line?.overtimeRate ? ([['Overtime rate', `${formatMoney(line.overtimeRate)}/hr`]] as [string, string][]) : []),
-            ['Gross pay so far', est(line?.gross ?? null)],
+            // Salary: the same fixed amount every pay run, whatever hours are clocked.
+            [salaried ? 'Salary – fixed (this pay period)' : 'Gross pay so far', est(line?.gross ?? null)],
           ]}
           bold={-1}
         />

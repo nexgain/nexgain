@@ -195,7 +195,7 @@ export function EmploymentFields({
         )}
       </FormField>
 
-      <FormField label="Pay rate" error={'error' in parsed ? parsed.error : undefined}>
+      <FormField label={draft.payType === 'salary' ? 'Yearly salary' : 'Pay rate'} error={'error' in parsed ? parsed.error : undefined}>
         <View style={styles.payRow}>
           <View style={styles.dollar}>
             <Text style={styles.dollarText}>$</Text>
@@ -214,7 +214,8 @@ export function EmploymentFields({
               value={draft.payType}
               options={PAY_TYPES}
               display={(t) => PAY_TYPE_SHORT[t]}
-              onChange={(payType) => onChange({ payType })}
+              // Salary workers always have a yearly salary.
+              onChange={(payType) => draft.employmentType !== 'Salary' && onChange({ payType })}
             />
           </View>
         </View>
@@ -233,7 +234,12 @@ export function EmploymentFields({
           label="Employment type"
           value={(draft.employmentType || null) as (typeof EMPLOYMENT_TYPES)[number] | null}
           options={EMPLOYMENT_TYPES}
-          onChange={(employmentType) => onChange({ employmentType })}
+          onChange={(employmentType) =>
+            // Salary workers are paid a yearly salary: an hourly rate can't carry over as one.
+            employmentType === 'Salary' && draft.payType !== 'salary'
+              ? onChange({ employmentType, payType: 'salary', payRate: '' })
+              : onChange({ employmentType })
+          }
         />
       </FormField>
 

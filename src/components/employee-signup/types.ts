@@ -30,7 +30,7 @@ export type SignupQualification = {
   file: PickedDocument | null;
 };
 
-export const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Casual', 'Contractor'] as const;
+export const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Casual', 'Salary', 'Contractor'] as const;
 
 /** "51824753556" -> "51 824 753 556" while typing. */
 export function formatAbnInput(text: string) {

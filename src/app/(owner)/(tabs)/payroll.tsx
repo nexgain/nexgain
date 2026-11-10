@@ -33,7 +33,7 @@ import {
 } from '@/data/business';
 import { useClockSessions } from '@/data/clock-records';
 import { formatShortDate } from '@/data/employee-roster';
-import { employeeFullName, useEmployees } from '@/data/employees';
+import { employeeFullName, isSalaried, useEmployees } from '@/data/employees';
 import {
   approvePayments,
   calculatePayLines,
@@ -157,7 +157,9 @@ export default function PayrollScreen() {
 
   // Tax must be known before anyone can be paid (see the tax rate message).
   const payable = lines.filter((l) => l.gross !== null && l.tax !== null && l.status === 'Pending');
-  const missingRate = lines.filter((l) => l.rate === null);
+  // No pay set yet, so they're left out of this pay run: salaried workers need a salary, everyone else a rate.
+  const missingSalary = lines.filter((l) => l.rate === null && isSalaried(l.employee));
+  const missingRate = lines.filter((l) => l.rate === null && !isSalaried(l.employee));
   const missingBank = lines.filter((l) => !l.employee.bankAccount);
   // Approved (in a pay run) or already paid.
   const approvedCount = lines.filter((l) => l.status !== 'Pending').length;
@@ -253,6 +255,13 @@ export default function PayrollScreen() {
                     )} net`}
           </Text>
 
+          {missingSalary.map((l) => (
+            <Warning
+              key={l.employee.id}
+              text={`Set salary for ${employeeFullName(l.employee)}. They're left out of this pay run until it's set.`}
+              onPress={() => router.push({ pathname: '/employee/[id]', params: { id: l.employee.id } })}
+            />
+          ))}
           {missingRate.length > 0 && (
             // Tap to set it: straight to that employee, or to Employee Status when there are several.
             <Warning
