@@ -10,6 +10,7 @@ import {
 import { EmployeeColors as C } from '@/constants/employee-theme';
 import { Spacing } from '@/constants/theme';
 import { markRead, typeInfo, useNotifications } from '@/data/notifications';
+import { useDesktopPageStyle } from '@/hooks/use-desktop';
 
 // Where each "Related actions" shortcut goes in the Employee section.
 const ACTION_ROUTES: Record<string, Href> = {
@@ -20,6 +21,7 @@ const ACTION_ROUTES: Record<string, Href> = {
 };
 
 export default function EmployeeNotificationDetail() {
+  const desktopPage = useDesktopPageStyle('form');
   const { id } = useLocalSearchParams<{ id: string }>();
   const n = useNotifications().find((x) => x.id === id && x.audience === 'employee');
 
@@ -46,7 +48,7 @@ export default function EmployeeNotificationDetail() {
   }));
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.screen} contentContainerStyle={[styles.content, desktopPage]}>
       <NotificationDetail
         n={n}
         palette={EMPLOYEE_PALETTE}

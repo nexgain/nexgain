@@ -31,6 +31,7 @@ import { formatCurrency as money } from '@/data/employee-payslips';
 import { employeeFullName, formatAbn, isContractor, type Employee } from '@/data/employees';
 import { useJobs } from '@/data/jobs';
 import { fromDateKey, toDateKey } from '@/data/shifts';
+import { useDesktopPageStyle, useDesktopSheetStyle } from '@/hooks/use-desktop';
 
 const PICKER_THEME = { sheet: C.card, border: C.border, text: C.text, muted: C.textSecondary, accent: C.primary, dark: false };
 
@@ -73,6 +74,7 @@ export default function ContractorInvoiceScreen() {
 // ---------------------------------------------------------------------------
 
 function Editor({ invoice, me }: { invoice: ContractorInvoice; me: Employee }) {
+  const desktopPage = useDesktopPageStyle('form');
   const insets = useSafeAreaInsets();
   const business = useBusiness();
   const [invoiceDate, setInvoiceDate] = useState(invoice.invoiceDate);
@@ -154,7 +156,7 @@ function Editor({ invoice, me }: { invoice: ContractorInvoice; me: Employee }) {
   return (
     <View style={styles.screen}>
       <Stack.Screen options={{ title: invoice.number }} />
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.content, desktopPage]} keyboardShouldPersistTaps="handled">
         <View style={styles.statusRow}>
           <InvoiceStatusPill status={invoice.status} />
           <Text style={styles.muted}>{me.gstRegistered ? 'Tax invoice · GST registered' : 'Not registered for GST'}</Text>
@@ -385,11 +387,12 @@ function ImportSheet({
   const rate = me.payType === 'hourly' && me.payRate ? me.payRate : 0;
   const preview =
     source === 'hours' ? linesFromClockedHours(sessions, me.id, from, to, rate) : linesFromCompletedJobs(jobs, from, to, rate);
+  const desktopSheet = useDesktopSheetStyle();
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + Spacing.three }]}>
+      <View style={[styles.sheet, { paddingBottom: insets.bottom + Spacing.three }, desktopSheet]}>
         <Text style={styles.sheetTitle}>Add hours or jobs</Text>
         <View style={styles.toggle}>
           {(['hours', 'jobs'] as const).map((s) => (
@@ -436,6 +439,7 @@ function ImportSheet({
 // ---------------------------------------------------------------------------
 
 function ReadOnly({ invoice }: { invoice: ContractorInvoice }) {
+  const desktopPage = useDesktopPageStyle('form');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const d = invoice.sentDetails;
@@ -454,7 +458,7 @@ function ReadOnly({ invoice }: { invoice: ContractorInvoice }) {
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.screen} contentContainerStyle={[styles.content, desktopPage]}>
       <Stack.Screen
         options={{
           title: invoice.number,

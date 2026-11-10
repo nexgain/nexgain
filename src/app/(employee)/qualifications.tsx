@@ -16,6 +16,7 @@ import {
   type Qualification,
   type QualificationStatus,
 } from '@/data/qualifications';
+import { useDesktopPageStyle } from '@/hooks/use-desktop';
 
 const CERTIFICATE_ICON: IconName = {
   ios: 'rosette',
@@ -24,6 +25,7 @@ const CERTIFICATE_ICON: IconName = {
 };
 
 export default function QualificationsScreen() {
+  const desktopPage = useDesktopPageStyle('form');
   const me = useCurrentEmployee();
   const qualifications = useQualifications(me?.id);
   const [loadError, setLoadError] = useState(false);
@@ -52,7 +54,7 @@ export default function QualificationsScreen() {
           ),
         }}
       />
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <ScrollView style={styles.screen} contentContainerStyle={[styles.content, desktopPage]}>
         <Text style={styles.description}>
           Upload and manage your licences, tickets and certificates. We&apos;ll remind you when
           they&apos;re expiring.

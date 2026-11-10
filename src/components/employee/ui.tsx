@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { cardShadow, EmployeeColors as C } from '@/constants/employee-theme';
 import { Radius, Spacing } from '@/constants/theme';
+import { useDesktopPageStyle } from '@/hooks/use-desktop';
 
 export type IconName = SymbolViewProps['name'];
 
@@ -50,6 +51,8 @@ export function EmployeeScreen({
   /** Indexes of children to pin while scrolling (the title row, when shown, is index 0). */
   stickyHeaderIndices?: number[];
 }) {
+  // Computer layout: a centred column instead of edge to edge (phones unchanged).
+  const desktopPage = useDesktopPageStyle('form');
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView
@@ -57,7 +60,7 @@ export function EmployeeScreen({
         onScroll={onScroll}
         scrollEventThrottle={16}
         stickyHeaderIndices={stickyHeaderIndices}
-        contentContainerStyle={styles.content}>
+        contentContainerStyle={[styles.content, desktopPage]}>
         {title !== undefined && (
           <View style={styles.titleRow}>
             <Text style={styles.title}>{title}</Text>

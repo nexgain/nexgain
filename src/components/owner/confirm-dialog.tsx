@@ -26,7 +26,7 @@ export function ConfirmDialog({
           <Text style={styles.message}>{message}</Text>
           <View style={styles.buttons}>
             <View style={styles.flex}>
-              <Button label="Cancel" variant="secondary" onPress={onCancel} />
+              <Button fill label="Cancel" variant="secondary" onPress={onCancel} />
             </View>
             <Pressable
               onPress={onConfirm}

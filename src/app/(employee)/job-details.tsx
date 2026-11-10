@@ -14,8 +14,10 @@ import {
 import { useCurrentEmployee } from '@/data/current-employee';
 import { useJobs } from '@/data/jobs';
 import { useShifts } from '@/data/shifts';
+import { useDesktopPageStyle } from '@/hooks/use-desktop';
 
 export default function JobDetailsScreen() {
+  const desktopPage = useDesktopPageStyle('form');
   const currentEmployee = useCurrentEmployee();
   const { date } = useLocalSearchParams<{ date?: string }>();
   const shiftSource = { shifts: useShifts(), employeeId: currentEmployee?.id ?? null };
@@ -43,7 +45,7 @@ export default function JobDetailsScreen() {
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.screen} contentContainerStyle={[styles.content, desktopPage]}>
       <Card style={styles.infoCard}>
         <Text style={styles.date}>
           {(day?.date ?? new Date()).toLocaleDateString([], {

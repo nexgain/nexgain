@@ -306,10 +306,10 @@ export function ShiftEditor({
 
             <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.three }]}>
               <View style={styles.flex}>
-                <Button label="Cancel" variant="secondary" onPress={onClose} />
+                <Button fill label="Cancel" variant="secondary" onPress={onClose} />
               </View>
               <View style={styles.flex}>
-                <Button label="Save Shift" icon={OwnerIcons.check} onPress={save} />
+                <Button fill label="Save Shift" icon={OwnerIcons.check} onPress={save} />
               </View>
             </View>
 
@@ -539,7 +539,7 @@ function SelectEmployees({
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.three }]}>
         <View style={styles.flex}>
-          <Button
+          <Button fill
             label={
               selected.length === 0
                 ? 'Continue without employees'

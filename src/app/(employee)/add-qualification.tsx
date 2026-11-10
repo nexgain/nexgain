@@ -19,6 +19,7 @@ import {
   QUALIFICATION_TYPES,
   type QualificationDocument,
 } from '@/data/qualifications';
+import { useDesktopPageStyle } from '@/hooks/use-desktop';
 
 type QualificationType = (typeof QUALIFICATION_TYPES)[number];
 
@@ -34,6 +35,7 @@ function toDocument(file: PickedFile): QualificationDocument | string {
 }
 
 export default function AddQualificationScreen() {
+  const desktopPage = useDesktopPageStyle('form');
   const insets = useSafeAreaInsets();
   const [type, setType] = useState<QualificationType | null>(null);
   const [otherName, setOtherName] = useState('');
@@ -126,7 +128,7 @@ export default function AddQualificationScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.content, desktopPage]} keyboardShouldPersistTaps="handled">
         <FormField label="Qualification Type" error={submitted ? typeError : undefined}>
           <SelectField
             title="Qualification Type"

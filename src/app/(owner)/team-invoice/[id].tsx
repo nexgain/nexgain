@@ -212,10 +212,10 @@ export default function TeamInvoiceScreen() {
           </FormField>
           <View style={styles.row}>
             <View style={styles.flex}>
-              <Button label="Cancel" variant="secondary" onPress={() => setDeclining(false)} />
+              <Button fill label="Cancel" variant="secondary" onPress={() => setDeclining(false)} />
             </View>
             <View style={styles.flex}>
-              <Button label="Decline" disabled={!reason.trim() || !!busy} onPress={() => act('declined', reason)} />
+              <Button fill label="Decline" disabled={!reason.trim() || !!busy} onPress={() => act('declined', reason)} />
             </View>
           </View>
         </Card>

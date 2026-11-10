@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/employee/ui';
 import { EmployeeColors as C } from '@/constants/employee-theme';
 import { Radius, Spacing } from '@/constants/theme';
+import { useDesktopSheetStyle } from '@/hooks/use-desktop';
 
 export function FormField({
   label,
@@ -84,6 +85,7 @@ export function SelectField<T extends string>({
 }) {
   const [open, setOpen] = useState(false);
   const insets = useSafeAreaInsets();
+  const desktopSheet = useDesktopSheetStyle();
 
   return (
     <>
@@ -97,7 +99,7 @@ export function SelectField<T extends string>({
       />
       <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityLabel="Close" />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + Spacing.two }]}>
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + Spacing.two }, desktopSheet]}>
           <View style={styles.sheetHeader}>
             <Text style={styles.sheetTitle}>{title}</Text>
             <Pressable onPress={() => setOpen(false)} hitSlop={10} accessibilityLabel="Close">

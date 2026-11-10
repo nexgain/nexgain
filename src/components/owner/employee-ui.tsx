@@ -375,7 +375,7 @@ export function InviteCodeCard() {
       </View>
       <View style={styles.buttons}>
         <View style={styles.flex}>
-          <Button
+          <Button fill
             label={copied ? 'Copied!' : 'Copy'}
             icon={
               copied
@@ -387,7 +387,7 @@ export function InviteCodeCard() {
           />
         </View>
         <View style={styles.flex}>
-          <Button label="Share" icon={{ ios: 'square.and.arrow.up', android: 'share', web: 'share' }} onPress={share} />
+          <Button fill label="Share" icon={{ ios: 'square.and.arrow.up', android: 'share', web: 'share' }} onPress={share} />
         </View>
       </View>
       {message ? <Text style={styles.muted}>{message}</Text> : null}

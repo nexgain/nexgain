@@ -644,10 +644,10 @@ function AddQualificationCard({ employee, onDone }: { employee: Employee; onDone
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <View style={styles.buttonRow}>
         <View style={styles.flex}>
-          <Button label="Cancel" variant="secondary" onPress={onDone} disabled={saving} />
+          <Button fill label="Cancel" variant="secondary" onPress={onDone} disabled={saving} />
         </View>
         <View style={styles.flex}>
-          <Button label={saving ? 'Saving…' : 'Save'} icon={OwnerIcons.check} onPress={save} disabled={saving} />
+          <Button fill label={saving ? 'Saving…' : 'Save'} icon={OwnerIcons.check} onPress={save} disabled={saving} />
         </View>
       </View>
     </Card>

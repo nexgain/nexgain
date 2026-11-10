@@ -16,9 +16,11 @@ import { fromDateKey } from '@/data/shifts';
 import { SUPER_STATUS_LABEL, superFor, superPaidDateKey, useSuperPayments } from '@/data/super-payments';
 import { TAX_ESTIMATE_NOTE } from '@/data/tax';
 import { businessUsesSuper } from '@/data/super-rules';
+import { useDesktopPageStyle } from '@/hooks/use-desktop';
 
 // One payslip, exactly as it was approved. Download saves it as a PDF.
 export default function PayslipScreen() {
+  const desktopPage = useDesktopPageStyle('form');
   const { id } = useLocalSearchParams<{ id: string }>();
   const payslips = usePayslipViews();
   const payslip = payslips.find((p) => p.id === id);
@@ -76,7 +78,7 @@ export default function PayslipScreen() {
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.screen} contentContainerStyle={[styles.content, desktopPage]}>
       {header}
 
       {busy && (

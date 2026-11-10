@@ -33,6 +33,7 @@ import {
   useShifts,
   type RosterShift,
 } from '@/data/shifts';
+import { useDesktopSheetStyle } from '@/hooks/use-desktop';
 import { useClearParamsOnLeave } from '@/lib/clear-params';
 
 const VIEWS = ['Week', 'Day', 'Month'] as const;
@@ -490,10 +491,11 @@ function AvailabilitySheet({
 }) {
   const insets = useSafeAreaInsets();
   const availability = useAvailability();
+  const desktopSheet = useDesktopSheetStyle();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={formStyles.backdrop} onPress={onClose} accessibilityLabel="Close" />
-      <View style={[formStyles.sheet, { paddingBottom: insets.bottom + Spacing.three }]}>
+      <View style={[formStyles.sheet, { paddingBottom: insets.bottom + Spacing.three }, desktopSheet]}>
         <Text style={formStyles.sheetTitle}>Employee Availability</Text>
         <ScrollView contentContainerStyle={styles.availabilityList}>
           {employees.length === 0 && (
