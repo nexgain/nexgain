@@ -1,7 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { comingSoon } from '@/components/auth/auth-screen';
-import { maskLast4, type EmployeeSignupData } from '@/components/employee-signup/types';
+import { employeeSteps, maskLast4, type EmployeeSignupData, type EmployeeStepId } from '@/components/employee-signup/types';
 import { Button, fieldStyles, SignupColors as C } from '@/components/signup/fields';
 import { choiceText } from '@/data/employee-super';
 
@@ -12,39 +12,41 @@ export function StepReview({
   busy,
 }: {
   data: EmployeeSignupData;
-  /** Jump back to a step (0-based) to change something. */
-  onEdit: (step: number) => void;
+  /** Jump back to a step to change something. */
+  onEdit: (step: EmployeeStepId) => void;
   onCreate: () => void;
   busy: boolean;
 }) {
-  const rows: { label: string; value: string; step: number }[] = [
-    { label: 'Full name', value: data.fullName, step: 2 },
-    { label: 'Email', value: data.email, step: 0 },
-    { label: 'Phone', value: data.phone, step: 2 },
-    { label: 'Position', value: data.position, step: 2 },
-    { label: 'Employment type', value: data.employmentType ?? '—', step: 2 },
+  const asksSuper = employeeSteps(data).some((s) => s.id === 'super');
+  const rows: { label: string; value: string; step: EmployeeStepId }[] = [
+    { label: 'Full name', value: data.fullName, step: 'personal' },
+    { label: 'Email', value: data.email, step: 'account' },
+    { label: 'Phone', value: data.phone, step: 'personal' },
+    { label: 'Position', value: data.position, step: 'personal' },
+    { label: 'Employment type', value: data.employmentType ?? '—', step: 'personal' },
     ...(data.employmentType === 'Contractor'
       ? [
-          { label: 'ABN', value: data.abn, step: 2 },
-          { label: 'Registered for GST', value: data.gstRegistered ? 'Yes' : 'No', step: 2 },
+          { label: 'ABN', value: data.abn, step: 'personal' as const },
+          { label: 'Registered for GST', value: data.gstRegistered ? 'Yes' : 'No', step: 'personal' as const },
         ]
       : []),
-    { label: 'Bank account', value: maskLast4(data.iban.replace(/\D/g, '').slice(-4) || data.accountNumber), step: 3 },
-    ...(data.employmentType === 'Contractor'
-      ? []
-      : [
+    { label: 'Bank account', value: maskLast4(data.iban.replace(/\D/g, '').slice(-4) || data.accountNumber), step: 'bank' },
+    // Australian businesses only (see businessUsesSuper).
+    ...(asksSuper
+      ? [
           {
             label: 'Superannuation',
-            value: data.superForm.choice ? choiceText(data.superForm.choice, data.superForm.fundName.trim() || null) : 'Not chosen',
-            step: 4,
+            value: data.superForm.choice ? choiceText(data.superForm.choice, data.superForm.fundName.trim() || null, '') : 'Not chosen',
+            step: 'super' as const,
           },
-        ]),
+        ]
+      : []),
     {
       label: 'Qualifications',
       value: data.qualifications.map((q) => q.name).join(', ') || 'None added',
-      step: 4,
+      step: 'additional',
     },
-    { label: 'Business', value: data.business?.name ?? '—', step: 1 },
+    { label: 'Business', value: data.business?.name ?? '—', step: 'join' },
   ];
 
   return (

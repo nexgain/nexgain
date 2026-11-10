@@ -28,17 +28,17 @@ const record = (changes: Partial<EmployeeSuper>): EmployeeSuper => ({
 });
 
 describe('super status', () => {
-  it('is Missing details until the employee chooses', () => {
-    expect(superStatusOf(employee, undefined)).toBe('Missing details');
+  it('is Not chosen yet until the employee chooses', () => {
+    expect(superStatusOf(employee, undefined)).toBe('Not chosen yet');
   });
-  it('is Complete for the employer’s default fund', () => {
-    expect(superStatusOf(employee, record({ choice: 'default' }))).toBe('Complete');
+  it('is Ready for the employer’s fund', () => {
+    expect(superStatusOf(employee, record({ choice: 'default' }))).toBe('Ready');
   });
-  it('needs a stapled fund request for "I’m not sure"', () => {
-    expect(superStatusOf(employee, record({ choice: 'unsure' }))).toBe('Needs stapled fund request');
+  it('needs a stapled fund check for "I’m not sure"', () => {
+    expect(superStatusOf(employee, record({ choice: 'unsure' }))).toBe('Stapled fund check needed');
   });
   it('checks an own fund has every detail', () => {
-    expect(superStatusOf(employee, record({ choice: 'own', fundName: 'AustralianSuper', fundAbn: '65714394898', usi: 'STA0100AU', memberNumber: '123' }))).toBe('Complete');
+    expect(superStatusOf(employee, record({ choice: 'own', fundName: 'AustralianSuper', fundAbn: '65714394898', usi: 'STA0100AU', memberNumber: '123' }))).toBe('Ready');
     expect(superStatusOf(employee, record({ choice: 'own', fundName: 'AustralianSuper' }))).toBe('Missing details');
   });
   it('isn’t needed for contractors', () => {

@@ -2,6 +2,7 @@
 // steps; sent to the database when "Create Account" is pressed. The password
 // goes to Supabase's login system; bank details and TFN are stored encrypted.
 import { EMPTY_SUPER_FORM, type SuperForm } from '@/data/employee-super';
+import { businessUsesSuper } from '@/data/super-rules';
 import type { BankForm } from '@/lib/payment-files/bank-details';
 
 export type FoundBusiness = {
@@ -117,14 +118,28 @@ export type EmployeeStepProps = {
   nextLabel: string;
 };
 
-export const EMPLOYEE_STEP_NAMES = [
-  'Create Account',
-  'Join Business',
-  'Personal Details',
-  'Bank Details',
-  'Additional Info',
-  'Review & Complete',
-] as const;
+export type EmployeeStepId = 'account' | 'join' | 'personal' | 'bank' | 'super' | 'additional' | 'review';
+
+type StepInfo = { id: EmployeeStepId; name: string; title: string; subtitle: string };
+
+const ALL_STEPS: StepInfo[] = [
+  { id: 'account', name: 'Create Account', title: 'Create your account', subtitle: 'Join your employer on NexGain to access your schedule, job information and payments.' },
+  { id: 'join', name: 'Join Business', title: 'Join your employer', subtitle: 'Enter the business code or invite link your employer gave you.' },
+  { id: 'personal', name: 'Personal Details', title: 'Personal details', subtitle: 'Tell your employer a little about you.' },
+  { id: 'bank', name: 'Bank Details', title: 'Bank details', subtitle: 'Where your pay will be sent.' },
+  { id: 'super', name: 'Your Super Fund', title: 'Your super fund', subtitle: 'Where your employer pays your superannuation.' },
+  { id: 'additional', name: 'Additional Info', title: 'Additional information', subtitle: 'An emergency contact and your qualifications.' },
+  { id: 'review', name: 'Review & Complete', title: 'Review & complete', subtitle: 'Check your details before creating your account.' },
+];
+
+/**
+ * The steps for this person. "Your super fund" only appears for employees of
+ * Australian businesses (see businessUsesSuper); contractors look after their own super.
+ */
+export function employeeSteps(data: Pick<EmployeeSignupData, 'business' | 'employmentType'>): StepInfo[] {
+  const superStep = businessUsesSuper(data.business) && data.employmentType !== 'Contractor';
+  return ALL_STEPS.filter((s) => s.id !== 'super' || superStep);
+}
 
 export const SUPER_FUNDS = [
   'AustralianSuper',

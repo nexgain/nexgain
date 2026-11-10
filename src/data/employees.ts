@@ -3,9 +3,11 @@
 // Loaded from the online database ("employees" table): an owner gets their
 // whole team, an employee gets only their own profile.
 import { setLoadedAvailability, type WeeklyAvailability } from '@/data/availability';
+import { businessStore } from '@/data/business';
 import { currentEmployeeStore } from '@/data/current-employee';
 import { employeeSuperStore, superStatusOf } from '@/data/employee-super';
 import { createStore } from '@/data/store';
+import { businessUsesSuper } from '@/data/super-rules';
 import { bankFormToColumns, type BankForm, type SavedBankRow } from '@/lib/payment-files/bank-details';
 import type { BankFieldSet } from '@/lib/payment-files/countries';
 import { supabase } from '@/lib/supabase';
@@ -317,9 +319,12 @@ export function isContractor(employee: Pick<Employee, 'employmentType'> | null |
   return employee?.employmentType === CONTRACTOR;
 }
 
-/** Employees, part-time and casual workers get super; contractors don't (they invoice instead). */
-export function getsSuper(employee: Pick<Employee, 'employmentType'> | null | undefined) {
-  return !!employee && !isContractor(employee);
+/**
+ * Employees, part-time and casual workers get super; contractors don't (they
+ * invoice instead). Only in Australia: no business elsewhere has super (see businessUsesSuper).
+ */
+export function getsSuper(employee: Pick<Employee, 'employmentType'> | null | undefined, business = businessStore.get()) {
+  return !!employee && !isContractor(employee) && businessUsesSuper(business);
 }
 
 /**
@@ -331,7 +336,7 @@ export function missingSuperDetails(employee: Pick<Employee, 'id' | 'employmentT
   const record = employeeSuperStore.get().find((s) => s.employeeId === employee.id);
   if (record) {
     const status = superStatusOf(employee, record);
-    return status === 'Needs stapled fund request' ? ['Stapled fund request'] : status === 'Missing details' ? ['Super details'] : [];
+    return status === 'Stapled fund check needed' ? ['Stapled fund check'] : status === 'Ready' ? [] : ['Super details'];
   }
   const missing: string[] = [];
   if (!employee.superFund.trim()) missing.push('Fund name');

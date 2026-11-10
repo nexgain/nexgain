@@ -21,6 +21,7 @@ import {
   type BankForm,
 } from '@/lib/payment-files/bank-details';
 import { bankFieldSetFor } from '@/lib/payment-files/countries';
+import { businessUsesSuper } from '@/data/super-rules';
 
 // The employee's own profile. Phone and position can be updated here; the
 // change shows everywhere (including for their owner) because there's only one profile.
@@ -34,7 +35,9 @@ export default function MyProfileScreen() {
   const [bank, setBank] = useState<BankForm>(EMPTY_BANK_FORM);
   const [status, setStatus] = useState<'idle' | 'saving' | 'error'>('idle');
   // Bank boxes match the business's country (BSB, routing number, sort code or IBAN).
-  const bankSet = bankFieldSetFor(useBusiness()?.country);
+  const business = useBusiness();
+  const bankSet = bankFieldSetFor(business?.country);
+  const usesSuper = businessUsesSuper(business);
   const mySuper = useEmployeeSuper().find((s) => s.employeeId === me?.id);
 
   if (!me) {
@@ -218,24 +221,28 @@ export default function MyProfileScreen() {
             <Text style={styles.sectionTitle}>Bank details</Text>
             <Card style={styles.form}>{bankFields}</Card>
 
-            <Text style={styles.sectionTitle}>Super details</Text>
-            <Card style={styles.form}>
-              <Pressable
-                onPress={() => router.push('/super-details')}
-                accessibilityRole="button"
-                accessibilityHint="Opens your super details"
-                style={({ pressed }) => [styles.superRow, pressed && styles.pressed]}>
-                <View style={styles.superText}>
-                  <Text style={styles.fieldLabel}>{mySuper ? choiceText(mySuper.choice, mySuper.fundName) : 'Not set up yet'}</Text>
-                  <Text style={styles.hint}>
-                    {mySuper
-                      ? `Confirmed ${new Date(mySuper.declaredAt).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })}. Tap to view or change.`
-                      : 'Tell your employer where to pay your super, and add your TFN.'}
-                  </Text>
-                </View>
-                <Icon name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }} color={C.textSecondary} size={14} />
-              </Pressable>
-            </Card>
+            {usesSuper && (
+              <>
+                <Text style={styles.sectionTitle}>Super details</Text>
+                <Card style={styles.form}>
+                  <Pressable
+                    onPress={() => router.push('/super-details')}
+                    accessibilityRole="button"
+                    accessibilityHint="Opens your super details"
+                    style={({ pressed }) => [styles.superRow, pressed && styles.pressed]}>
+                    <View style={styles.superText}>
+                      <Text style={styles.fieldLabel}>{mySuper ? choiceText(mySuper.choice, mySuper.fundName) : 'Not set up yet'}</Text>
+                      <Text style={styles.hint}>
+                        {mySuper
+                          ? `Confirmed ${new Date(mySuper.declaredAt).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })}. Tap to view or change.`
+                          : 'Tell your employer where to pay your super, and add your TFN.'}
+                      </Text>
+                    </View>
+                    <Icon name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }} color={C.textSecondary} size={14} />
+                  </Pressable>
+                </Card>
+              </>
+            )}
           </>
         )}
         {status === 'error' && (

@@ -15,6 +15,7 @@ import { formatCurrency as money, formatHrs, usePayslipViews, type PayslipView }
 import { fromDateKey } from '@/data/shifts';
 import { SUPER_STATUS_LABEL, superFor, superPaidDateKey, useSuperPayments } from '@/data/super-payments';
 import { TAX_ESTIMATE_NOTE } from '@/data/tax';
+import { businessUsesSuper } from '@/data/super-rules';
 
 // One payslip, exactly as it was approved. Download saves it as a PDF.
 export default function PayslipScreen() {
@@ -161,7 +162,7 @@ export default function PayslipScreen() {
         <Text style={[styles.smallMuted, styles.superNote]}>{TAX_ESTIMATE_NOTE}</Text>
       </Card>
 
-      <SuperSection payslip={payslip} payslips={payslips} records={superRecords} fyStartMonth={business?.financialYearStartMonth ?? 7} fund={me?.superFund ?? ''} />
+      {businessUsesSuper(business) && <SuperSection payslip={payslip} payslips={payslips} records={superRecords} fyStartMonth={business?.financialYearStartMonth ?? 7} fund={me?.superFund ?? ''} />}
 
       <View style={styles.netBox}>
         <Text style={styles.netLabel}>Net Pay</Text>

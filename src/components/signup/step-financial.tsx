@@ -1,7 +1,12 @@
+import { useState } from 'react';
+import { StyleSheet, Text } from 'react-native';
+
 import { SelectField } from '@/components/employee/form-fields';
-import { Button, Field, YesNo } from '@/components/signup/fields';
+import { Button, Field, Input, Note, SignupColors as C, YesNo } from '@/components/signup/fields';
 import type { StepProps } from '@/components/signup/types';
+import { businessUsesSuper } from '@/data/super-rules';
 import { COUNTRIES, isEurozone } from '@/lib/payment-files/countries';
+import { abnError, formatAbn, requiredError, usiError } from '@/lib/super-validation';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -27,10 +32,27 @@ function currencyFor(code: string): (typeof CURRENCIES)[number] | null {
   return CURRENCIES.find((c) => c.startsWith(`${prefix} `)) ?? null;
 }
 
+/** What's still needed on this step (field -> message). */
+export function financialErrors(data: StepProps['data']) {
+  const e: Record<string, string | null> = { country: data.country ? null : 'Choose the country your business is in.' };
+  // Australian businesses: a default super fund for staff who choose "use my employer's fund".
+  if (data.country && businessUsesSuper({ country: data.country })) {
+    e.superFundName = requiredError(data.superFundName, 'the fund’s name');
+    e.superFundUsi = usiError(data.superFundUsi);
+    e.superFundAbn = abnError(data.superFundAbn);
+  }
+  return Object.fromEntries(Object.entries(e).filter((x): x is [string, string] => !!x[1]));
+}
+
 export function StepFinancial({ data, update, onNext }: StepProps) {
+  const [tried, setTried] = useState(false);
+  const errors = financialErrors(data);
+  const err = (key: string) => (tried ? errors[key] : undefined);
+  const usesSuper = !!data.country && businessUsesSuper({ country: data.country });
+
   return (
     <>
-      <Field label="Country" hint="Where your business pays its staff. This decides the bank payment file payroll makes.">
+      <Field label="Country" error={err('country')} hint="Where your business pays its staff. This decides the bank payment file payroll makes, and whether super applies.">
         <SelectField
           title="Country"
           value={COUNTRIES.find((c) => c.code === data.country)?.name ?? null}
@@ -42,6 +64,26 @@ export function StepFinancial({ data, update, onNext }: StepProps) {
           }}
         />
       </Field>
+
+      {usesSuper && (
+        <>
+          <Text style={styles.heading}>Default super fund</Text>
+          <Note>
+            Staff who choose &quot;use my employer&apos;s fund&quot; are paid into this fund. You can change it later in Business
+            Profile. (Before using it for someone who isn&apos;t sure, check with the ATO for their existing &quot;stapled&quot;
+            fund; NexGain reminds you.)
+          </Note>
+          <Field label="Fund name" error={err('superFundName')}>
+            <Input value={data.superFundName} onChangeText={(superFundName) => update({ superFundName })} placeholder="e.g. AustralianSuper" autoCapitalize="words" maxLength={100} accessibilityLabel="Default fund name" hasError={!!err('superFundName')} />
+          </Field>
+          <Field label="Fund USI (Unique Superannuation Identifier)" error={err('superFundUsi')} hint="On the fund's website, usually under 'Employers'.">
+            <Input value={data.superFundUsi} onChangeText={(t) => update({ superFundUsi: t.toUpperCase() })} placeholder="e.g. STA0100AU" autoCapitalize="characters" autoCorrect={false} maxLength={20} accessibilityLabel="Default fund USI" hasError={!!err('superFundUsi')} />
+          </Field>
+          <Field label="Fund ABN" error={err('superFundAbn')}>
+            <Input value={formatAbn(data.superFundAbn)} onChangeText={(t) => update({ superFundAbn: t.replace(/\D/g, '').slice(0, 11) })} placeholder="11 digits" keyboardType="number-pad" accessibilityLabel="Default fund ABN" hasError={!!err('superFundAbn')} />
+          </Field>
+        </>
+      )}
 
       <Field label="Financial year start date">
         <SelectField
@@ -73,7 +115,22 @@ export function StepFinancial({ data, update, onNext }: StepProps) {
         <YesNo label="Track GST in reports" value={data.trackGstInReports} onChange={(trackGstInReports) => update({ trackGstInReports })} />
       </Field>
 
-      <Button label="Next" arrow onPress={onNext} />
+      <Button
+        label="Next"
+        arrow
+        onPress={() => {
+          setTried(true);
+          if (Object.keys(errors).length === 0) onNext();
+        }}
+      />
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  heading: {
+    color: C.text,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+});

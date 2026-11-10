@@ -237,7 +237,8 @@ export function calculatePayLine(employee: Employee, split: HoursSplit, status: 
     { contractor: isContractor(employee), claimsTaxFreeThreshold: employee.taxFreeThreshold },
     weeks,
   );
-  const qualifyingEarnings = getsSuper(employee)
+  // No super outside Australia (getsSuper checks the business's country).
+  const qualifyingEarnings = getsSuper(employee, business)
     ? qualifyingEarningsOf({ ordinaryPay, overtimePay }, superIncludesOf(business))
     : null;
   return {

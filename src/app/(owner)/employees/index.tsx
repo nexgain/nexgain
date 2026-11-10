@@ -9,6 +9,8 @@ import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { shareInvite, useInvites, type EmployeeInvite } from '@/data/employee-invites';
 import { superStatusOf, useEmployeeSuper } from '@/data/employee-super';
 import { employeeFullName, formatPayRate, useEmployees, type Employee } from '@/data/employees';
+import { businessUsesSuper } from '@/data/super-rules';
+import { useBusiness } from '@/data/business';
 
 type Row =
   | { kind: 'employee'; id: string; name: string; status: ListStatus; employee: Employee }
@@ -130,14 +132,15 @@ export default function EmployeesScreen() {
   );
 }
 
-const SUPER_TONE = { Complete: 'success', 'Missing details': 'warning', 'Needs stapled fund request': 'danger' } as const;
+const SUPER_TONE = { Ready: 'success', 'Not chosen yet': 'warning', 'Missing details': 'warning', 'Stapled fund check needed': 'danger' } as const;
 
 /** Super: Complete, Missing details or Needs stapled fund request (nothing for contractors). */
 function SuperBadge({ employee }: { employee: Employee }) {
   const record = useEmployeeSuper().find((s) => s.employeeId === employee.id);
+  const usesSuper = businessUsesSuper(useBusiness());
   const status = superStatusOf(employee, record);
-  if (status === 'Not needed') return null;
-  const toAction = status === 'Complete' && record && !record.choiceActionedAt;
+  if (!usesSuper || status === 'Not needed') return null;
+  const toAction = status === 'Ready' && record && !record.choiceActionedAt;
   return (
     <View style={styles.superLine}>
       <Badge label={`Super: ${status}`} tone={SUPER_TONE[status]} />

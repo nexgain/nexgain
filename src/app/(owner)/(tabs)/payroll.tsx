@@ -70,9 +70,12 @@ import { fromDateKey } from '@/data/shifts';
 import { TAX_ESTIMATE_NOTE, taxSetupFor, type TaxSetup } from '@/data/tax';
 import { SUPER_STATUS_LABEL, superFor, useSuperPayments, type SuperStatus } from '@/data/super-payments';
 import { countryName, paymentFileTypeFor, payrollLabel, payrollReference } from '@/lib/payment-files';
+import { businessUsesSuper } from '@/data/super-rules';
 
 const TABS = ['Employees', 'Summary', 'Tax & Super', 'Bank Accounts'] as const;
-type Tab = (typeof TABS)[number];
+/** Outside Australia there's no super, so the tax tab is just "Tax". */
+const TABS_NO_SUPER = ['Employees', 'Summary', 'Tax', 'Bank Accounts'] as const;
+type Tab = (typeof TABS)[number] | (typeof TABS_NO_SUPER)[number];
 
 /** e.g. "12%" */
 const percentText = (rate: number) => `${Math.round(rate * 10000) / 100}%`;
@@ -109,10 +112,14 @@ export default function PayrollScreen() {
   usePayRuns();
   const periods = getSchedulePayPeriods(now, 6);
   const [periodId, setPeriodId] = useState(periods[0].id);
-  const [tab, setTab] = useState<Tab>('Employees');
+  const [chosenTab, setTab] = useState<Tab>('Employees');
   const scrollRef = useRef<ScrollViewInstance>(null);
   const approveCardY = useRef(0);
   const business = useBusiness();
+  // Super only for Australian businesses (see businessUsesSuper): elsewhere payroll is pay and tax only.
+  const usesSuper = businessUsesSuper(business);
+  const tabs: readonly Tab[] = usesSuper ? TABS : TABS_NO_SUPER;
+  const tab: Tab = tabs.includes(chosenTab) ? chosenTab : chosenTab === 'Tax' || chosenTab === 'Tax & Super' ? tabs[2] : 'Employees';
   const superPercent = percentText(superRateOf(business));
   const taxSetup = taxSetupFor(business);
   const taxNote = taxNoteFor(taxSetup, business?.country);
@@ -233,13 +240,17 @@ export default function PayrollScreen() {
       align: 'right',
       render: (l) => (isContractor(l.employee) ? 'None - contractor' : moneyOrDash(l.tax)),
     },
-    {
-      key: 'super',
-      label: `Super (${superPercent})`,
-      width: 130,
-      align: 'right',
-      render: (l) => (isContractor(l.employee) ? 'N/A - contractor' : moneyOrDash(l.super)),
-    },
+    ...(usesSuper
+      ? [
+          {
+            key: 'super',
+            label: `Super (${superPercent})`,
+            width: 130,
+            align: 'right' as const,
+            render: (l: PayLine) => (isContractor(l.employee) ? 'N/A - contractor' : moneyOrDash(l.super)),
+          },
+        ]
+      : []),
   ];
 
   const bankColumns: Column<PayLine>[] = [
@@ -315,16 +326,18 @@ export default function PayrollScreen() {
           change={percentChange(totals.net, previousTotals.net)}
           changeLabel="vs last period"
         />
-        <StatCard
-          icon={OwnerIcons.percent}
-          label="Total Super"
-          value={formatMoney(totals.super)}
-          change={percentChange(totals.super, previousTotals.super)}
-          changeLabel="vs last period"
-        />
+        {usesSuper && (
+          <StatCard
+            icon={OwnerIcons.percent}
+            label="Total Super"
+            value={formatMoney(totals.super)}
+            change={percentChange(totals.super, previousTotals.super)}
+            changeLabel="vs last period"
+          />
+        )}
       </StatGrid>
 
-      <TabRow tabs={TABS} active={tab} onChange={setTab} />
+      <TabRow tabs={tabs} active={tab} onChange={setTab} />
 
       <Card>
         {tab === 'Employees' && (
@@ -354,10 +367,10 @@ export default function PayrollScreen() {
               ['Total gross pay', formatMoney(totals.gross)],
               ['Tax withheld (estimate)', formatMoney(totals.tax)],
               ['Total net pay', formatMoney(totals.net)],
-              [`Total super (${superPercent})`, formatMoney(totals.super)],
+              ...(usesSuper ? [[`Total super (${superPercent})`, formatMoney(totals.super)]] : []),
               ['Approved', `${approvedCount} of ${lines.length}`],
               ['Wages paid', `${paidCount} of ${lines.length}`],
-              ['Super paid', `${superPaidCount} of ${superDueCount}`],
+              ...(usesSuper ? [['Super paid', `${superPaidCount} of ${superDueCount}`]] : []),
             ].map(([label, value], i) => (
               <View key={label} style={[styles.summaryRow, i > 0 && styles.summaryDivider]}>
                 <Text style={styles.summaryLabel}>{label}</Text>
@@ -367,7 +380,7 @@ export default function PayrollScreen() {
           </View>
         )}
 
-        {tab === 'Tax & Super' && (
+        {(tab === 'Tax & Super' || tab === 'Tax') && (
           <View style={styles.tabContent}>
             <Table
               columns={taxColumns}
@@ -378,12 +391,14 @@ export default function PayrollScreen() {
                 name: 'Total',
                 gross: formatMoney(totals.gross),
                 tax: formatMoney(totals.tax),
-                super: formatMoney(totals.super),
+                ...(usesSuper ? { super: formatMoney(totals.super) } : {}),
               }}
             />
             <Text style={ownerStyles.mutedText}>
-              {taxNote} Super is the {superPercent} Superannuation Guarantee on qualifying earnings (the pay items set to count towards
-              super in Payroll Settings; not overtime by default), paid by you on top of gross pay.
+              {taxNote}
+              {usesSuper
+                ? ` Super is the ${superPercent} Superannuation Guarantee on qualifying earnings (the pay items set to count towards super in Payroll Settings; not overtime by default), paid by you on top of gross pay.`
+                : ''}
             </Text>
           </View>
         )}
@@ -450,7 +465,7 @@ export default function PayrollScreen() {
         </Card>
       </View>
 
-      <SuperCard />
+      {usesSuper && <SuperCard />}
 
       <PayRunsCard />
 
@@ -655,34 +670,38 @@ function PayrollSettingsCard() {
         Hours worked past this in a single day are paid at the employee&apos;s overtime rate.
       </Text>
       <ManualTaxRateField />
-      <View style={styles.divider} />
-      <FormField label={`Super rate: ${percentText(superRateOf(business))} of qualifying earnings`}>
-        <Text style={ownerStyles.mutedText}>
-          Choose which pay counts towards super (qualifying earnings). Approved pay runs keep what they were worked out on.
-        </Text>
-        {PAY_ITEM_TYPES.map(({ type, label }) => {
-          const includes = superIncludesOf(business);
-          return (
-            <View key={type} style={styles.choiceRow}>
-              <Text style={styles.choiceLabel}>{label}</Text>
-              {([true, false] as const).map((v) => {
-                const selected = includes[type] === v;
-                return (
-                  <Pressable
-                    key={String(v)}
-                    onPress={() => updateBusiness({ superIncludes: { ...includes, [type]: v } })}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected }}
-                    accessibilityLabel={`${label} includes super: ${v ? 'Yes' : 'No'}`}
-                    style={[styles.choice, selected && styles.choiceSelected]}>
-                    <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>{v ? 'Yes' : 'No'}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          );
-        })}
-      </FormField>
+      {businessUsesSuper(business) && (
+        <>
+          <View style={styles.divider} />
+          <FormField label={`Super rate: ${percentText(superRateOf(business))} of qualifying earnings`}>
+            <Text style={ownerStyles.mutedText}>
+              Choose which pay counts towards super (qualifying earnings). Approved pay runs keep what they were worked out on.
+            </Text>
+            {PAY_ITEM_TYPES.map(({ type, label }) => {
+              const includes = superIncludesOf(business);
+              return (
+                <View key={type} style={styles.choiceRow}>
+                  <Text style={styles.choiceLabel}>{label}</Text>
+                  {([true, false] as const).map((v) => {
+                    const selected = includes[type] === v;
+                    return (
+                      <Pressable
+                        key={String(v)}
+                        onPress={() => updateBusiness({ superIncludes: { ...includes, [type]: v } })}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected }}
+                        accessibilityLabel={`${label} includes super: ${v ? 'Yes' : 'No'}`}
+                        style={[styles.choice, selected && styles.choiceSelected]}>
+                        <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>{v ? 'Yes' : 'No'}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              );
+            })}
+          </FormField>
+        </>
+      )}
       <View style={styles.divider} />
       <ActionRow
         icon={OwnerIcons.bank}
@@ -766,6 +785,7 @@ function PayRunsCard() {
   }
 
   const shown = showAll ? runs : runs.slice(0, SHOWN_RUNS);
+  const usesSuper = businessUsesSuper(business);
 
 
   return (
@@ -783,8 +803,8 @@ function PayRunsCard() {
                   {run.employeeCount} {run.employeeCount === 1 ? 'person' : 'people'} · {formatMoney(run.totalNet)} net
                 </Text>
                 <Text style={styles.runMeta}>
-                  Wages {formatMoney(runTotals(payslips, run).gross)} · Tax {formatMoney(runTotals(payslips, run).tax)} · Super{' '}
-                  {formatMoney(runTotals(payslips, run).super)}
+                  Wages {formatMoney(runTotals(payslips, run).gross)} · Tax {formatMoney(runTotals(payslips, run).tax)}
+                  {usesSuper ? ` · Super ${formatMoney(runTotals(payslips, run).super)}` : ''}
                 </Text>
                 <Text style={styles.runMeta}>
                   {run.status === 'paid' && run.paidAt
@@ -803,7 +823,7 @@ function PayRunsCard() {
               hitSlop={6}
               style={styles.breakdownToggle}>
               <Text style={styles.breakdownToggleText}>
-                {openRunId === run.id ? 'Hide breakdown' : 'Show wages and super per person'}
+                {openRunId === run.id ? 'Hide breakdown' : usesSuper ? 'Show wages and super per person' : 'Show wages per person'}
               </Text>
               <Icon name={OwnerIcons.chevronDown} color={C.accent} size={12} />
             </Pressable>
@@ -883,6 +903,7 @@ function RunBreakdown({ run }: { run: PayRun }) {
   const employees = useEmployees();
   const rows = payslips.filter((p) => p.payRunId === run.id);
   const totals = runTotals(payslips, run);
+  const usesSuper = businessUsesSuper(useBusiness());
   const columns: Column<PayslipRecord>[] = [
     {
       key: 'name',
@@ -896,16 +917,20 @@ function RunBreakdown({ run }: { run: PayRun }) {
     { key: 'gross', label: 'Wages', width: 100, align: 'right', render: (p) => formatMoney(p.gross) },
     { key: 'tax', label: 'Tax', width: 90, align: 'right', render: (p) => formatMoney(p.tax) },
     { key: 'net', label: 'Net Pay', width: 100, align: 'right', render: (p) => formatMoney(p.net) },
-    { key: 'super', label: 'Super', width: 90, align: 'right', render: (p) => formatMoney(p.super) },
-    {
-      key: 'superStatus',
-      label: 'Super Status',
-      width: 110,
-      render: (p) => {
-        const s = superFor(superRecords, p.payRunId, p.employeeId);
-        return s ? <Badge label={SUPER_STATUS_LABEL[s.status]} tone={SUPER_TONE[s.status]} /> : '—';
-      },
-    },
+    ...(usesSuper
+      ? [
+          { key: 'super', label: 'Super', width: 90, align: 'right' as const, render: (p: PayslipRecord) => formatMoney(p.super) },
+          {
+            key: 'superStatus',
+            label: 'Super Status',
+            width: 110,
+            render: (p: PayslipRecord) => {
+              const s = superFor(superRecords, p.payRunId, p.employeeId);
+              return s ? <Badge label={SUPER_STATUS_LABEL[s.status]} tone={SUPER_TONE[s.status]} /> : '—';
+            },
+          },
+        ]
+      : []),
   ];
   return (
     <Table
@@ -918,7 +943,7 @@ function RunBreakdown({ run }: { run: PayRun }) {
         gross: formatMoney(totals.gross),
         tax: formatMoney(totals.tax),
         net: formatMoney(totals.net),
-        super: formatMoney(totals.super),
+        ...(usesSuper ? { super: formatMoney(totals.super) } : {}),
       }}
     />
   );

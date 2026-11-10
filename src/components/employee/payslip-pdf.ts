@@ -4,6 +4,7 @@ import { formatShortDate } from '@/data/employee-roster';
 import { formatCurrency as money, formatHrs, type PayslipView } from '@/data/employee-payslips';
 import { TAX_ESTIMATE_NOTE } from '@/data/tax';
 import { escapeHtml as esc, sharePdf } from '@/lib/share-pdf';
+import { businessUsesSuper } from '@/data/super-rules';
 
 export type PayslipPerson = { name: string; position: string; employeeId: string };
 
@@ -99,10 +100,14 @@ export function buildPayslipHtml(v: PayslipView, business: BusinessProfile | nul
           <tr class="total"><td>Total Deductions</td><td class="num">${money(v.totalDeductions)}</td></tr>
         </tbody>
       </table>
-      <table style="margin-top:8px"><tbody>
+      ${
+        businessUsesSuper(business)
+          ? `<table style="margin-top:8px"><tbody>
         <tr><td>Superannuation (${Math.round(superRateOf(business) * 10000) / 100}%)</td><td class="num">${money(v.super)}</td></tr>
-      </tbody></table>
-      <div class="note">${TAX_ESTIMATE_NOTE} Superannuation is paid by your employer on top of your pay. It is not taken out of your net pay.</div>
+      </tbody></table>`
+          : ''
+      }
+      <div class="note">${TAX_ESTIMATE_NOTE}${businessUsesSuper(business) ? ' Superannuation is paid by your employer on top of your pay. It is not taken out of your net pay.' : ''}</div>
     </div>
 
     <div class="net"><div class="label">Net Pay</div><div class="value">${money(v.net)}</div></div>

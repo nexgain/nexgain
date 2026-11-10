@@ -4,11 +4,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatTfn, type EmployeeStepProps, type PickedDocument } from '@/components/employee-signup/types';
 import { useNativePicker } from '@/components/pickers/use-native-picker';
-import { SuperFields, superFormErrors } from '@/components/super-fields';
 import { Button, Field, fieldStyles, Icon, Input, SignupColors as C } from '@/components/signup/fields';
 import { formatShortDate } from '@/data/employee-roster';
 import { MAX_DOCUMENT_BYTES, QUALIFICATION_TYPES } from '@/data/qualifications';
 import { newId } from '@/lib/ids';
+import { businessUsesSuper } from '@/data/super-rules';
 import { tfnError } from '@/lib/super-validation';
 
 const SUGGESTED_QUALIFICATIONS = QUALIFICATION_TYPES.filter((q) => q !== 'Other');
@@ -25,21 +25,19 @@ const PICKER_THEME = {
 export function StepAdditional({ data, update, onNext, nextLabel }: EmployeeStepProps) {
   const [tried, setTried] = useState(false);
   const [showTfnInfo, setShowTfnInfo] = useState(false);
-  // Contractors manage their own super (they're paid on their invoices), so only employees choose a fund.
-  const contractor = data.employmentType === 'Contractor';
-  const superErrors = contractor ? {} : superFormErrors(data.superForm, data.tfn);
-
-  const contractorTfn = contractor ? tfnError(data.tfn) : null;
+  // Super (with the TFN) has its own step for employees of Australian businesses.
+  // Australian contractors can still give a TFN here; elsewhere there's no TFN.
+  const contractorTfnAsked = data.employmentType === 'Contractor' && businessUsesSuper(data.business);
+  const contractorTfn = contractorTfnAsked ? tfnError(data.tfn) : null;
   const errors = {
     contractorTfn: !!contractorTfn,
-    ...superErrors,
     emergencyName: !data.emergencyName.trim() && 'Enter an emergency contact name.',
     emergencyPhone: data.emergencyPhone.replace(/\D/g, '').length < 8 && 'Enter a valid emergency contact phone.',
   };
 
   return (
     <>
-      {contractor ? (
+      {contractorTfnAsked && (
         <Field label="Tax file number" optional error={(tried && contractorTfn) || undefined}>
           <View style={styles.tfnRow}>
             <View style={fieldStyles.flex}>
@@ -72,19 +70,6 @@ export function StepAdditional({ data, update, onNext, nextLabel }: EmployeeStep
             </Text>
           )}
         </Field>
-      ) : (
-        <>
-          <Text style={styles.sectionHeading}>Super details</Text>
-          <SuperFields
-            form={data.superForm}
-            update={(changes) => update({ superForm: { ...data.superForm, ...changes } })}
-            errors={superErrors}
-            showErrors={tried}
-            tfn={data.tfn}
-            onTfnChange={(tfn) => update({ tfn })}
-            tfnHint="Stored encrypted and shown masked. Only you and your employer can see it, and it's only used for tax and super."
-          />
-        </>
       )}
 
       <Field label="Emergency contact name" error={tried && errors.emergencyName}>
@@ -313,11 +298,6 @@ const styles = StyleSheet.create({
   addText: {
     color: C.onPrimary,
     fontSize: 15,
-    fontWeight: '700',
-  },
-  sectionHeading: {
-    color: C.text,
-    fontSize: 17,
     fontWeight: '700',
   },
   tfnRow: {

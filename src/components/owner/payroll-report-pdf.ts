@@ -6,6 +6,7 @@ import { employeeFullName, employeeInitialsOf } from '@/data/employees';
 import { formatHours, formatMoney, payTotals, type PayLine, type Period } from '@/data/payroll';
 import { TAX_ESTIMATE_NOTE } from '@/data/tax';
 import { escapeHtml as esc, sharePdf } from '@/lib/share-pdf';
+import { businessUsesSuper } from '@/data/super-rules';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const fileDate = (d: Date) => `${String(d.getDate()).padStart(2, '0')}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
@@ -20,6 +21,8 @@ const rateText = (l: PayLine, rate: number | null) =>
   rate === null ? '—' : l.employee.payType === 'salary' ? `${formatMoney(rate)}/yr` : `${formatMoney(rate)}/hr`;
 
 export function buildPayrollReportHtml(period: Period, frequency: string, business: BusinessProfile | null, lines: PayLine[]) {
+  // Super only for Australian businesses (see businessUsesSuper).
+  const usesSuper = businessUsesSuper(business);
   const totals = payTotals(lines);
   const span = `${formatShortDate(period.start)} – ${formatShortDate(lastDay(period))}`;
   const rows = lines
@@ -91,10 +94,10 @@ export function buildPayrollReportHtml(period: Period, frequency: string, busine
       <div><div class="label">Total Employees</div><div class="value">${lines.length}</div></div>
       <div><div class="label">Total Hours</div><div class="value">${formatHours(totals.hours)}</div><div class="sub2">incl. ${formatHours(totals.overtimeHours)} OT hrs</div></div>
       <div><div class="label">Total Gross Pay</div><div class="value">${formatMoney(totals.gross)}</div></div>
-      <div><div class="label">Total Deductions</div><div class="value">${formatMoney(totals.tax)}</div><div class="sub2">+ ${formatMoney(totals.super)} super paid by employer</div></div>
+      <div><div class="label">Total Deductions</div><div class="value">${formatMoney(totals.tax)}</div>${usesSuper ? `<div class="sub2">+ ${formatMoney(totals.super)} super paid by employer</div>` : ''}</div>
       <div><div class="label">Total Net Pay</div><div class="value">${formatMoney(totals.net)}</div></div>
     </div>
-    <div class="foot">Deductions are PAYG tax taken out of pay. ${TAX_ESTIMATE_NOTE} Super is paid by the employer on top of gross pay and isn't deducted.</div>
+    <div class="foot">Deductions are PAYG tax taken out of pay. ${TAX_ESTIMATE_NOTE}${usesSuper ? " Super is paid by the employer on top of gross pay and isn't deducted." : ''}</div>
   </body></html>`;
 }
 

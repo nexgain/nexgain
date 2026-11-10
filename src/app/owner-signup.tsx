@@ -25,6 +25,8 @@ import { saveBusinessPayment, updateBusinessPayment } from '@/data/invoices';
 import { DEFAULT_SELECTED_COUNT, findIndustry, industryDefaults } from '@/data/industries';
 import { signUp } from '@/lib/auth';
 import { reloadSession } from '@/lib/session';
+import { saveDefaultFund } from '@/data/employee-super';
+import { businessUsesSuper } from '@/data/super-rules';
 
 const STEPS = [
   { title: 'Create your account', subtitle: "Let's get started. Create your NexGain owner account." },
@@ -125,6 +127,11 @@ export default function OwnerSignupScreen() {
       });
       await saveBusinessPayment().catch((e) => console.warn('Could not save bank details:', e.message));
       if (business.id) await saveSignupApps(business.id, data.apps);
+      // Australian businesses: the default super fund, saved against the business.
+      if (business.id && businessUsesSuper({ country: data.country })) {
+        const saved = await saveDefaultFund(business.id, { name: data.superFundName, usi: data.superFundUsi, abn: data.superFundAbn });
+        if (!saved) console.warn('The default super fund was not saved; it can be added in Business Profile.');
+      }
       // Start loading the new owner's data and live notifications.
       await reloadSession();
       setInviteCode(business.inviteCode);

@@ -64,7 +64,8 @@ async function load(userId: string) {
   if (role === 'owner' && business?.id) {
     const businessId = business.id;
     const reloadTeam = refresh(() =>
-      Promise.all([loadTeam(businessId, businessStore.get()?.businessName ?? businessName), loadInvites()]),
+      // Saving super details also updates the employee, so this reloads them too (the owner's Super page updates by itself).
+      Promise.all([loadTeam(businessId, businessStore.get()?.businessName ?? businessName), loadInvites(), loadEmployeeSuper()]),
     );
     await Promise.all([
       loadTeam(businessId, businessName),

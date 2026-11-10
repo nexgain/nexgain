@@ -37,8 +37,12 @@ export type SignupData = {
   financialYearStartMonth: number;
   gstRegistered: boolean;
   currency: string;
-  /** e.g. "AU" (see COUNTRIES). */
+  /** e.g. "AU" (see COUNTRIES). Required; blank until chosen. */
   country: string;
+  /** Australian businesses only: the default super fund for staff who choose it. */
+  superFundName: string;
+  superFundUsi: string;
+  superFundAbn: string;
   trackGstInReports: boolean;
   // Step 7
   emailApp: EmailApp;
@@ -70,7 +74,10 @@ export const EMPTY_SIGNUP: SignupData = {
   financialYearStartMonth: 7,
   gstRegistered: true,
   currency: 'AUD – Australian Dollar',
-  country: 'AU',
+  country: '',
+  superFundName: '',
+  superFundUsi: '',
+  superFundAbn: '',
   trackGstInReports: true,
   emailApp: 'gmail',
   businessEmail: '',

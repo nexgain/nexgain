@@ -23,6 +23,8 @@ import {
 } from '@/data/employee-super';
 import { isContractor } from '@/data/employees';
 import { formatBsb } from '@/lib/super-validation';
+import { businessUsesSuper } from '@/data/super-rules';
+import { useBusiness } from '@/data/business';
 
 const dateText = (iso: string) => new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -32,6 +34,7 @@ export default function SuperDetailsScreen() {
   const me = useCurrentEmployee();
   const saved = useEmployeeSuper().find((s) => s.employeeId === me?.id);
   const settings = useSuperSettings();
+  const business = useBusiness();
   const insets = useSafeAreaInsets();
   const [form, setForm] = useState<SuperForm | null>(null);
   const [tfn, setTfn] = useState('');
@@ -49,6 +52,14 @@ export default function SuperDetailsScreen() {
     return (
       <View style={[styles.screen, styles.centered]}>
         <ActivityIndicator color={C.primary} />
+      </View>
+    );
+  }
+
+  if (!businessUsesSuper(business)) {
+    return (
+      <View style={[styles.screen, styles.content]}>
+        <Text style={styles.muted}>Super only applies to Australian businesses, so there&apos;s nothing to fill in here.</Text>
       </View>
     );
   }

@@ -15,11 +15,18 @@ import { supabase } from '@/lib/supabase';
 export type SuperChoice = 'default' | 'own' | 'smsf' | 'unsure';
 export type Gender = 'female' | 'male' | 'x' | 'not_said';
 
+/**
+ * The choices employees are offered. Self-managed funds (SMSFs) aren't offered
+ * yet; the database can still hold one for later.
+ */
 export const SUPER_CHOICES: { id: SuperChoice; label: string; hint: string }[] = [
-  { id: 'default', label: 'Use my employer’s default fund', hint: 'Your employer picks the fund. Nothing else to fill in.' },
-  { id: 'own', label: 'My own super fund', hint: 'A fund you already belong to, like AustralianSuper or Hostplus.' },
-  { id: 'smsf', label: 'Self-managed super fund (SMSF)', hint: 'A fund you run yourself.' },
-  { id: 'unsure', label: 'I’m not sure', hint: 'Your employer will look up your existing fund with the ATO.' },
+  { id: 'default', label: 'Use my employer’s fund', hint: 'Your employer’s fund. Nothing to type.' },
+  { id: 'own', label: 'Use my own fund', hint: 'A fund you already belong to, like AustralianSuper or Hostplus.' },
+  {
+    id: 'unsure',
+    label: 'I’m not sure / skip for now',
+    hint: 'Your employer will check with the ATO for a super fund you already have (a “stapled” fund) before using theirs.',
+  },
 ];
 
 export const GENDERS: { id: Gender; label: string }[] = [
@@ -248,29 +255,71 @@ export async function loadSuperHistory(employeeId: string): Promise<SuperHistory
 // Status (owner's Employees list)
 // ---------------------------------------------------------------------------
 
-export type SuperStatus = 'Complete' | 'Missing details' | 'Needs stapled fund request' | 'Not needed';
+export type SuperStatus = 'Ready' | 'Stapled fund check needed' | 'Not chosen yet' | 'Missing details' | 'Not needed';
 
-/** Complete, Missing details, or Needs stapled fund request ("I'm not sure"). Contractors don't need super through payroll. */
+/**
+ * Ready, Stapled fund check needed ("I'm not sure"), Not chosen yet, or Missing
+ * details. Contractors don't get super through payroll.
+ */
 export function superStatusOf(employee: Pick<Employee, 'employmentType'>, record: EmployeeSuper | undefined): SuperStatus {
   if (isContractor(employee)) return 'Not needed';
-  if (!record) return 'Missing details';
-  if (record.choice === 'unsure') return 'Needs stapled fund request';
+  if (!record) return 'Not chosen yet';
+  if (record.choice === 'unsure') return 'Stapled fund check needed';
   if (record.choice === 'own' && !(record.fundName && record.fundAbn && record.usi && record.memberNumber)) return 'Missing details';
   if (record.choice === 'smsf' && !(record.fundName && record.fundAbn && record.esa && record.smsfAccountLast3)) return 'Missing details';
-  return 'Complete';
+  return 'Ready';
+}
+
+/** Where an employee's super should be paid. */
+export type SuperFund =
+  | { kind: 'employer'; fundName: string; usi: string; abn: string; employerNumber: string }
+  | { kind: 'own'; fundName: string; usi: string; abn: string; memberNumber: string; accountName: string | null }
+  | { kind: 'smsf'; fundName: string; abn: string; esa: string }
+  | { kind: 'none'; reason: 'stapled_check_needed' | 'not_chosen' };
+
+/**
+ * THE answer to "which fund do we pay this employee's super into?":
+ * - option a (employer's fund): the business's default fund
+ * - option b (own fund): their fund
+ * - option c (not sure) or no choice yet: none yet; for "not sure" the employer
+ *   must check with the ATO for a stapled fund first (never the default fund).
+ */
+export function getEmployeeSuperFund(
+  employee: Pick<Employee, 'id'>,
+  records: EmployeeSuper[] = employeeSuperStore.get(),
+  settings: SuperSettings = superSettingsStore.get(),
+): SuperFund {
+  const r = records.find((x) => x.employeeId === employee.id);
+  if (!r) return { kind: 'none', reason: 'not_chosen' };
+  switch (r.choice) {
+    case 'default':
+      return {
+        kind: 'employer',
+        fundName: settings.defaultFundName,
+        usi: settings.defaultFundUsi,
+        abn: settings.defaultFundAbn,
+        employerNumber: settings.employerNumber,
+      };
+    case 'own':
+      return { kind: 'own', fundName: r.fundName ?? '', usi: r.usi ?? '', abn: r.fundAbn ?? '', memberNumber: r.memberNumber ?? '', accountName: r.accountName };
+    case 'smsf':
+      return { kind: 'smsf', fundName: r.fundName ?? '', abn: r.fundAbn ?? '', esa: r.esa ?? '' };
+    case 'unsure':
+      return { kind: 'none', reason: 'stapled_check_needed' };
+  }
 }
 
 /** How a choice reads, e.g. "Own fund: AustralianSuper". */
 export function choiceText(choice: SuperChoice, fundName: string | null, defaultFund = superSettingsStore.get().defaultFundName) {
   switch (choice) {
     case 'default':
-      return `Employer's default fund${defaultFund ? `: ${defaultFund}` : ''}`;
+      return `Employer's fund${defaultFund ? `: ${defaultFund}` : ''}`;
     case 'own':
       return `Own fund${fundName ? `: ${fundName}` : ''}`;
     case 'smsf':
       return `SMSF${fundName ? `: ${fundName}` : ''}`;
     case 'unsure':
-      return 'Not sure (stapled fund request needed)';
+      return 'Not sure yet (stapled fund check needed)';
   }
 }
 
@@ -374,4 +423,15 @@ export function updateSuperSettings(changes: Partial<SuperSettings>) {
       .upsert({ business_id: businessId, settings, updated_at: new Date().toISOString() }, { onConflict: 'business_id' });
     if (error) console.warn('Could not save super settings.');
   }, 600);
+}
+
+/** Saves the default fund straight away (owner sign-up, once the business exists). Returns false if it couldn't. */
+export async function saveDefaultFund(businessId: string, fund: { name: string; usi: string; abn: string }) {
+  const next = { ...superSettingsStore.get(), defaultFundName: fund.name.trim(), defaultFundUsi: fund.usi.trim().toUpperCase(), defaultFundAbn: fund.abn.replace(/\D/g, '') };
+  superSettingsStore.set(next);
+  const settings = Object.fromEntries(SETTING_COLUMNS.map(([key, col]) => [col, next[key]]));
+  const { error } = await supabase
+    .from('business_super_settings')
+    .upsert({ business_id: businessId, settings, updated_at: new Date().toISOString() }, { onConflict: 'business_id' });
+  return !error;
 }

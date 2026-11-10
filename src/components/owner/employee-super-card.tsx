@@ -18,8 +18,10 @@ import {
 } from '@/data/employee-super';
 import type { Employee } from '@/data/employees';
 import { formatAbn, formatBsb } from '@/lib/super-validation';
+import { businessUsesSuper } from '@/data/super-rules';
+import { useBusiness } from '@/data/business';
 
-const TONE = { Complete: 'success', 'Missing details': 'warning', 'Needs stapled fund request': 'danger', 'Not needed': 'neutral' } as const;
+const TONE = { Ready: 'success', 'Not chosen yet': 'warning', 'Missing details': 'warning', 'Stapled fund check needed': 'danger', 'Not needed': 'neutral' } as const;
 /** Revealed numbers hide again after this long. */
 const REVEAL_MS = 30_000;
 
@@ -41,6 +43,7 @@ function Row({ label, value, action }: { label: string; value: string; action?: 
 export function EmployeeSuperCard({ employee }: { employee: Employee }) {
   const record = useEmployeeSuper().find((s) => s.employeeId === employee.id);
   const status = superStatusOf(employee, record);
+  const usesSuper = businessUsesSuper(useBusiness());
   const [history, setHistory] = useState<SuperHistoryEntry[]>([]);
   const [shown, setShown] = useState<{ tfn?: string | null; bsb?: string | null; account?: string | null }>({});
   const [busy, setBusy] = useState(false);
@@ -78,7 +81,7 @@ export function EmployeeSuperCard({ employee }: { employee: Employee }) {
     setBusy(false);
   }
 
-  if (status === 'Not needed') return null;
+  if (!usesSuper || status === 'Not needed') return null;
 
   const revealButton = (what: 'tfn' | 'bank', isShown: boolean) => (
     <Text

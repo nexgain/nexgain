@@ -12,13 +12,15 @@ import { superRateOf, updateBusiness, useBusiness } from '@/data/business';
 import { updateSuperSettings, useSuperSettings, type SuperSettings } from '@/data/employee-super';
 import { daysText, frequencyLabel, paySchedule } from '@/data/pay-schedule';
 import { abnError, formatAbn, usiError } from '@/lib/super-validation';
+import { businessUsesSuper } from '@/data/super-rules';
 
 const percent = (rate: number) => `${Math.round(rate * 10000) / 100}%`;
 
 export function SuperSettingsCard() {
   const business = useBusiness();
   const s = useSuperSettings();
-  if (!business) return null;
+  // Australian businesses only.
+  if (!business || !businessUsesSuper(business)) return null;
   const schedule = paySchedule(business);
 
   const text = (key: keyof SuperSettings, label: string, props: Partial<React.ComponentProps<typeof TextField>> = {}, error?: string | null) => (

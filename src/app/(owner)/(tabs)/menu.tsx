@@ -3,10 +3,14 @@ import { View } from 'react-native';
 
 import { InviteCodeCard } from '@/components/owner/employee-ui';
 import { ActionRow, Card, OwnerScreen, PageHeader } from '@/components/owner/ui';
+import { useBusiness } from '@/data/business';
 import { useContractorInvoices } from '@/data/contractor-invoices';
+import { superStatusOf, useEmployeeSuper } from '@/data/employee-super';
+import { useEmployees } from '@/data/employees';
 import { useJobs } from '@/data/jobs';
 import { reminderProblems, useReminders } from '@/data/reminders';
 import { ownerNotifications, useNotifications } from '@/data/notifications';
+import { businessUsesSuper } from '@/data/super-rules';
 import { logOut } from '@/lib/auth';
 
 // Owner screens that don't fit in the tab bar.
@@ -14,6 +18,10 @@ export default function OwnerMoreScreen() {
   const unread = ownerNotifications(useNotifications()).filter((n) => !n.read).length;
   const toReview = useContractorInvoices().filter((i) => i.status === 'sent').length;
   const cantSend = reminderProblems(useJobs(), useReminders()).length;
+  // Super: Australian businesses only.
+  const usesSuper = businessUsesSuper(useBusiness());
+  const superRecords = useEmployeeSuper();
+  const stapledChecks = useEmployees().filter((e) => superStatusOf(e, superRecords.find((r) => r.employeeId === e.id)) === 'Stapled fund check needed').length;
 
   return (
     <OwnerScreen>
@@ -64,6 +72,14 @@ export default function OwnerMoreScreen() {
             onPress={() => router.navigate('/employees' as Href)}
             showDivider
           />
+          {usesSuper && (
+            <ActionRow
+              icon={{ ios: 'banknote.fill', android: 'savings', web: 'savings' }}
+              label={stapledChecks > 0 ? `Super (${stapledChecks} need a stapled fund check)` : 'Super'}
+              onPress={() => router.navigate('/super')}
+              showDivider
+            />
+          )}
           <ActionRow
             icon={{ ios: 'puzzlepiece.extension.fill', android: 'extension', web: 'extension' }}
             label="Integrations"
