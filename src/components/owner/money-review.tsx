@@ -250,7 +250,17 @@ export function NeedsReviewCard({ feed }: { feed: MoneyFeed }) {
     <Card
       title="Needs review"
       icon={OwnerIcons.sparkles}
-      right={count > 0 ? <Badge label={String(count)} tone="warning" /> : null}>
+      right={
+        <>
+          {/* Once opened, "Show less" is at the top as well as the bottom, so a long list closes easily. */}
+          {showAll && items.length > FIRST && (
+            <Pressable onPress={() => setShowAll(false)} accessibilityRole="button" hitSlop={8} style={({ pressed }) => [styles.lessTop, pressed && styles.pressed]}>
+              <Text style={styles.moreText}>Show less</Text>
+            </Pressable>
+          )}
+          {count > 0 ? <Badge label={String(count)} tone="warning" /> : null}
+        </>
+      }>
       {feed.preview && <Text style={styles.muted}>Sample data: your answers aren’t saved.</Text>}
 
       {matches.map((t, i) => {
@@ -410,6 +420,7 @@ const styles = StyleSheet.create({
   chipText: { color: C.text, fontSize: 14, fontWeight: '600' },
   chipTextPrimary: { color: C.onAccent },
   more: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
+  lessTop: { minHeight: 32, justifyContent: 'center', paddingHorizontal: Spacing.one },
   moreText: { color: C.accent, fontSize: 14, fontWeight: '700' },
   groupRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three - 4, minHeight: 60, paddingVertical: Spacing.two },
   groupIcon: {

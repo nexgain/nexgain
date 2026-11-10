@@ -126,7 +126,8 @@ export default function AddQualificationScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      {/* "automatic": on iPhone the page starts below the see-through title bar instead of under it. */}
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" contentInsetAdjustmentBehavior="automatic">
         <FormField label="Qualification Type" error={submitted ? typeError : undefined}>
           <SelectField
             title="Qualification Type"

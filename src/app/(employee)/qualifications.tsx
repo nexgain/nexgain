@@ -52,7 +52,7 @@ export default function QualificationsScreen() {
           ),
         }}
       />
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <ScrollView style={styles.screen} contentContainerStyle={styles.content} contentInsetAdjustmentBehavior="automatic">
         <Text style={styles.description}>
           Upload and manage your licences, tickets and certificates. We&apos;ll remind you when
           they&apos;re expiring.
