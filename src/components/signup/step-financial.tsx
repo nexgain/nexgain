@@ -5,7 +5,7 @@ import { SelectField } from '@/components/employee/form-fields';
 import { Button, Field, Input, Note, SignupColors as C, YesNo } from '@/components/signup/fields';
 import type { StepProps } from '@/components/signup/types';
 import { businessUsesSuper } from '@/data/super-rules';
-import { COUNTRIES, isEurozone } from '@/lib/payment-files/countries';
+import { COUNTRIES, countryNeedsBank, isEurozone, NZ_BANKS } from '@/lib/payment-files/countries';
 import { abnError, formatAbn, requiredError, usiError } from '@/lib/super-validation';
 
 const MONTHS = [
@@ -35,6 +35,8 @@ function currencyFor(code: string): (typeof CURRENCIES)[number] | null {
 /** What's still needed on this step (field -> message). */
 export function financialErrors(data: StepProps['data']) {
   const e: Record<string, string | null> = { country: data.country ? null : 'Choose the country your business is in.' };
+  // New Zealand: each bank has its own payroll file, so ask which one.
+  if (countryNeedsBank(data.country) && !NZ_BANKS.some((b) => b.id === data.bank)) e.bank = 'Choose your bank.';
   // Australian businesses: a default super fund for staff who choose "use my employer's fund".
   if (data.country && businessUsesSuper({ country: data.country })) {
     e.superFundName = requiredError(data.superFundName, 'the fund’s name');
@@ -64,6 +66,18 @@ export function StepFinancial({ data, update, onNext }: StepProps) {
           }}
         />
       </Field>
+
+      {countryNeedsBank(data.country) && (
+        <Field label="Your bank" error={err('bank')} hint="The bank your business pays wages from. Each bank has its own payroll file.">
+          <SelectField
+            title="Your bank"
+            value={NZ_BANKS.find((b) => b.id === data.bank)?.name ?? null}
+            options={NZ_BANKS.map((b) => b.name)}
+            placeholder="Select your bank"
+            onChange={(name) => update({ bank: NZ_BANKS.find((b) => b.name === name)?.id ?? '' })}
+          />
+        </Field>
+      )}
 
       {usesSuper && (
         <>

@@ -13,7 +13,7 @@ import {
   buildPaymentFile,
   EMPTY_PAYER,
   paymentFileName,
-  paymentFileTypeFor,
+  getPayrollFileFormat,
   payeeBankFromSaved,
   PaymentFileError,
   validatePayer,
@@ -172,8 +172,8 @@ export async function savePayrollBank(p: PayerSettings) {
 
 export type DownloadResult =
   | { ok: true; fileName: string }
-  /** No bank file for this country yet. */
-  | { ok: false; reason: 'unsupported'; country: string | null }
+  /** No bank file for this country (or NZ bank) yet: a plain message saying what to do instead. */
+  | { ok: false; reason: 'unsupported'; message: string }
   /** The owner's own payroll bank details aren't set up (or are incomplete). */
   | { ok: false; reason: 'setup' }
   /** These employees need to add or fix their bank details first. */
@@ -195,12 +195,15 @@ export function todayKey(now = new Date()) {
 export async function downloadPaymentFile(run: PayRun): Promise<DownloadResult> {
   const business = businessStore.get();
   const country = business?.country ?? null;
-  const fileType = paymentFileTypeFor(country);
-  if (!fileType) return { ok: false, reason: 'unsupported', country };
+  const countryFormat = getPayrollFileFormat(business);
+  if (!countryFormat.ok && countryFormat.reason !== 'needs-bank') return { ok: false, reason: 'unsupported', message: countryFormat.message };
 
   try {
     const payer = await loadPayrollBank();
-    if (Object.keys(validatePayer(fileType, payer)).length > 0) return { ok: false, reason: 'setup' };
+    // The country (and, in New Zealand, the owner's bank) decides the file.
+    const format = getPayrollFileFormat(business, payer.bankName);
+    if (!format.ok) return format.reason === 'needs-bank' ? { ok: false, reason: 'setup' } : { ok: false, reason: 'unsupported', message: format.message };
+    if (Object.keys(validatePayer(format.type, payer)).length > 0) return { ok: false, reason: 'setup' };
 
     const { data, error } = await supabase.rpc('pay_run_bank_details', { p_pay_run_id: run.id });
     if (error) return { ok: false, reason: 'error', message: error.message };
@@ -231,7 +234,7 @@ export async function downloadPaymentFile(run: PayRun): Promise<DownloadResult> 
     const payDate = run.status === 'approved' && run.payDate < today ? today : run.payDate;
 
     const file = buildPaymentFile(
-      country,
+      format.type,
       {
         payrollNumber: run.payrollNumber,
         payDate,
@@ -241,9 +244,8 @@ export async function downloadPaymentFile(run: PayRun): Promise<DownloadResult> 
       },
       payer,
     );
-    if (!file) return { ok: false, reason: 'unsupported', country };
 
-    const fileName = paymentFileName(business?.businessName ?? '', run.payrollNumber, payDate, file.extension);
+    const fileName = paymentFileName(format.code, run.payrollNumber, payDate, file.extension);
     await shareTextFile(file.content, fileName, file.mimeType);
 
     // Record the download (and any new pay date) on the pay run.

@@ -19,6 +19,8 @@ export type PayeeBank = {
   iban?: string;
   /** Eurozone, optional. */
   bic?: string;
+  /** NZ: full account number, 15 or 16 digits (bank, branch, account, suffix). */
+  nzAccount?: string;
 };
 
 /** One person being paid in a pay run. */
@@ -59,7 +61,7 @@ export type PayerSettings = {
   userIdNumber: string;
   /** US: Company ID from your bank (usually "1" + your EIN). */
   companyId: string;
-  /** US: your bank's name. */
+  /** US: your bank's name. NZ: which bank (see NZ_BANKS), as it decides the file layout. */
   bankName: string;
   /** AU: add a balancing line that takes the total from your account (some banks require it). */
   abaBalancing: boolean;
@@ -73,13 +75,16 @@ export type PaymentFile = {
   content: string;
 };
 
-export type PaymentFileType = 'aba' | 'nacha' | 'bacs18' | 'sepa';
+export type PaymentFileType = 'aba' | 'nacha' | 'bacs18' | 'sepa' | 'nz_bnz' | 'nz_anz' | 'nz_asb';
 
 export const PAYMENT_FILE_LABEL: Record<PaymentFileType, string> = {
   aba: 'ABA file',
   nacha: 'NACHA file',
   bacs18: 'Bacs Standard 18 file',
   sepa: 'SEPA credit transfer file (pain.001)',
+  nz_bnz: 'BNZ payroll file',
+  nz_anz: 'ANZ bulk payment file',
+  nz_asb: 'ASB bulk payment file (MT9)',
 };
 
 /** "001" (3 digits, more when needed). */

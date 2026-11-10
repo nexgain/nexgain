@@ -14,10 +14,12 @@ import {
   EMPTY_PAYER,
   formatBsb,
   formatIban,
+  formatNzAccount,
   formatSortCode,
+  getPayrollFileFormat,
+  NZ_BANKS,
   PAYMENT_FILE_LABEL,
   payerFieldsFor,
-  paymentFileTypeFor,
   validatePayer,
   type PayerField,
   type PayerSettings,
@@ -32,9 +34,13 @@ export default function PayrollBankScreen() {
   const { from } = useLocalSearchParams<{ from?: string }>();
   const business = useBusiness();
   const country = business?.country ?? null;
-  const fileType = paymentFileTypeFor(country);
   const [payer, setPayer] = useState<PayerSettings | null>(null);
+  // The one rule for which file to make (country, and in New Zealand the owner's bank).
+  const fileFormat = getPayrollFileFormat(business, payer?.bankName);
+  const fileType = fileFormat.ok ? fileFormat.type : null;
+  const isNz = country === 'NZ';
   const [countryOpen, setCountryOpen] = useState(false);
+  const [bankOpen, setBankOpen] = useState(false);
   const [tried, setTried] = useState(false);
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'load-error'>('idle');
 
@@ -62,7 +68,7 @@ export default function PayrollBankScreen() {
       if (fileType === 'bacs18') return formatSortCode(text);
       return text.replace(/\D/g, '').slice(0, 9);
     }
-    if (key === 'accountNumber') return text.replace(/\D/g, '').slice(0, fileType === 'bacs18' ? 8 : 9);
+    if (key === 'accountNumber') return isNz ? formatNzAccount(text) : text.replace(/\D/g, '').slice(0, fileType === 'bacs18' ? 8 : 9);
     if (key === 'iban') return formatIban(text);
     if (key === 'bic' || key === 'bankShortName' || key === 'companyId') return text.toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (key === 'userIdNumber') return text.replace(/\D/g, '').slice(0, 6);
@@ -97,13 +103,41 @@ export default function PayrollBankScreen() {
             accessibilityLabel="Country"
           />
         </FormField>
+        {isNz && (
+          <FormField label="Your bank">
+            <FieldButton
+              value={NZ_BANKS.find((b) => b.id === payer?.bankName)?.name ?? null}
+              placeholder="Select your bank"
+              icon={{ ios: 'chevron.down', android: 'expand_more', web: 'expand_more' }}
+              onPress={() => setBankOpen(true)}
+              accessibilityLabel="Your bank"
+            />
+          </FormField>
+        )}
         <Text style={ownerStyles.mutedText}>
           {fileType
-            ? `Payroll makes an ${PAYMENT_FILE_LABEL[fileType]} you upload to your bank's bulk payments page. Your team enters their bank details in this country's format.`
-            : country
-              ? `Bank payment files aren't available for ${countryName(country)} yet. You can still approve payroll, pay your team through your bank, then mark each pay run as paid.`
-              : 'Choose your country so payroll knows which bank file to make.'}
+            ? `Payroll makes ${/^[AEIOU]/.test(PAYMENT_FILE_LABEL[fileType]) ? 'an' : 'a'} ${PAYMENT_FILE_LABEL[fileType]} you upload to your bank's bulk payments page. Your team enters their bank details in this country's format.`
+            : fileFormat.ok
+              ? ''
+              : fileFormat.reason === 'needs-bank'
+                ? 'Each New Zealand bank has its own file, so choose yours.'
+                : fileFormat.message}
         </Text>
+        <OptionSheet
+          visible={bankOpen}
+          title="Your bank"
+          options={NZ_BANKS.map((b) => b.name)}
+          value={NZ_BANKS.find((b) => b.id === payer?.bankName)?.name ?? null}
+          onSelect={(name) => {
+            const id = NZ_BANKS.find((b) => b.name === name)?.id ?? '';
+            setStatus('idle');
+            setTried(false);
+            setPayer((p) => ({ ...(p ?? EMPTY_PAYER), bankName: id }));
+            // Saved straight away, so the next download uses the new bank's file.
+            if (payer) savePayrollBank({ ...payer, bankName: id }).catch(() => setStatus('error'));
+          }}
+          onClose={() => setBankOpen(false)}
+        />
         <OptionSheet
           visible={countryOpen}
           title="Country"
@@ -130,7 +164,7 @@ export default function PayrollBankScreen() {
               {payerFieldsFor(fileType).map((f) => (
                 <FormField key={f.key} label={f.optional ? `${f.label} (optional)` : f.label} error={tried ? errors[f.key] : undefined}>
                   <TextField
-                    value={payer[f.key]}
+                    value={isNz && f.key === 'accountNumber' ? formatNzAccount(payer[f.key]) : payer[f.key]}
                     onChangeText={(t) => set(f.key, t)}
                     placeholder={f.placeholder}
                     keyboardType={f.numeric ? 'number-pad' : 'default'}

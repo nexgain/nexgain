@@ -27,6 +27,8 @@ import { signUp } from '@/lib/auth';
 import { reloadSession } from '@/lib/session';
 import { saveDefaultFund } from '@/data/employee-super';
 import { businessUsesSuper } from '@/data/super-rules';
+import { savePayrollBank } from '@/data/pay-runs';
+import { countryNeedsBank, EMPTY_PAYER } from '@/lib/payment-files';
 
 const STEPS = [
   { title: 'Create your account', subtitle: "Let's get started. Create your NexGain owner account." },
@@ -127,6 +129,12 @@ export default function OwnerSignupScreen() {
       });
       await saveBusinessPayment().catch((e) => console.warn('Could not save bank details:', e.message));
       if (business.id) await saveSignupApps(business.id, data.apps);
+      // New Zealand: the owner's bank decides which payroll file to make (changeable in Payroll bank details).
+      if (business.id && countryNeedsBank(data.country) && data.bank) {
+        await savePayrollBank({ ...EMPTY_PAYER, country: data.country, bankName: data.bank }).catch(() =>
+          console.warn('Your bank was not saved; it can be chosen in Payroll bank details.'),
+        );
+      }
       // Australian businesses: the default super fund, saved against the business.
       if (business.id && businessUsesSuper({ country: data.country })) {
         const saved = await saveDefaultFund(business.id, { name: data.superFundName, usi: data.superFundUsi, abn: data.superFundAbn });

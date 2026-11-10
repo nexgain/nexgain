@@ -85,7 +85,9 @@ describe('owner sign-up', () => {
     expect(Object.keys(e).sort()).toEqual(['superFundAbn', 'superFundName', 'superFundUsi']);
     expect(financialErrors({ ...EMPTY_SIGNUP, country: 'AU', superFundName: 'AustralianSuper', superFundUsi: 'STA0100AU', superFundAbn: '65714394898' })).toEqual({});
   });
-  it('doesn’t ask for a fund anywhere else', () => {
-    expect(financialErrors({ ...EMPTY_SIGNUP, country: 'NZ' })).toEqual({});
+  it('doesn’t ask for a fund anywhere else (New Zealand asks for the bank instead)', () => {
+    expect(Object.keys(financialErrors({ ...EMPTY_SIGNUP, country: 'NZ' }))).toEqual(['bank']);
+    expect(financialErrors({ ...EMPTY_SIGNUP, country: 'NZ', bank: 'BNZ' })).toEqual({});
+    expect(financialErrors({ ...EMPTY_SIGNUP, country: 'GB' })).toEqual({});
   });
 });

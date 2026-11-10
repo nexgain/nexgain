@@ -5,10 +5,9 @@ import {
   EMPTY_PAYER,
   isValidIban,
   isValidRoutingNumber,
+  getPayrollFileFormat,
   paymentFileName,
-  paymentFileTypeFor,
   payeeBankFromSaved,
-  pickPaymentFileBuilder,
   payrollLabel,
   payrollReference,
   validateBankForm,
@@ -21,6 +20,11 @@ import { buildAba } from '../aba';
 import { buildBacs18 } from '../bacs';
 import { buildNacha } from '../nacha';
 import { buildSepa } from '../sepa';
+
+const typeFor = (country: string | null, bank?: string) => {
+  const f = getPayrollFileFormat({ country }, bank);
+  return f.ok ? f.type : null;
+};
 
 const lines = (content: string) => content.split('\r\n').slice(0, -1);
 
@@ -323,23 +327,35 @@ describe('SEPA pain.001 (Eurozone)', () => {
 // Picking the file, payroll numbers and bank details
 // ---------------------------------------------------------------------------
 
-describe('picking the right file for the country', () => {
+describe('picking the right file for the country (getPayrollFileFormat)', () => {
   it('maps countries to file types', () => {
-    expect(paymentFileTypeFor('AU')).toBe('aba');
-    expect(paymentFileTypeFor('US')).toBe('nacha');
-    expect(paymentFileTypeFor('GB')).toBe('bacs18');
-    for (const c of ['DE', 'FR', 'IE', 'NL', 'BG', 'HR']) expect(paymentFileTypeFor(c)).toBe('sepa');
-    for (const c of ['NZ', 'CA', 'SG', 'OTHER', null, undefined]) expect(paymentFileTypeFor(c)).toBeNull();
+    expect(typeFor('AU')).toBe('aba');
+    expect(typeFor('US')).toBe('nacha');
+    expect(typeFor('GB')).toBe('bacs18');
+    for (const c of ['DE', 'FR', 'IE', 'NL', 'BG', 'HR']) expect(typeFor(c)).toBe('sepa');
+    for (const c of ['CA', 'SG', 'OTHER', null]) expect(typeFor(c)).toBeNull();
   });
 
-  it('returns the matching builder, or null', () => {
-    expect(pickPaymentFileBuilder('AU')).toBe(buildAba);
-    expect(pickPaymentFileBuilder('US')).toBe(buildNacha);
-    expect(pickPaymentFileBuilder('GB')).toBe(buildBacs18);
-    expect(pickPaymentFileBuilder('FR')).toBe(buildSepa);
-    expect(pickPaymentFileBuilder('NZ')).toBeNull();
-    expect(buildPaymentFile('NZ', run(1, auPayees), auPayer)).toBeNull();
-    expect(buildPaymentFile('AU', run(1, auPayees), auPayer)?.extension).toBe('aba');
+  it('uses the owner’s bank in New Zealand', () => {
+    expect(typeFor('NZ', 'BNZ')).toBe('nz_bnz');
+    expect(typeFor('NZ', 'ANZ')).toBe('nz_anz');
+    expect(typeFor('NZ', 'ASB')).toBe('nz_asb');
+    expect(getPayrollFileFormat({ country: 'NZ' }, '')).toMatchObject({ ok: false, reason: 'needs-bank' });
+    for (const bank of ['WESTPAC', 'KIWIBANK', 'OTHER']) {
+      expect(getPayrollFileFormat({ country: 'NZ' }, bank)).toMatchObject({ ok: false, reason: 'bank-not-ready' });
+    }
+    expect((getPayrollFileFormat({ country: 'NZ' }, 'KIWIBANK') as { message: string }).message).toMatch(/Kiwibank/);
+  });
+
+  it('gives a friendly message instead of a file where it can’t make one', () => {
+    expect(getPayrollFileFormat({ country: 'CA' })).toMatchObject({ ok: false, reason: 'country-not-ready', message: expect.stringMatching(/Canada/) });
+    expect(getPayrollFileFormat({ country: null })).toMatchObject({ ok: false, reason: 'no-country' });
+  });
+
+  it('builds with the matching builder', () => {
+    expect(buildPaymentFile('aba', run(1, auPayees), auPayer)).toEqual(buildAba(run(1, auPayees), auPayer));
+    expect(buildPaymentFile('aba', run(1, auPayees), auPayer).extension).toBe('aba');
+    expect([buildBacs18, buildNacha, buildSepa].every((b) => typeof b === 'function')).toBe(true);
   });
 });
 
@@ -351,8 +367,9 @@ describe('payroll numbers', () => {
     expect(payrollReference(1234, true)).toBe('PAYROLL1234');
   });
 
-  it('names the file with business, payroll number and pay date', () => {
-    expect(paymentFileName('Smith & Sons Cleaning!', 3, '2026-10-09', 'aba')).toBe('Smith-Sons-Cleaning_PAYROLL003_2026-10-09.aba');
+  it('names the file with country, pay date and payroll number', () => {
+    expect(paymentFileName('AU', 3, '2026-11-14', 'aba')).toBe('NexGain_Payroll_AU_2026-11-14_003.aba');
+    expect(paymentFileName('NZ', 12, '2026-11-14', 'csv')).toBe('NexGain_Payroll_NZ_2026-11-14_012.csv');
   });
 });
 

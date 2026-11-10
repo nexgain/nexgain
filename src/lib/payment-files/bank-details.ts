@@ -2,6 +2,7 @@
 // typed, and how to check it. Used by sign-up, the profile screen and the
 // payment file check, so the rules are the same everywhere.
 import type { BankFieldSet } from './countries';
+import { formatNzAccount, nzAccount16, parseNzAccount } from './nz';
 import { digitsOnly, type PayeeBank } from './types';
 
 /** What the bank boxes hold while being typed (every country uses some of these). */
@@ -114,6 +115,18 @@ export function bankFieldsFor(set: BankFieldSet): BankFieldSpec[] {
           format: (t) => digitsOnly(t).slice(0, 8),
         },
       ];
+    case 'NZ':
+      return [
+        ACCOUNT_NAME,
+        {
+          key: 'accountNumber',
+          label: 'Account number',
+          placeholder: '12-3456-1234567-00',
+          hint: 'The full number: bank, branch, account and suffix.',
+          numeric: true,
+          format: formatNzAccount,
+        },
+      ];
     case 'EU':
       return [
         ACCOUNT_NAME,
@@ -188,6 +201,9 @@ export function validateBankForm(set: BankFieldSet, form: BankForm): BankErrors 
       if (branch.length !== 6) errors.branchCode = 'A sort code has 6 digits, e.g. 12-34-56.';
       if (account.length !== 8) errors.accountNumber = 'A UK account number has 8 digits.';
       break;
+    case 'NZ':
+      if (!parseNzAccount(form.accountNumber)) errors.accountNumber = 'Enter your full account number, e.g. 12-3456-1234567-00.';
+      break;
     case 'EU':
       if (!isValidIban(form.iban)) errors.iban = 'That IBAN doesn’t look right. Check it against your bank app.';
       if (form.bic.trim() && !isValidBic(form.bic)) errors.bic = 'A BIC has 8 or 11 letters and numbers.';
@@ -237,11 +253,13 @@ export function payeeBankFromSaved(
     return { bank: null, problem: 'No bank details added' };
   }
   const savedSet = row.bank_country ?? 'AU';
-  if (savedSet !== set) return { bank: null, problem: 'Bank details are for a different country' };
+  // NZ details typed before NexGain had NZ boxes were saved as "other country": use them if they're a full NZ number.
+  const oldNz = set === 'NZ' && savedSet === 'OTHER';
+  if (savedSet !== set && !oldNz) return { bank: null, problem: 'Bank details are for a different country' };
   const form: BankForm = {
     accountName: row.account_name ?? '',
-    branchCode: row.bsb ?? '',
-    accountNumber: row.account_number ?? '',
+    branchCode: oldNz ? '' : (row.bsb ?? ''),
+    accountNumber: oldNz ? `${row.bsb ?? ''}${row.account_number ?? ''}` : (row.account_number ?? ''),
     accountType: row.account_type === 'checking' || row.account_type === 'savings' ? row.account_type : '',
     iban: row.iban ?? '',
     bic: row.bic ?? '',
@@ -261,6 +279,8 @@ export function payeeBankFromSaved(
       };
     case 'GB':
       return { bank: { accountName: form.accountName, sortCode: branch, accountNumber: account }, problem: null };
+    case 'NZ':
+      return { bank: { accountName: form.accountName, nzAccount: nzAccount16(parseNzAccount(account)!) }, problem: null };
     case 'EU':
       return { bank: { accountName: form.accountName, iban: compactIban(form.iban), bic: form.bic || undefined }, problem: null };
     default:
@@ -276,6 +296,10 @@ export function describeBank(set: BankFieldSet, row: SavedBankRow) {
       return `Routing ${row.bsb ?? '—'} · ${row.account_type === 'savings' ? 'Savings' : 'Checking'} ${last4(row.account_number)}`;
     case 'GB':
       return `Sort code ${formatSortCode(row.bsb ?? '')} · Account ${last4(row.account_number)}`;
+    case 'NZ': {
+      const nz = parseNzAccount(row.account_number ?? '');
+      return nz ? `Account ${nz.bank}-${nz.branch}-•••${nz.base.slice(-4)}-${nz.suffix}` : `Account ${last4(row.account_number)}`;
+    }
     case 'EU':
       return `IBAN ${last4(row.iban)}`;
     case 'AU':

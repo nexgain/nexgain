@@ -43,6 +43,8 @@ export type SignupData = {
   superFundName: string;
   superFundUsi: string;
   superFundAbn: string;
+  /** New Zealand only: the owner's bank (see NZ_BANKS), which decides the payroll file. */
+  bank: string;
   trackGstInReports: boolean;
   // Step 7
   emailApp: EmailApp;
@@ -78,6 +80,7 @@ export const EMPTY_SIGNUP: SignupData = {
   superFundName: '',
   superFundUsi: '',
   superFundAbn: '',
+  bank: '',
   trackGstInReports: true,
   emailApp: 'gmail',
   businessEmail: '',

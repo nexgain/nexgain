@@ -69,7 +69,7 @@ import {
 import { fromDateKey } from '@/data/shifts';
 import { TAX_ESTIMATE_NOTE, taxSetupFor, type TaxSetup } from '@/data/tax';
 import { SUPER_STATUS_LABEL, superFor, useSuperPayments, type SuperStatus } from '@/data/super-payments';
-import { countryName, paymentFileTypeFor, payrollLabel, payrollReference } from '@/lib/payment-files';
+import { countryName, getPayrollFileFormat, payrollLabel, payrollReference } from '@/lib/payment-files';
 import { businessUsesSuper } from '@/data/super-rules';
 
 const TABS = ['Employees', 'Summary', 'Tax & Super', 'Bank Accounts'] as const;
@@ -588,15 +588,17 @@ function PayScheduleSetting() {
         value={frequency}
         onChange={setFrequency}
       />
-      <Text style={styles.scheduleQuestion}>Pay periods start on</Text>
+      {/* Asked as the LAST day of the week (e.g. Thursday): the new week starts the next day. */}
+      <Text style={styles.scheduleQuestion}>{frequency === 'weekly' ? 'Pay week ends on' : 'Pay fortnight ends on'}</Text>
       <Choices
-        label="Pay periods start on"
+        label={frequency === 'weekly' ? 'Pay week ends on' : 'Pay fortnight ends on'}
         options={START_DAYS.map((d) => ({ value: d, label: short[d] }))}
-        value={startDay}
-        onChange={setStartDay}
+        value={(startDay + 6) % 7}
+        onChange={(endDay) => setStartDay((endDay + 1) % 7)}
       />
       <Text style={ownerStyles.mutedText}>
-        {frequency === 'weekly' ? 'Each pay covers' : 'Each pay covers two weeks,'} {daysText(startDay)}.
+        {frequency === 'weekly' ? 'Each pay covers a full week,' : 'Each pay covers two full weeks,'} {daysText(startDay)}. Hours start
+        fresh every {frequency === 'weekly' ? '' : 'second '}{DAY_NAMES[startDay]}.
       </Text>
 
       {frequency === 'fortnightly' && !lastApproved && (
@@ -631,6 +633,8 @@ function PayScheduleSetting() {
 /** Owner-only payroll settings: when overtime starts. Approved payrolls keep the rule they were paid under. */
 function PayrollSettingsCard() {
   const business = useBusiness();
+  // Closed to keep the page tidy: just the heading until it's tapped.
+  const [open, setOpen] = useState(false);
   const saved = overtimeRulesOf(business).dailyAfterHours;
   const [text, setText] = useState<string | null>(null);
   const value = text ?? String(saved);
@@ -644,7 +648,21 @@ function PayrollSettingsCard() {
         : null;
 
   return (
-    <Card title="Payroll Settings" icon={{ ios: 'gearshape.fill', android: 'settings', web: 'settings' }}>
+    <Card>
+      <Pressable
+        onPress={() => setOpen((o) => !o)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel="Payroll Settings"
+        style={({ pressed }) => [styles.dropdownHeader, pressed && styles.pressed]}>
+        <Icon name={{ ios: 'gearshape.fill', android: 'settings', web: 'settings' }} color={C.accent} size={16} />
+        <Text style={styles.dropdownTitle}>Payroll Settings</Text>
+        <View style={open && styles.chevronOpen}>
+          <Icon name={OwnerIcons.chevronDown} color={C.textSecondary} size={14} />
+        </View>
+      </Pressable>
+      {open && (
+        <>
       <PayScheduleSetting />
       <View style={styles.divider} />
       <FormField label="Overtime starts after (hours in a day)" error={error ?? undefined}>
@@ -708,6 +726,8 @@ function PayrollSettingsCard() {
         label={`Payroll bank details · ${countryName(business?.country)}`}
         onPress={() => router.navigate({ pathname: '/payroll-bank', params: { from: 'payroll' } })}
       />
+        </>
+      )}
     </Card>
   );
 }
@@ -729,11 +749,14 @@ function PayRunsCard() {
   const runs = usePayRuns();
   const business = useBusiness();
   const [showAll, setShowAll] = useState(false);
+  const [pastOpen, setPastOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ runId: string; tone: 'ok' | 'warn'; text: string; names?: string[] } | null>(null);
   const [confirm, setConfirm] = useState<PayRun | null>(null);
   const [openRunId, setOpenRunId] = useState<string | null>(null);
-  const fileType = paymentFileTypeFor(business?.country);
+  // Shown when NexGain can make a file here, or once the owner picks their bank (NZ); otherwise a tap explains.
+  const countryFormat = getPayrollFileFormat(business);
+  const offerFile = countryFormat.ok || countryFormat.reason === 'needs-bank';
   const payslips = usePayslipRecords();
 
   async function download(run: PayRun) {
@@ -754,9 +777,7 @@ function PayRunsCard() {
       setMessage({
         runId: run.id,
         tone: 'warn',
-        text: result.country
-          ? `Bank payment files aren't available for ${countryName(result.country)} yet. Pay your team through your bank, then press Mark as paid.`
-          : 'Choose your country in Payroll bank details so NexGain knows which bank file to make.',
+        text: result.message,
       });
     } else if (result.reason === 'employees') {
       setMessage({
@@ -784,8 +805,83 @@ function PayRunsCard() {
     }
   }
 
-  const shown = showAll ? runs : runs.slice(0, SHOWN_RUNS);
   const usesSuper = businessUsesSuper(business);
+  // Up front: pay runs still waiting for their bank file (or, where NexGain can't make one,
+  // still to be marked paid), plus any run with a message showing. The rest are tucked away.
+  const needsAction = (r: PayRun) =>
+    r.status === 'approved' && (offerFile ? !r.fileDownloadedAt : true);
+  const current = runs.filter((r) => needsAction(r) || message?.runId === r.id);
+  const past = runs.filter((r) => !current.includes(r));
+  const shownPast = showAll ? past : past.slice(0, SHOWN_RUNS);
+
+  const renderRun = (run: PayRun, i: number) => (
+      <View key={run.id} style={[styles.run, i > 0 && styles.runDivider]}>
+        <View style={styles.runTop}>
+          <View style={styles.flex}>
+            <Text style={styles.runTitle}>{payrollLabel(run.payrollNumber)}</Text>
+            <Text style={styles.runMeta}>
+              {formatShortDate(fromDateKey(run.periodStart), false)} – {formatShortDate(fromDateKey(run.periodEnd))} ·{' '}
+              {run.employeeCount} {run.employeeCount === 1 ? 'person' : 'people'} · {formatMoney(run.totalNet)} net
+            </Text>
+            <Text style={styles.runMeta}>
+              Wages {formatMoney(runTotals(payslips, run).gross)} · Tax {formatMoney(runTotals(payslips, run).tax)}
+              {usesSuper ? ` · Super ${formatMoney(runTotals(payslips, run).super)}` : ''}
+            </Text>
+            <Text style={styles.runMeta}>
+              {run.status === 'paid' && run.paidAt
+                ? `Paid ${formatShortDate(new Date(run.paidAt))}`
+                : `Pay date ${formatShortDate(fromDateKey(run.payDate))}`}
+              {run.fileDownloadedAt ? ' · File downloaded' : ''}
+            </Text>
+          </View>
+          <Badge label={run.status === 'paid' ? 'Paid' : 'Approved'} tone={run.status === 'paid' ? 'success' : 'info'} />
+        </View>
+
+        <Pressable
+          onPress={() => setOpenRunId(openRunId === run.id ? null : run.id)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: openRunId === run.id }}
+          hitSlop={6}
+          style={styles.breakdownToggle}>
+          <Text style={styles.breakdownToggleText}>
+            {openRunId === run.id ? 'Hide breakdown' : usesSuper ? 'Show wages and super per person' : 'Show wages per person'}
+          </Text>
+          <Icon name={OwnerIcons.chevronDown} color={C.accent} size={12} />
+        </Pressable>
+        {openRunId === run.id && <RunBreakdown run={run} />}
+
+        {run.status === 'approved' && (
+          <View style={styles.approveButtons}>
+            {offerFile && (
+              <Button
+                label={busyId === run.id ? 'Working…' : 'Download payment file'}
+                icon={OwnerIcons.download}
+                disabled={busyId !== null}
+                onPress={() => download(run)}
+              />
+            )}
+            <Button
+              label="Mark as paid"
+              icon={OwnerIcons.check}
+              variant="secondary"
+              disabled={busyId !== null}
+              onPress={() => setConfirm(run)}
+            />
+          </View>
+        )}
+
+        {message?.runId === run.id && (
+          <View style={styles.message}>
+            <Text style={[styles.messageText, message.tone === 'warn' && styles.warningText]}>{message.text}</Text>
+            {message.names?.map((n) => (
+              <Text key={n} style={styles.warningText}>
+                • {n}
+              </Text>
+            ))}
+          </View>
+        )}
+      </View>
+  );
 
 
   return (
@@ -793,84 +889,34 @@ function PayRunsCard() {
       {runs.length === 0 ? (
         <Text style={ownerStyles.mutedText}>No pay runs yet. Approving payroll makes your first one (Payroll 001).</Text>
       ) : (
-        shown.map((run, i) => (
-          <View key={run.id} style={[styles.run, i > 0 && styles.runDivider]}>
-            <View style={styles.runTop}>
-              <View style={styles.flex}>
-                <Text style={styles.runTitle}>{payrollLabel(run.payrollNumber)}</Text>
-                <Text style={styles.runMeta}>
-                  {formatShortDate(fromDateKey(run.periodStart), false)} – {formatShortDate(fromDateKey(run.periodEnd))} ·{' '}
-                  {run.employeeCount} {run.employeeCount === 1 ? 'person' : 'people'} · {formatMoney(run.totalNet)} net
-                </Text>
-                <Text style={styles.runMeta}>
-                  Wages {formatMoney(runTotals(payslips, run).gross)} · Tax {formatMoney(runTotals(payslips, run).tax)}
-                  {usesSuper ? ` · Super ${formatMoney(runTotals(payslips, run).super)}` : ''}
-                </Text>
-                <Text style={styles.runMeta}>
-                  {run.status === 'paid' && run.paidAt
-                    ? `Paid ${formatShortDate(new Date(run.paidAt))}`
-                    : `Pay date ${formatShortDate(fromDateKey(run.payDate))}`}
-                  {run.fileDownloadedAt ? ' · File downloaded' : ''}
-                </Text>
-              </View>
-              <Badge label={run.status === 'paid' ? 'Paid' : 'Approved'} tone={run.status === 'paid' ? 'success' : 'info'} />
-            </View>
-
+        <>
+          {current.length === 0 ? (
+            <Text style={ownerStyles.mutedText}>Nothing to do right now. Earlier pay runs are below.</Text>
+          ) : (
+            current.map((run, i) => renderRun(run, i))
+          )}
+          {past.length > 0 && (
             <Pressable
-              onPress={() => setOpenRunId(openRunId === run.id ? null : run.id)}
+              onPress={() => setPastOpen((o) => !o)}
               accessibilityRole="button"
-              accessibilityState={{ expanded: openRunId === run.id }}
-              hitSlop={6}
-              style={styles.breakdownToggle}>
-              <Text style={styles.breakdownToggleText}>
-                {openRunId === run.id ? 'Hide breakdown' : usesSuper ? 'Show wages and super per person' : 'Show wages per person'}
+              accessibilityState={{ expanded: pastOpen }}
+              style={({ pressed }) => [styles.pastToggle, pressed && styles.pressed]}>
+              <Text style={styles.pastToggleText}>
+                {pastOpen ? 'Hide earlier pay runs' : `Earlier pay runs (${past.length})`}
               </Text>
-              <Icon name={OwnerIcons.chevronDown} color={C.accent} size={12} />
+              <View style={pastOpen && styles.chevronOpen}>
+                <Icon name={OwnerIcons.chevronDown} color={C.accent} size={12} />
+              </View>
             </Pressable>
-            {openRunId === run.id && <RunBreakdown run={run} />}
-
-            {run.status === 'approved' && (
-              <View style={styles.approveButtons}>
-                {fileType && (
-                  <Button
-                    label={busyId === run.id ? 'Working…' : 'Download payment file'}
-                    icon={OwnerIcons.download}
-                    disabled={busyId !== null}
-                    onPress={() => download(run)}
-                  />
-                )}
-                <Button
-                  label="Mark as paid"
-                  icon={OwnerIcons.check}
-                  variant="secondary"
-                  disabled={busyId !== null}
-                  onPress={() => setConfirm(run)}
-                />
-              </View>
-            )}
-
-            {message?.runId === run.id && (
-              <View style={styles.message}>
-                <Text style={[styles.messageText, message.tone === 'warn' && styles.warningText]}>{message.text}</Text>
-                {message.names?.map((n) => (
-                  <Text key={n} style={styles.warningText}>
-                    • {n}
-                  </Text>
-                ))}
-              </View>
-            )}
-          </View>
-        ))
+          )}
+          {pastOpen && shownPast.map((run, i) => renderRun(run, i + 1))}
+        </>
       )}
-      {runs.length > SHOWN_RUNS && (
-        <Button label={showAll ? 'Show fewer' : `See all ${runs.length} pay runs`} variant="secondary" onPress={() => setShowAll(!showAll)} />
+      {pastOpen && past.length > SHOWN_RUNS && (
+        <Button label={showAll ? 'Show fewer' : `See all ${past.length} earlier pay runs`} variant="secondary" onPress={() => setShowAll(!showAll)} />
       )}
-      {!fileType && runs.some((r) => r.status === 'approved') && (
-        <Text style={ownerStyles.mutedText}>
-          {business?.country
-            ? `Bank payment files aren't available for ${countryName(business.country)} yet, so pay your team through your bank and then mark the pay run as paid.`
-            : 'Set your country in Payroll bank details to download bank payment files.'}
-        </Text>
+      {!offerFile && runs.some((r) => r.status === 'approved') && (
+        <Text style={ownerStyles.mutedText}>{countryFormat.ok ? '' : countryFormat.message}</Text>
       )}
 
       <ConfirmDialog
@@ -1049,6 +1095,38 @@ const styles = StyleSheet.create({
   messageText: {
     color: C.success,
     fontSize: 13,
+  },
+  dropdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    minHeight: 32,
+  },
+  dropdownTitle: {
+    flex: 1,
+    color: C.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  chevronOpen: {
+    transform: [{ rotate: '180deg' }],
+  },
+  pastToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    minHeight: 44,
+    paddingTop: Spacing.two,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+  },
+  pastToggleText: {
+    color: C.accent,
+    fontSize: 14,
+    fontWeight: '600',
   },
   breakdownToggle: {
     flexDirection: 'row',
