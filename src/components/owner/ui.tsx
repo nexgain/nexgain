@@ -15,7 +15,9 @@ import { router, type Href } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors as C, Radius, Spacing } from '@/constants/theme';
+import { Colors as C, Desktop, FontSize, Radius, Shadow, Spacing } from '@/constants/theme';
+import { useIsDesktopMenuPage } from '@/components/layout/top-level-pages';
+import { useDesktopSheetStyle, useIsDesktop } from '@/hooks/use-desktop';
 
 export type IconName = SymbolViewProps['name'];
 
@@ -67,12 +69,31 @@ export function OwnerScreen({
   children: ReactNode;
   scrollRef?: React.Ref<ScrollViewInstance>;
 }) {
+  const desktop = useIsDesktop();
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.content}>
+      <ScrollView ref={scrollRef} contentContainerStyle={[styles.content, desktop && styles.contentDesktop]}>
         {children}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/**
+ * Computer layout only: puts sections side by side (e.g. two cards). On phones
+ * the children are shown exactly as if this wrapper weren't there.
+ */
+export function DesktopColumns({ children, weights }: { children: ReactNode; weights?: number[] }) {
+  const desktop = useIsDesktop();
+  if (!desktop) return <>{children}</>;
+  return (
+    <View style={styles.desktopColumns}>
+      {Children.toArray(children).map((child, i) => (
+        <View key={i} style={[styles.desktopColumn, { flex: weights?.[i] ?? 1 }]}>
+          {child}
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -108,10 +129,12 @@ export function PageHeader({
   /** Shows the back button (sub-pages only, not the main tabs). */
   onBack?: () => void;
 }) {
+  // On a computer, pages in the side menu are main pages: no back arrow.
+  const menuPage = useIsDesktopMenuPage();
   return (
     <View style={styles.pageHeader}>
       <View style={styles.pageHeaderText}>
-        {onBack ? (
+        {onBack && !menuPage ? (
           <View style={styles.pageTitleRow}>
             <BackButton onPress={onBack} />
             <Text style={[styles.pageTitle, styles.flexShrink]}>{title}</Text>
@@ -154,8 +177,9 @@ export function Card({
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
+  const desktop = useIsDesktop();
   return (
-    <View style={[styles.card, style]}>
+    <View style={[styles.card, desktop && styles.cardDesktop, style]}>
       {title ? (
         <View style={styles.cardHeader}>
           {icon ? <Icon name={icon} color={C.accent} size={16} /> : null}
@@ -190,8 +214,9 @@ export function StatCard({
   change?: string | null;
   changeLabel?: string;
 }) {
+  const desktop = useIsDesktop();
   return (
-    <View style={[styles.card, styles.statCard]}>
+    <View style={[styles.card, desktop && styles.cardDesktop, styles.statCard]}>
       <View style={styles.statTop}>
         <Text style={styles.statLabel} numberOfLines={2}>
           {label}
@@ -272,13 +297,21 @@ export function Button({
   onPress,
   variant = 'primary',
   disabled,
+  fill = false,
 }: {
   label: string;
   icon?: IconName;
   onPress?: () => void;
   variant?: 'primary' | 'secondary';
   disabled?: boolean;
+  /**
+   * Computer layout only: keep filling the space it's given (e.g. Cancel and Save
+   * sharing a row). Otherwise a button is sized to its label on a computer.
+   * Phones always fill, as before.
+   */
+  fill?: boolean;
 }) {
+  const desktop = useIsDesktop();
   const primary = variant === 'primary';
   const color = primary ? C.onAccent : C.text;
   return (
@@ -289,12 +322,14 @@ export function Button({
       accessibilityState={{ disabled }}
       style={({ pressed }) => [
         styles.button,
+        desktop && styles.buttonDesktop,
+        desktop && !fill && styles.buttonDesktopHug,
         primary ? styles.buttonPrimary : styles.buttonSecondary,
         disabled && styles.buttonDisabled,
         pressed && (primary ? styles.buttonPrimaryPressed : styles.pressed),
       ]}>
       {icon ? <Icon name={icon} color={color} size={16} /> : null}
-      <Text style={[styles.buttonText, { color }]}>{label}</Text>
+      <Text style={[styles.buttonText, desktop && styles.buttonTextDesktop, { color }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -354,6 +389,7 @@ export function RangeSelect<T extends { id: string; label: string }>({
 }) {
   const [open, setOpen] = useState(false);
   const insets = useSafeAreaInsets();
+  const desktopSheet = useDesktopSheetStyle();
   return (
     <>
       <Pressable
@@ -370,7 +406,7 @@ export function RangeSelect<T extends { id: string; label: string }>({
       </Pressable>
       <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityLabel="Close" />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + Spacing.two }]}>
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + Spacing.two }, desktopSheet]}>
           <Text style={styles.sheetTitle}>Date range</Text>
           {options.map((option, i) => {
             const selected = option.id === value.id;
@@ -419,6 +455,21 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 1200,
     alignSelf: 'center',
+  },
+  contentDesktop: {
+    maxWidth: Desktop.contentMaxWidth + Desktop.pagePaddingX * 2,
+    paddingHorizontal: Desktop.pagePaddingX,
+    paddingTop: Desktop.pagePaddingTop,
+    paddingBottom: Spacing.six,
+    gap: Spacing.four - 4,
+  },
+  desktopColumns: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.four - 4,
+  },
+  desktopColumn: {
+    minWidth: 0,
   },
   pageHeader: {
     flexDirection: 'row',
@@ -484,6 +535,11 @@ const styles = StyleSheet.create({
     boxShadow: C.cardShadow,
     padding: Spacing.three,
     gap: Spacing.three - 4,
+  },
+  cardDesktop: {
+    borderRadius: Radius.medium + 2,
+    padding: Spacing.four - 4,
+    boxShadow: Shadow.card,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -584,6 +640,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     borderRadius: Radius.medium,
     borderWidth: 1,
+  },
+  buttonDesktop: {
+    minHeight: Desktop.buttonHeight,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.four - 4,
+    borderRadius: Radius.small + 2,
+  },
+  buttonDesktopHug: {
+    alignSelf: 'flex-start',
+    minWidth: Desktop.buttonMinWidth,
+    maxWidth: Desktop.buttonMaxWidth,
+  },
+  buttonTextDesktop: {
+    fontSize: FontSize.small + 1,
   },
   buttonPrimary: {
     backgroundColor: C.accent,

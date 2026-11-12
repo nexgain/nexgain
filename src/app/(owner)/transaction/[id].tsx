@@ -171,7 +171,7 @@ export default function TransactionDetailScreen() {
               <>
                 <View style={styles.receiptButtons}>
                   <View style={styles.flex}>
-                    <Button
+                    <Button fill
                       label={adding ? 'Saving…' : 'Take photo'}
                       icon={ReceiptIcons.camera}
                       onPress={() => addReceipt({ bankTransactionId: txn.id }, 'camera')}
@@ -179,7 +179,7 @@ export default function TransactionDetailScreen() {
                     />
                   </View>
                   <View style={styles.flex}>
-                    <Button
+                    <Button fill
                       label="Choose photo"
                       icon={{ ios: 'photo.on.rectangle', android: 'photo_library', web: 'photo_library' }}
                       variant="secondary"

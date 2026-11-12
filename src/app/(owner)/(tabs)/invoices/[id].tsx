@@ -394,7 +394,7 @@ export default function DocDetailScreen() {
 
       <View style={styles.actions}>
         <View style={styles.flex}>
-          <Button
+          <Button fill
             label="Edit"
             variant="secondary"
             icon={{ ios: 'pencil', android: 'edit', web: 'edit' }}
@@ -402,7 +402,7 @@ export default function DocDetailScreen() {
           />
         </View>
         <View style={styles.flex}>
-          <Button
+          <Button fill
             label="Download PDF"
             variant="secondary"
             icon={OwnerIcons.download}

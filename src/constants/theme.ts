@@ -96,6 +96,48 @@ export const Spacing = {
 } as const;
 
 export const Radius = {
+  small: 8,
   medium: 12,
   large: 20,
+  pill: 999,
+} as const;
+
+/** Text sizes. Use these instead of typing font sizes into screens. */
+export const FontSize = {
+  caption: 12,
+  small: 13,
+  body: 15,
+  large: 17,
+  heading: 20,
+  title: 24,
+  pageTitle: 28,
+} as const;
+
+/** Shadows, from flat to floating. */
+export const Shadow = {
+  card: Palette.cardShadow,
+  raised: '0px 6px 20px rgba(15, 23, 42, 0.08)',
+  popover: '0px 18px 48px rgba(15, 23, 42, 0.18)',
+} as const;
+
+/**
+ * Sizes for the computer (web, wide window) layout. Phones never use these:
+ * see useIsDesktop() in src/hooks/use-desktop.ts.
+ */
+export const Desktop = {
+  /** Window width (px) from which the web app switches to the computer layout. */
+  minWidth: 1024,
+  sidebarWidth: 248,
+  /** Widest the page content gets, centred in the space beside the sidebar. */
+  contentMaxWidth: 1160,
+  /** Forms and single-column detail pages read best at this width. */
+  formMaxWidth: 760,
+  pagePaddingX: 40,
+  pagePaddingTop: 32,
+  /** Buttons keep a sensible size instead of stretching across the page. */
+  buttonMinWidth: 140,
+  buttonMaxWidth: 360,
+  buttonHeight: 42,
+  /** Pop-ups (bottom sheets on phones) show as a centred dialog this wide. */
+  dialogWidth: 520,
 } as const;

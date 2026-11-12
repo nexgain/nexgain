@@ -7,6 +7,7 @@ import { useNativePicker, type PickerTheme } from '@/components/pickers/use-nati
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { format12h, formatShortDate, formatWeekday } from '@/data/employee-roster';
 import { dateToTime, timeToDate } from '@/data/time';
+import { useDesktopSheetStyle } from '@/hooks/use-desktop';
 
 export const OWNER_PICKER_THEME: PickerTheme = {
   sheet: C.surface,
@@ -191,10 +192,11 @@ export function OptionSheet<T extends string>({
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const desktopSheet = useDesktopSheetStyle();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + Spacing.two }]}>
+      <View style={[styles.sheet, { paddingBottom: insets.bottom + Spacing.two }, desktopSheet]}>
         <Text style={styles.sheetTitle}>{title}</Text>
         <ScrollView>
           {options.map((option, i) => (

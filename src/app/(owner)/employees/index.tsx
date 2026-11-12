@@ -63,14 +63,14 @@ export default function EmployeesScreen() {
 
       <View style={styles.actions}>
         <View style={styles.flex}>
-          <Button
+          <Button fill
             label="Add Employee"
             icon={{ ios: 'plus', android: 'add', web: 'add' }}
             onPress={() => router.push('/employees/add' as Href)}
           />
         </View>
         <View style={styles.flex}>
-          <Button
+          <Button fill
             label="Share Invite Code"
             icon={{ ios: 'square.and.arrow.up', android: 'share', web: 'share' }}
             variant="secondary"

@@ -352,7 +352,7 @@ export default function NewDocScreen() {
 
       <View style={styles.footer}>
         <View style={styles.flex}>
-          <Button label="Save as Draft" variant="secondary" onPress={saveDraft} />
+          <Button fill label="Save as Draft" variant="secondary" onPress={saveDraft} />
         </View>
         <View style={styles.flex}>
           {step < 2 ? (
@@ -519,10 +519,10 @@ function NoTimeDialog({ onAnswer }: { onAnswer: (moveOn: boolean, dontShowAgain:
           </Pressable>
           <View style={styles.dialogButtons}>
             <View style={styles.flex}>
-              <Button label="No" variant="secondary" onPress={() => onAnswer(false, dontShow)} />
+              <Button fill label="No" variant="secondary" onPress={() => onAnswer(false, dontShow)} />
             </View>
             <View style={styles.flex}>
-              <Button label="Yes" onPress={() => onAnswer(true, dontShow)} />
+              <Button fill label="Yes" onPress={() => onAnswer(true, dontShow)} />
             </View>
           </View>
         </View>

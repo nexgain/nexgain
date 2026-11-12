@@ -13,6 +13,7 @@ import { dateKey, formatShiftTime, getShiftForDate } from '@/data/employee-roste
 import { employeeFullName } from '@/data/employees';
 import { JOB_OUTCOMES, REPORT_TEXT_LIMIT, submitJobReport, type JobOutcome } from '@/data/job-reports';
 import { useShifts } from '@/data/shifts';
+import { useDesktopPageStyle } from '@/hooks/use-desktop';
 
 const MAX_PHOTOS = 10;
 
@@ -23,6 +24,7 @@ const OUTCOME_COLORS: Record<JobOutcome, { text: string; soft: string }> = {
 };
 
 export default function JobReportScreen() {
+  const desktopPage = useDesktopPageStyle('form');
   const currentEmployee = useCurrentEmployee();
   const insets = useSafeAreaInsets();
   const { date } = useLocalSearchParams<{ date?: string }>();
@@ -127,7 +129,7 @@ export default function JobReportScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.content, desktopPage]} keyboardShouldPersistTaps="handled">
         <Card style={styles.summary}>
           <IconBadge name={Icons.work} />
           <View style={styles.flex}>

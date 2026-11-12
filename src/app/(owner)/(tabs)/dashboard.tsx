@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   ActionRow,
   Card,
+  DesktopColumns,
   Icon,
   OwnerIcons,
   OwnerScreen,
@@ -137,9 +138,11 @@ export default function OwnerDashboardScreen() {
         </Pressable>
       )}
 
-      <UpcomingSection />
-
-      <NotificationsSection />
+      {/* Side by side on a computer; stacked on phones as before. */}
+      <DesktopColumns>
+        <UpcomingSection />
+        <NotificationsSection />
+      </DesktopColumns>
 
       <ResponsiveRow weights={[1.6, 1]}>
         <Card title="AI Insights & Recommendations" icon={OwnerIcons.sparkles}>

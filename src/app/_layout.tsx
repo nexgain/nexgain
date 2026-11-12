@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { EmailPreviewHost } from '@/components/email-preview';
+import { addWebGlobalStyles } from '@/components/layout/web-global-styles';
 import { Colors } from '@/constants/theme';
 // Starts listening for logins so the signed-in person's business loads automatically.
 import '@/lib/auth';
@@ -21,6 +23,8 @@ const navigationTheme = {
 // Root navigator: the landing screen plus the (owner) and (employee) sections.
 // Each section owns its own layout inside its route group folder.
 export default function RootLayout() {
+  // Web on a computer: pointer cursor and hover on clickable things (does nothing on phones).
+  useEffect(addWebGlobalStyles, []);
   return (
     <ThemeProvider value={navigationTheme}>
       <StatusBar style="light" />

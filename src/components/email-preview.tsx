@@ -180,7 +180,7 @@ function EmailPreview({ request }: { request: EmailPreviewRequest }) {
           ) : (
             <>
               <View style={styles.flex}>
-                <Button
+                <Button fill
                   label={editing ? 'Done' : 'Edit'}
                   variant="secondary"
                   icon={editing ? undefined : { ios: 'pencil', android: 'edit', web: 'edit' }}
@@ -188,7 +188,7 @@ function EmailPreview({ request }: { request: EmailPreviewRequest }) {
                 />
               </View>
               <View style={styles.flex}>
-                <Button
+                <Button fill
                   label="Send"
                   icon={{ ios: 'paperplane.fill', android: 'send', web: 'send' }}
                   onPress={send}

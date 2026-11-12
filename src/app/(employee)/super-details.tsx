@@ -22,6 +22,7 @@ import {
   type SuperHistoryEntry,
 } from '@/data/employee-super';
 import { isContractor } from '@/data/employees';
+import { useDesktopPageStyle } from '@/hooks/use-desktop';
 import { formatBsb } from '@/lib/super-validation';
 import { businessUsesSuper } from '@/data/super-rules';
 import { useBusiness } from '@/data/business';
@@ -31,6 +32,7 @@ const dateText = (iso: string) => new Date(iso).toLocaleDateString([], { day: 'n
 // The employee's super details: where their super is paid, their TFN, and the
 // declaration. Changing them keeps the old version in the history.
 export default function SuperDetailsScreen() {
+  const desktopPage = useDesktopPageStyle('form');
   const me = useCurrentEmployee();
   const saved = useEmployeeSuper().find((s) => s.employeeId === me?.id);
   const settings = useSuperSettings();
@@ -117,7 +119,7 @@ export default function SuperDetailsScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Spacing.five }]} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Spacing.five }, desktopPage]} keyboardShouldPersistTaps="handled">
         {saved && (
           <Card style={styles.summary}>
             <Text style={styles.summaryTitle}>{choiceText(saved.choice, saved.fundName)}</Text>

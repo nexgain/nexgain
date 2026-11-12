@@ -6,6 +6,7 @@ import { EmployeeColors as C } from '@/constants/employee-theme';
 import { useCurrentEmployee } from '@/data/current-employee';
 import { isContractor } from '@/data/employees';
 import { employeeNotifications, useNotifications } from '@/data/notifications';
+import { useIsDesktop } from '@/hooks/use-desktop';
 
 type TabIconProps = {
   name: SymbolViewProps['name'];
@@ -22,6 +23,8 @@ export default function EmployeeTabsLayout() {
   const unread = employeeNotifications(useNotifications(), currentEmployee?.id ?? null).filter((n) => !n.read).length;
   // Decided only by their employment type (set at sign-up, changeable by the owner).
   const contractor = isContractor(currentEmployee);
+  // On a computer the side menu (EmployeeDesktopShell) replaces the tab bar.
+  const desktop = useIsDesktop();
 
   return (
     <Tabs
@@ -29,10 +32,12 @@ export default function EmployeeTabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: C.primary,
         tabBarInactiveTintColor: C.textSecondary,
-        tabBarStyle: {
-          backgroundColor: C.card,
-          borderTopColor: C.border,
-        },
+        tabBarStyle: desktop
+          ? { display: 'none' }
+          : {
+              backgroundColor: C.card,
+              borderTopColor: C.border,
+            },
       }}>
       <Tabs.Screen
         name="home"

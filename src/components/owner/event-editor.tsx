@@ -164,10 +164,10 @@ export function EventEditor({
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.three }]}>
           <View style={styles.flex}>
-            <Button label="Cancel" variant="secondary" onPress={onClose} />
+            <Button fill label="Cancel" variant="secondary" onPress={onClose} />
           </View>
           <View style={styles.flex}>
-            <Button label="Save Event" icon={OwnerIcons.check} onPress={save} />
+            <Button fill label="Save Event" icon={OwnerIcons.check} onPress={save} />
           </View>
         </View>
 

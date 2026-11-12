@@ -148,10 +148,10 @@ export default function JobDetailScreen() {
             {timeError ? <Text style={styles.error}>{timeError}</Text> : null}
             <View style={styles.row}>
               <View style={styles.flex}>
-                <Button label="Cancel" variant="secondary" onPress={() => setEditing(null)} />
+                <Button fill label="Cancel" variant="secondary" onPress={() => setEditing(null)} />
               </View>
               <View style={styles.flex}>
-                <Button label="Save" disabled={!!timeError || busy} onPress={saveSchedule} />
+                <Button fill label="Save" disabled={!!timeError || busy} onPress={saveSchedule} />
               </View>
             </View>
           </>

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useIsDesktopMenuPage } from '@/components/layout/top-level-pages';
 import { BackButton, Button, Icon, OwnerIcons } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { formatShortDate } from '@/data/employee-roster';
@@ -124,10 +125,10 @@ export function ConfirmDialog({
           <Text style={styles.dialogTitle}>{title}</Text>
           <View style={styles.dialogButtons}>
             <View style={styles.flex}>
-              <Button label={cancelLabel} variant="secondary" onPress={onCancel} />
+              <Button fill label={cancelLabel} variant="secondary" onPress={onCancel} />
             </View>
             <View style={styles.flex}>
-              <Button label={confirmLabel} onPress={onConfirm} />
+              <Button fill label={confirmLabel} onPress={onConfirm} />
             </View>
           </View>
         </View>
@@ -146,9 +147,11 @@ export function ScreenHeader({
   onBack?: () => void;
   right?: ReactNode;
 }) {
+  // On a computer the Invoices list is a main page in the side menu: no back arrow.
+  const menuPage = useIsDesktopMenuPage();
   return (
     <View style={styles.header}>
-      <BackButton onPress={onBack} />
+      {!menuPage && <BackButton onPress={onBack} />}
       <Text style={styles.headerTitle} numberOfLines={1}>
         {title}
       </Text>

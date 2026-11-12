@@ -18,6 +18,7 @@ import {
 import { useCurrentEmployee } from '@/data/current-employee';
 import { format12h } from '@/data/employee-roster';
 import { dateToTime, timeToDate, toMinutes } from '@/data/time';
+import { useDesktopPageStyle } from '@/hooks/use-desktop';
 
 const PICKER_THEME = {
   sheet: C.card,
@@ -29,6 +30,7 @@ const PICKER_THEME = {
 };
 
 export default function AvailabilityScreen() {
+  const desktopPage = useDesktopPageStyle('form');
   const currentEmployee = useCurrentEmployee();
   const insets = useSafeAreaInsets();
   const employeeId = currentEmployee?.id ?? null;
@@ -51,7 +53,7 @@ export default function AvailabilityScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, desktopPage]}>
         <Text style={styles.subtitle}>Set the days and times you are available to work.</Text>
 
         <Card>

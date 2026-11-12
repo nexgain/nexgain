@@ -25,6 +25,7 @@ import { clockIn, clockOut, useClockSessions } from '@/data/clock-records';
 import { employeeInitials, useCurrentEmployee } from '@/data/current-employee';
 import { getPayPeriods, hoursInPeriod } from '@/data/payroll';
 import { useShifts } from '@/data/shifts';
+import { useIsDesktop } from '@/hooks/use-desktop';
 
 function useNow() {
   const [now, setNow] = useState(() => new Date());
@@ -60,6 +61,8 @@ function greetingFor(date: Date) {
 }
 
 export default function HomeScreen() {
+  // Computer layout: the Clock In button keeps a sensible size instead of spanning the card.
+  const desktop = useIsDesktop();
   const currentEmployee = useCurrentEmployee();
   const now = useNow();
   // Clock records live in the shared store so Owner Payroll reads the same data.
@@ -162,6 +165,7 @@ export default function HomeScreen() {
           accessibilityRole="button"
           style={({ pressed }) => [
             styles.clockButton,
+            desktop && styles.clockButtonDesktop,
             isClockedIn ? styles.clockOutButton : styles.clockInButton,
             pressed && styles.pressed,
           ]}>
@@ -325,6 +329,11 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.three,
     borderRadius: Radius.medium,
     alignItems: 'center',
+  },
+  clockButtonDesktop: {
+    alignSelf: 'center',
+    width: 280,
+    paddingVertical: Spacing.three - 2,
   },
   clockInButton: {
     backgroundColor: C.primary,

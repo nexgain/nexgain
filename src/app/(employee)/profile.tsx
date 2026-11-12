@@ -20,12 +20,14 @@ import {
   validateBankForm,
   type BankForm,
 } from '@/lib/payment-files/bank-details';
+import { useDesktopPageStyle } from '@/hooks/use-desktop';
 import { bankFieldSetFor } from '@/lib/payment-files/countries';
 import { businessUsesSuper } from '@/data/super-rules';
 
 // The employee's own profile. Phone and position can be updated here; the
 // change shows everywhere (including for their owner) because there's only one profile.
 export default function MyProfileScreen() {
+  const desktopPage = useDesktopPageStyle('form');
   const me = useCurrentEmployee();
   const insets = useSafeAreaInsets();
   const [phone, setPhone] = useState<string | null>(null);
@@ -141,7 +143,7 @@ export default function MyProfileScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={[styles.content, desktopPage]} keyboardShouldPersistTaps="handled">
         <Card>
           {details.map(([label, value], i) => (
             <View key={label} style={[styles.row, i > 0 && styles.divider]}>

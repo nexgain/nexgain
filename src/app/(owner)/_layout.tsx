@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
+import { OwnerDesktopShell } from '@/components/owner/owner-desktop-shell';
 import { Colors } from '@/constants/theme';
 
 // Owner section: the tab bar ((tabs)/_layout.tsx) with every other owner page
@@ -19,14 +20,17 @@ export default function OwnerLayout() {
     <>
       {/* Dark status bar icons on the light owner screens. */}
       <StatusBar style="dark" />
-      <Stack
-        screenOptions={{
-          // Each page draws its own header with a back button.
-          headerShown: false,
-          contentStyle: { backgroundColor: Colors.background },
-        }}>
-        <Stack.Screen name="(tabs)" />
-      </Stack>
+      {/* On a computer (web, wide window): a menu down the left side. Phones: unchanged. */}
+      <OwnerDesktopShell>
+        <Stack
+          screenOptions={{
+            // Each page draws its own header with a back button.
+            headerShown: false,
+            contentStyle: { backgroundColor: Colors.background },
+          }}>
+          <Stack.Screen name="(tabs)" />
+        </Stack>
+      </OwnerDesktopShell>
     </>
   );
 }
