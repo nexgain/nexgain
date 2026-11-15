@@ -46,7 +46,8 @@ export type BankTransaction = {
   /** How sure NexGain is about the category (0 to 1); null until sorted. */
   confidence: number | null;
   /** How it was sorted: rule, learned (the owner's earlier choice), ai (best guess) or owner. */
-  categoryMethod: 'rule' | 'learned' | 'ai' | 'owner' | null;
+  /** 'ai' = NexGain's quick best guess; 'claude' = read by the AI (sort-transactions). */
+  categoryMethod: 'rule' | 'learned' | 'ai' | 'claude' | 'owner' | null;
   /** The job it was for (when "Link expenses to jobs" is on). */
   jobId: string | null;
   /** Money in: the invoice it paid. */

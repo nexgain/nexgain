@@ -7,8 +7,9 @@
 // page changes.
 //
 // After the bank data loads, processBank() sorts new transactions (rules ->
-// the owner's remembered choices -> best guess with a confidence score) and
-// matches money coming in to unpaid invoices. "Needs review" (reviewItems)
+// the owner's remembered choices -> best guess with a confidence score), has
+// the AI read the ones it isn't sure about (askAi), and matches money coming
+// in to unpaid invoices. "Needs review" (reviewItems)
 // asks the owner about anything NexGain isn't sure of.
 import { businessStore, updateBusiness, useBusiness } from '@/data/business';
 import {
@@ -217,7 +218,7 @@ async function runProcess() {
   const learned = await loadLearnedRules();
   const contractors = employeesStore.get().filter(isContractor).map(employeeFullName);
   const { all, changed } = sortNew(before, contextFor(before, learned, contractors));
-  if (changed.length === 0) return;
+  if (changed.length === 0) return askAi();
 
   for (let i = 0; i < changed.length; i += 200) {
     const batch = changed
@@ -244,6 +245,46 @@ async function runProcess() {
         invoices.findIndex((i) => i.id === match.invoice.id),
         1,
       );
+  }
+
+  await askAi();
+}
+
+/**
+ * Money out the quick sorting wasn't sure about, that the AI hasn't read yet
+ * (the AI only reads each one once; the owner's own choices are never sent).
+ */
+export const needsAiSorting = (t: BankTransaction) =>
+  t.categorySource === 'auto' &&
+  t.categoryMethod === 'ai' &&
+  !t.categoryReviewDone &&
+  t.amount < 0 &&
+  (t.confidence ?? 0) < REVIEW_BELOW;
+
+type AiUpdate = { id: string; category?: string; confidence?: number };
+
+/** The AI's answers applied to the transactions: sure ones get its category; unsure ones stay in Needs review. */
+export function applyAiUpdates(transactions: BankTransaction[], updates: AiUpdate[]) {
+  const byId = new Map(updates.map((u) => [u.id, u]));
+  return transactions.map((t) => {
+    const u = byId.get(t.id);
+    if (!u || t.categorySource !== 'auto') return t;
+    return u.category ? { ...t, category: u.category, confidence: u.confidence ?? null, categoryMethod: 'claude' as const } : { ...t, categoryMethod: 'claude' as const };
+  });
+}
+
+/**
+ * Has the AI (the sort-transactions Edge Function) read the transactions
+ * NexGain isn't sure about. Only real bank data, never the sample preview.
+ * If it isn't set up yet or the internet drops, they just stay in Needs review.
+ */
+async function askAi() {
+  for (let round = 0; round < 10; round++) {
+    if (!bankTransactionsStore.get().some(needsAiSorting)) return;
+    const { data, error } = await supabase.functions.invoke('sort-transactions', { method: 'POST' });
+    const updates = (data as { updates?: AiUpdate[] } | null)?.updates ?? [];
+    if (error || updates.length === 0) return;
+    bankTransactionsStore.set(applyAiUpdates(bankTransactionsStore.get(), updates));
   }
 }
 
@@ -610,9 +651,9 @@ export function monthlyTotals(items: TransactionItem[], groupId: SpendGroupId, m
   });
 }
 
-/** How the transactions were sorted, e.g. { rule: 12, learned: 2, ai: 3, owner: 1 }. */
+/** How the transactions were sorted, e.g. { rule: 12, learned: 2, ai: 3, claude: 4, owner: 1 }. */
 export function sortingCounts(items: TransactionItem[]) {
-  const counts = { rule: 0, learned: 0, ai: 0, owner: 0, typed: 0 };
+  const counts = { rule: 0, learned: 0, ai: 0, claude: 0, owner: 0, typed: 0 };
   for (const i of items) {
     if (i.source === 'expense') counts.typed++;
     else counts[i.bank?.categoryMethod ?? 'rule']++;

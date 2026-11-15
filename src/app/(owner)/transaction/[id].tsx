@@ -29,6 +29,9 @@ function sortedBy(t: BankTransaction) {
       return 'Chosen by you.';
     case 'learned':
       return 'You picked this category for this shop before, so NexGain used it again.';
+    case 'claude':
+      if ((t.confidence ?? 0) < 0.6) return 'NexGain’s AI couldn’t tell what this was for. Pick the right category below.';
+      return `NexGain’s AI read this one and sorted it (${Math.round((t.confidence ?? 0) * 100)}% sure). Tap another one if it’s wrong.`;
     case 'ai':
       return `NexGain’s best guess (${Math.round((t.confidence ?? 0) * 100)}% sure). Tap another one if it’s wrong.`;
     default:

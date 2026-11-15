@@ -29,6 +29,7 @@ const PAGE = 10;
 const METHODS = [
   { key: 'rule', label: 'Known shops and payees', hint: 'Like Bunnings, Ampol or your payroll.' },
   { key: 'learned', label: 'From your earlier choices', hint: 'You picked the category for this shop before.' },
+  { key: 'claude', label: 'Read by AI', hint: 'NexGain’s AI read the bank’s description and picked the category.' },
   { key: 'ai', label: 'Best guesses', hint: 'From clues in the bank’s description. NexGain asks when it’s not sure.' },
   { key: 'owner', label: 'Chosen by you', hint: null },
   { key: 'typed', label: 'Typed in by you', hint: 'Expenses you added yourself.' },
