@@ -44,6 +44,12 @@ export default function OwnerMoreScreen() {
             showDivider
           />
           <ActionRow
+            icon={OwnerIcons.scissors}
+            label="Services & Prices"
+            onPress={() => router.navigate('/bookings/services')}
+            showDivider
+          />
+          <ActionRow
             icon={{ ios: 'briefcase.fill', android: 'work', web: 'work' }}
             label="Appointments"
             onPress={() => router.navigate('/bookings/calendar')}

@@ -11,7 +11,6 @@ import { updateBusiness } from '@/data/business';
 import {
   addDays,
   formatDayKey,
-  formatDuration,
   TIME_ZONES,
   timeZoneLabel,
   todayIn,
@@ -22,7 +21,6 @@ import {
   addTimeOff,
   bookingLink,
   cleanSlug,
-  formatPrice,
   removeTimeOff,
   updateBookingSettings,
   useBookingServices,
@@ -173,34 +171,11 @@ export default function BookingSettingsScreen() {
         </FormField>
       </Card>
 
-      <Card title="Services" icon={OwnerIcons.scissors}>
-        <Text style={styles.muted}>What customers can book, how long it takes and the price.</Text>
-        {services.length === 0 ? (
-          <Text style={styles.muted}>No services yet. Add one so customers can book.</Text>
-        ) : (
-          services.map((s, i) => (
-            <ListRow
-              key={s.id}
-              title={s.name}
-              subtitle={[
-                formatDuration(s.durationMinutes),
-                s.price === null ? 'No price shown' : formatPrice(s.price),
-                s.staffIds.length ? `${s.staffIds.length} staff` : 'Everyone',
-                s.active ? null : 'Hidden',
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-              muted={!s.active}
-              showDivider={i > 0}
-              onPress={() => router.push({ pathname: '/bookings/booking-service/[id]', params: { id: s.id } })}
-            />
-          ))
-        )}
-        <Button
-          label="Add a service"
-          variant="secondary"
-          icon={OwnerIcons.plus}
-          onPress={() => router.push({ pathname: '/bookings/booking-service/[id]', params: { id: 'new' } })}
+      <Card title="Services & Prices" icon={OwnerIcons.scissors}>
+        <ListRow
+          title={`${services.filter((x) => x.active).length} service${services.filter((x) => x.active).length === 1 ? '' : 's'} on your booking page`}
+          subtitle="Add, edit or delete services, prices and how long they take"
+          onPress={() => router.navigate('/bookings/services')}
         />
       </Card>
 

@@ -51,7 +51,7 @@ export default function BookingServiceScreen() {
   if (!isNew && !existing) {
     return (
       <OwnerScreen>
-        <PageHeader onBack={() => goBack('/bookings/booking-settings')} title="Service" />
+        <PageHeader onBack={() => goBack('/bookings/services')} title="Service" />
         <Card>
           <Text style={styles.muted}>This service no longer exists.</Text>
         </Card>
@@ -82,7 +82,7 @@ export default function BookingServiceScreen() {
     const error = await saveService(draft);
     setBusy(false);
     if (error) setMessage({ tone: 'error', text: error });
-    else goBack('/bookings/booking-settings');
+    else goBack('/bookings/services');
   }
 
   async function remove() {
@@ -97,7 +97,7 @@ export default function BookingServiceScreen() {
 
   return (
     <OwnerScreen>
-      <PageHeader onBack={() => goBack('/bookings/booking-settings')} title={isNew ? 'Add a Service' : 'Edit Service'} />
+      <PageHeader onBack={() => goBack('/bookings/services')} title={isNew ? 'Add a Service' : 'Edit Service'} />
       <Card>
         <FormField label="Name">
           <TextField value={name} onChangeText={setName} placeholder="e.g. Skin fade" maxLength={100} accessibilityLabel="Service name" />
@@ -160,7 +160,7 @@ export default function BookingServiceScreen() {
       <SaveNote message={message} />
       <View style={styles.row}>
         <View style={styles.flex}>
-          <Button label="Cancel" variant="secondary" onPress={() => goBack('/bookings/booking-settings')} fill />
+          <Button label="Cancel" variant="secondary" onPress={() => goBack('/bookings/services')} fill />
         </View>
         <View style={styles.flex}>
           <Button label={busy ? 'Saving…' : 'Save'} onPress={save} disabled={busy} fill />

@@ -25,6 +25,8 @@ const TOP_LEVEL = new Set([
   '/bookings/alerts',
   '/bookings/integrations',
   '/bookings/business-profile',
+  '/bookings/services',
+  '/bookings/booking-settings',
   '/bookings/menu',
   // Employee
   '/bookings/home',
