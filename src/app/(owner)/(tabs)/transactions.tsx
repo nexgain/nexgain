@@ -203,18 +203,26 @@ export default function TransactionsScreen() {
       <RangeSelect options={ranges} value={range} onChange={(r) => setRangeId(r.id)} />
 
       <View style={styles.totals}>
-        <View style={[styles.total, styles.flex]}>
-          <Text style={styles.label}>Money in</Text>
-          <Text style={[styles.totalValue, { color: C.success }]} numberOfLines={1} adjustsFontSizeToFit>
-            {formatMoney(moneyIn)}
-          </Text>
-        </View>
-        <View style={[styles.total, styles.flex]}>
-          <Text style={styles.label}>Money out</Text>
-          <Text style={styles.totalValue} numberOfLines={1} adjustsFontSizeToFit>
-            {formatMoney(moneyOut)}
-          </Text>
-        </View>
+        {/* Tap either box to see every transaction in that direction, newest first. */}
+        {(['in', 'out'] as const).map((direction) => (
+          <Pressable
+            key={direction}
+            onPress={() => router.push({ pathname: '/money/[direction]', params: { direction, range: range.id } } as Href)}
+            accessibilityRole="button"
+            accessibilityHint={`Shows all money ${direction}, newest first`}
+            style={({ pressed }) => [styles.total, styles.flex, pressed && styles.pressed]}>
+            <View style={styles.totalLabelRow}>
+              <Text style={styles.label}>{direction === 'in' ? 'Money in' : 'Money out'}</Text>
+              <Icon name={OwnerIcons.chevron} color={C.textSecondary} size={12} />
+            </View>
+            <Text
+              style={[styles.totalValue, direction === 'in' && { color: C.success }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit>
+              {formatMoney(direction === 'in' ? moneyIn : moneyOut)}
+            </Text>
+          </Pressable>
+        ))}
       </View>
 
       {all.length > 0 && (
@@ -490,6 +498,11 @@ const styles = StyleSheet.create({
     backgroundColor: C.surface,
     borderWidth: 1,
     borderColor: C.border,
+  },
+  totalLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   label: {
     color: C.textSecondary,
