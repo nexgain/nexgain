@@ -347,8 +347,18 @@ export async function createBusinessOnline(profile: Omit<BusinessProfile, 'id' |
     .eq('id', created.id);
   if (emailError) console.warn('Could not save email settings:', emailError.message);
   // NexGain Bookings businesses (System 2). Service businesses keep the database default.
+  // Their time zone comes from the phone (e.g. "Europe/London"), so customers'
+  // booking times are right wherever the business is.
   if (profile.systemType === 'bookings') {
-    const { error: systemError } = await supabase.from('businesses').update({ system_type: 'bookings' }).eq('id', created.id);
+    const timezone = deviceTimeZone();
+    let { error: systemError } = await supabase
+      .from('businesses')
+      .update(timezone ? { system_type: 'bookings', timezone } : { system_type: 'bookings' })
+      .eq('id', created.id);
+    // A time zone the database doesn't know: keep the default rather than fail sign-up.
+    if (systemError && timezone) {
+      ({ error: systemError } = await supabase.from('businesses').update({ system_type: 'bookings' }).eq('id', created.id));
+    }
     if (systemError) console.warn('Could not save the booking system:', systemError.message);
   }
   const saved = {
@@ -360,6 +370,16 @@ export async function createBusinessOnline(profile: Omit<BusinessProfile, 'id' |
   };
   businessStore.set(saved);
   return saved;
+}
+
+/** The phone's or computer's time zone, e.g. "Australia/Sydney" (null if it can't tell). */
+function deviceTimeZone(): string | null {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return typeof zone === 'string' && /^[A-Za-z_]+(\/[A-Za-z0-9_+-]+)+$/.test(zone) ? zone : null;
+  } catch {
+    return null;
+  }
 }
 
 // Edits show straight away and are saved online shortly after typing stops,

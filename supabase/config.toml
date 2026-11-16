@@ -55,3 +55,8 @@ verify_jwt = true
 
 [functions.read-receipt]
 verify_jwt = true
+
+# NexGain Bookings: customers book without logging in. The page only gets what a
+# customer may see; the database functions check everything.
+[functions.booking-page]
+verify_jwt = false
