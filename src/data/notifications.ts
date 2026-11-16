@@ -67,6 +67,11 @@ export const OWNER_TYPES = {
   ai_alert_finance: { category: 'Finance', icon: ICONS.sparkles, tone: 'blue', actions: ['Open AI Assistant'] },
   ai_alert_jobs: { category: 'Jobs', icon: ICONS.sparkles, tone: 'blue', actions: ['Open AI Assistant'] },
   ai_alert_team: { category: 'Employees', icon: ICONS.sparkles, tone: 'blue', actions: ['Open AI Assistant'] },
+  // NexGain Bookings only (sent by the database, see 20261119000000_bookings_staff.sql).
+  booking_new: { category: 'Jobs', icon: ICONS.calendar, tone: 'green', actions: ['Open Bookings'] },
+  booking_changed: { category: 'Jobs', icon: ICONS.calendar, tone: 'blue', actions: ['Open Bookings'] },
+  booking_cancelled: { category: 'Jobs', icon: ICONS.calendar, tone: 'red', actions: ['Open Bookings'] },
+  booking_request: { category: 'Employees', icon: ICONS.clock, tone: 'amber', actions: ['Open Bookings Settings'] },
 } satisfies Record<string, TypeInfo>;
 
 /** Employee notification types. */
@@ -80,6 +85,11 @@ export const EMPLOYEE_TYPES = {
   announcement: { category: 'Team', icon: ICONS.megaphone, tone: 'blue', actions: [] },
   document_added: { category: 'Team', icon: ICONS.document, tone: 'purple', actions: ['Open Qualifications'] },
   vehicle_reminder: { category: 'Team', icon: ICONS.car, tone: 'amber', actions: [] },
+  // NexGain Bookings only (sent by the database, see 20261119000000_bookings_staff.sql).
+  booking_new: { category: 'Roster', icon: ICONS.calendar, tone: 'green', actions: ['Open Schedule'] },
+  booking_changed: { category: 'Roster', icon: ICONS.calendar, tone: 'blue', actions: ['Open Schedule'] },
+  booking_cancelled: { category: 'Roster', icon: ICONS.calendar, tone: 'red', actions: ['Open Schedule'] },
+  booking_request_answer: { category: 'Roster', icon: ICONS.clock, tone: 'blue', actions: ['Open My Booking Hours'] },
 } satisfies Record<string, TypeInfo>;
 
 export type OwnerNotificationType = keyof typeof OWNER_TYPES;

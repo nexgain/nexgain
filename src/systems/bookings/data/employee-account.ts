@@ -28,6 +28,13 @@ export const ACCOUNT_SECTIONS: AccountSection[] = [
     href: '/bookings/availability',
   },
   {
+    id: 'booking-hours',
+    title: 'My Booking Hours & Days Off',
+    subtitle: 'When customers can book you, and asking for time off',
+    icon: { ios: 'calendar', android: 'calendar_month', web: 'calendar_month' },
+    href: '/bookings/booking-hours',
+  },
+  {
     id: 'payment',
     title: 'Payment',
     subtitle: 'Bank account details',

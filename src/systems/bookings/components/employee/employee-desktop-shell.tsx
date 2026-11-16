@@ -26,7 +26,7 @@ export function EmployeeDesktopShell({ children }: { children: ReactNode }) {
           match: ['/bookings/home'],
         },
         {
-          label: 'Roster',
+          label: 'Schedule',
           icon: { ios: 'calendar', android: 'calendar_month', web: 'calendar_month' },
           href: '/bookings/my-roster',
           match: ['/bookings/my-roster', '/bookings/job-details', '/bookings/job-report'],

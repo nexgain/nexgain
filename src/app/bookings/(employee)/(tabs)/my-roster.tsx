@@ -24,6 +24,13 @@ import {
 } from '@/data/employee-roster';
 import { useCurrentEmployee } from '@/data/current-employee';
 import { useShifts } from '@/data/shifts';
+import { MyAppointments } from '@/systems/bookings/components/employee/my-appointments';
+
+/** Schedule tab (NexGain Bookings): appointments customers booked, or rostered shifts. */
+const MODES = [
+  { label: 'Appointments', value: 'appointments' },
+  { label: 'Shifts', value: 'shifts' },
+] as const;
 
 const WEEKS = [
   { label: 'This Week', offset: 0 },
@@ -37,6 +44,7 @@ export default function RosterScreen() {
   const sectionY = useRef<number[]>([0, 0]);
   const toggleHeight = useRef(0);
   const [activeWeek, setActiveWeek] = useState(0);
+  const [mode, setMode] = useState<(typeof MODES)[number]['value']>('appointments');
   const shiftSource = { shifts: useShifts(), employeeId: currentEmployee?.id ?? null };
 
   // The toggle stays pinned at the top, so scroll each section to just below it.
@@ -57,7 +65,7 @@ export default function RosterScreen() {
 
   return (
     <EmployeeScreen
-      title="Roster"
+      title="Schedule"
       scrollRef={scrollRef}
       onScroll={onScroll}
       stickyHeaderIndices={[1]}>
@@ -66,23 +74,38 @@ export default function RosterScreen() {
         onLayout={(e) => {
           toggleHeight.current = e.nativeEvent.layout.height;
         }}>
-        <View style={styles.segmented}>
-          {WEEKS.map((week, i) => (
+        <View style={[styles.segmented, styles.modes]}>
+          {MODES.map((m) => (
             <Pressable
-              key={week.label}
-              onPress={() => selectWeek(i)}
+              key={m.value}
+              onPress={() => setMode(m.value)}
               accessibilityRole="tab"
-              accessibilityState={{ selected: activeWeek === i }}
-              style={[styles.segment, activeWeek === i && styles.segmentActive]}>
-              <Text style={[styles.segmentText, activeWeek === i && styles.segmentTextActive]}>
-                {week.label}
-              </Text>
+              accessibilityState={{ selected: mode === m.value }}
+              style={[styles.segment, mode === m.value && styles.segmentActive]}>
+              <Text style={[styles.segmentText, mode === m.value && styles.segmentTextActive]}>{m.label}</Text>
             </Pressable>
           ))}
         </View>
+        {mode === 'shifts' && (
+          <View style={styles.segmented}>
+            {WEEKS.map((week, i) => (
+              <Pressable
+                key={week.label}
+                onPress={() => selectWeek(i)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: activeWeek === i }}
+                style={[styles.segment, activeWeek === i && styles.segmentActive]}>
+                <Text style={[styles.segmentText, activeWeek === i && styles.segmentTextActive]}>
+                  {week.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
       </View>
 
-      {WEEKS.map((week, i) => {
+      {mode === 'appointments' && <MyAppointments />}
+      {mode === 'shifts' && WEEKS.map((week, i) => {
         const days = getRosterWeek(week.offset, today, shiftSource);
         return (
           <View
@@ -153,6 +176,9 @@ function RosterRow({
 }
 
 const styles = StyleSheet.create({
+  modes: {
+    marginBottom: Spacing.two,
+  },
   toggleBar: {
     backgroundColor: C.background,
     paddingVertical: Spacing.two,

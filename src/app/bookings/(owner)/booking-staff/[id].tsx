@@ -6,9 +6,10 @@ import { SaveNote, WeekHours } from '@/systems/bookings/components/owner/booking
 import { DateField, FormField, SwitchRow, TextField } from '@/systems/bookings/components/owner/form';
 import { Badge, Button, Card, goBack, OwnerIcons, OwnerScreen, PageHeader } from '@/systems/bookings/components/owner/ui';
 import { Colors as C, Spacing } from '@/constants/theme';
-import { addDays, formatDayKey, todayIn, zonedParts, zonedToIso } from '@/systems/bookings/data/booking-time';
+import { addDays, format12h, formatDayKey, LONG_DAYS, todayIn, zonedParts, zonedToIso } from '@/systems/bookings/data/booking-time';
 import {
   addTimeOff,
+  answerHoursRequest,
   removeTimeOff,
   setTimeOffStatus,
   updateStaff,
@@ -102,6 +103,35 @@ export default function BookingStaffScreen() {
       </Card>
 
       <Card title="Working Hours" icon={OwnerIcons.clock}>
+        {person.hoursRequestedAt && (
+          <View style={styles.request}>
+            <Text style={styles.requestTitle}>{person.name} asked for new hours</Text>
+            <Text style={styles.muted}>
+              {person.requestedHours
+                ? person.requestedHours
+                    .map((d, i) => `${LONG_DAYS[i].slice(0, 3)}  ${d.working ? `${format12h(d.start)} – ${format12h(d.end)}` : 'Not working'}`)
+                    .join('\n')
+                : 'The same hours as your opening hours.'}
+            </Text>
+            <View style={styles.row}>
+              <View style={styles.flex}>
+                <Button
+                  label="Decline"
+                  variant="secondary"
+                  onPress={async () => report(await answerHoursRequest(person.id, false), 'Declined. They’ve been told.')}
+                  fill
+                />
+              </View>
+              <View style={styles.flex}>
+                <Button
+                  label="Approve"
+                  onPress={async () => report(await answerHoursRequest(person.id, true), 'Approved. Customers can book them in their new hours.')}
+                  fill
+                />
+              </View>
+            </View>
+          </View>
+        )}
         <SwitchRow
           label="Same as opening hours"
           hint={person.hours ? 'Off: they have their own hours below.' : 'Customers can book them any time you’re open.'}
@@ -187,4 +217,6 @@ const styles = StyleSheet.create({
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.border },
   approve: { color: C.success, fontSize: 15, fontWeight: '600' },
   remove: { color: C.danger, fontSize: 15, fontWeight: '600' },
+  request: { gap: Spacing.two, padding: Spacing.three, borderRadius: 12, backgroundColor: C.warningSoft },
+  requestTitle: { color: C.warning, fontSize: 15, fontWeight: '700' },
 });

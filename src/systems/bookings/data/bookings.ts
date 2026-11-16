@@ -41,6 +41,10 @@ export type BookingStaff = {
   /** Their own week (Monday first), or null = the business's opening hours. */
   hours: StaffDay[] | null;
   sort: number;
+  /** Set while they've asked for new hours (waiting for the owner). */
+  hoursRequestedAt: string | null;
+  /** The hours they asked for (null with a request = "the opening hours"). */
+  requestedHours: StaffDay[] | null;
 };
 
 export type BookingService = {
@@ -134,7 +138,20 @@ type SettingsRow = {
   cancellation_policy: string;
   reminder_hours: number;
 };
-type StaffRow = { id: string; employee_id: string | null; is_owner: boolean; name: string; active: boolean; hours: StaffDay[] | null; sort: number };
+type StaffRow = {
+  id: string;
+  employee_id: string | null;
+  is_owner: boolean;
+  name: string;
+  active: boolean;
+  hours: StaffDay[] | null;
+  sort: number;
+  requested_hours?: StaffDay[] | null;
+  hours_requested_at?: string | null;
+};
+
+const daysOf = (v: unknown): StaffDay[] | null =>
+  Array.isArray(v) && v.length === 7 ? v.map((d) => ({ working: !!d?.working, start: d?.start ?? '09:00', end: d?.end ?? '17:00' })) : null;
 type ServiceRow = {
   id: string;
   name: string;
@@ -194,10 +211,10 @@ const staffFromRow = (r: StaffRow): BookingStaff => ({
   isOwner: r.is_owner,
   name: r.name,
   active: r.active,
-  hours: validDays<StaffDay>(r.hours)
-    ? r.hours.map((d) => ({ working: !!d?.working, start: d?.start ?? '09:00', end: d?.end ?? '17:00' }))
-    : null,
+  hours: daysOf(r.hours),
   sort: r.sort,
+  hoursRequestedAt: r.hours_requested_at ?? null,
+  requestedHours: daysOf(r.requested_hours),
 });
 
 const serviceFromRow = (r: ServiceRow): BookingService => ({
@@ -273,7 +290,7 @@ export async function loadBookingsData() {
   try {
     const [settings, staff, services, timeOff, bookings] = await Promise.all([
       supabase.from('booking_settings').select('*').maybeSingle<SettingsRow>(),
-      supabase.from('booking_staff').select('id, employee_id, is_owner, name, active, hours, sort').order('sort').order('name'),
+      supabase.from('booking_staff').select('*').order('sort').order('name'),
       supabase.from('booking_services').select('id, name, description, duration_minutes, price, staff_ids, active, sort').order('sort').order('name'),
       supabase
         .from('booking_time_off')
@@ -600,4 +617,75 @@ export function formatPrice(amount: number, { whole = false, currency }: { whole
   } catch {
     return amount.toFixed(whole ? 0 : 2);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Staff: their own appointments, days off and hours (see 20261119000000_bookings_staff.sql)
+// ---------------------------------------------------------------------------
+
+/** The bookable person who is this employee (null for the owner, or before loading). */
+export function myStaff(staff: BookingStaff[], employeeId: string | null | undefined) {
+  return employeeId ? (staff.find((s) => s.employeeId === employeeId) ?? null) : null;
+}
+
+/** The database's own message (e.g. "This booking was cancelled."), or a general one. */
+const rpcError = (message: string) => (/network|fetch/i.test(message) ? friendly(message) : message);
+
+/** Staff: Completed, No-show, or back to booked (their own appointments, once started). */
+export async function markMyBooking(bookingId: string, status: 'completed' | 'no_show' | 'confirmed'): Promise<string | null> {
+  const { error } = await supabase.rpc('booking_staff_set_status', { p_booking: bookingId, p_status: status });
+  if (error) return rpcError(error.message);
+  bookingsStore.set((list) => list.map((b) => (b.id === bookingId ? { ...b, status } : b)));
+  return null;
+}
+
+/** Staff: ask for time off. The owner approves it before customers stop seeing those times. */
+export async function requestTimeOff(staffId: string, startsAt: string, endsAt: string, note: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('booking_request_time_off', { p_starts: startsAt, p_ends: endsAt, p_note: note });
+  if (error) return rpcError(error.message);
+  timeOffStore.set((list) =>
+    [...list, { id: data as string, staffId, startsAt, endsAt, status: 'pending' as const, note: note.trim() }].sort((a, b) =>
+      a.startsAt.localeCompare(b.startsAt),
+    ),
+  );
+  return null;
+}
+
+/** Staff: take back a request the owner hasn't answered. */
+export async function withdrawTimeOff(timeOffId: string): Promise<string | null> {
+  const { error } = await supabase.rpc('booking_withdraw_time_off', { p_id: timeOffId });
+  if (error) return rpcError(error.message);
+  timeOffStore.set((list) => list.filter((t) => t.id !== timeOffId));
+  return null;
+}
+
+/** Staff: ask for new weekly hours (null = the opening hours), or withdraw the request. */
+export async function requestHours(staffId: string, hours: StaffDay[] | null, withdraw = false): Promise<string | null> {
+  const { error } = await supabase.rpc('booking_request_hours', { p_hours: hours, p_withdraw: withdraw });
+  if (error) return rpcError(error.message);
+  bookingStaffStore.set((list) =>
+    list.map((s) =>
+      s.id === staffId
+        ? { ...s, requestedHours: withdraw ? null : hours, hoursRequestedAt: withdraw ? null : new Date().toISOString() }
+        : s,
+    ),
+  );
+  return null;
+}
+
+/** Owner: answer a request for new hours. Approving changes when customers can book them. */
+export async function answerHoursRequest(staffId: string, approve: boolean): Promise<string | null> {
+  const person = bookingStaffStore.get().find((s) => s.id === staffId);
+  if (!person?.hoursRequestedAt) return 'There’s no request to answer.';
+  const changes = approve
+    ? { hours: person.requestedHours, requested_hours: null, hours_requested_at: null }
+    : { requested_hours: null, hours_requested_at: null };
+  const { error } = await supabase.from('booking_staff').update(changes).eq('id', staffId);
+  if (error) return friendly(error.message);
+  bookingStaffStore.set((list) =>
+    list.map((s) =>
+      s.id === staffId ? { ...s, hours: approve ? person.requestedHours : s.hours, requestedHours: null, hoursRequestedAt: null } : s,
+    ),
+  );
+  return null;
 }

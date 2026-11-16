@@ -13,6 +13,8 @@ const ACTION_ROUTES: Record<string, Href> = {
   'Open roster': '/bookings/roster',
   'Open AI Assistant': '/bookings/ai-assistant',
   'Open GST': '/bookings/gst',
+  'Open Bookings': '/bookings/calendar',
+  'Open Bookings Settings': '/bookings/booking-settings',
   'View invoice': '/bookings/invoices' as Href,
   'Create quote': { pathname: '/bookings/invoices/new', params: { kind: 'quote' } },
 };

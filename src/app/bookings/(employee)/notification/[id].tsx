@@ -15,6 +15,8 @@ import { useDesktopPageStyle } from '@/hooks/use-desktop';
 // Where each "Related actions" shortcut goes in the Employee section.
 const ACTION_ROUTES: Record<string, Href> = {
   'Open Roster': '/bookings/my-roster',
+  'Open Schedule': '/bookings/my-roster',
+  'Open My Booking Hours': '/bookings/booking-hours',
   'View Upcoming Jobs': '/bookings/home',
   'Open Payslips': '/bookings/payslips',
   'Open Qualifications': '/bookings/qualifications',

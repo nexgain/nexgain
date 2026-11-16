@@ -51,7 +51,7 @@ export default function EmployeeTabsLayout() {
       <Tabs.Screen
         name="my-roster"
         options={{
-          title: 'Roster',
+          title: 'Schedule',
           tabBarIcon: (props) => (
             <TabIcon
               name={{ ios: 'calendar', android: 'calendar_month', web: 'calendar_month' }}
