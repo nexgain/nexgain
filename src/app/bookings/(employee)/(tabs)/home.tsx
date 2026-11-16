@@ -11,6 +11,7 @@ import {
   IconBadge,
   Icons,
 } from '@/systems/bookings/components/employee/ui';
+import { BusinessLinkCard } from '@/systems/bookings/components/employee/business-link';
 import { EmployeeColors as C } from '@/constants/employee-theme';
 import { Radius, Spacing } from '@/constants/theme';
 import {
@@ -221,6 +222,9 @@ export default function HomeScreen() {
           ))}
         </Card>
       )}
+
+      {/* NexGain Bookings: the business's booking link to share. */}
+      <BusinessLinkCard />
     </EmployeeScreen>
   );
 }

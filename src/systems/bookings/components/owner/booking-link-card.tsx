@@ -5,7 +5,7 @@ import { ShareLinkBox } from '@/systems/bookings/components/share-link';
 import { Card, OwnerIcons } from '@/systems/bookings/components/owner/ui';
 import { Colors as C } from '@/constants/theme';
 import { useBusiness } from '@/data/business';
-import { bookingLink, useBookingSettings, useBookingsLoad, type BookingStaff } from '@/systems/bookings/data/bookings';
+import { bookingLink, useBookingSettings, useBookingsLoad } from '@/systems/bookings/data/bookings';
 
 export { QrCode } from '@/systems/bookings/components/share-link';
 
@@ -45,26 +45,6 @@ export function BookingLinkCard({ showSettingsLink = false }: { showSettingsLink
           <Text style={styles.toggle}>Bookings settings</Text>
         </Pressable>
       )}
-    </Card>
-  );
-}
-
-/** A staff member's personal booking link (opens the booking page with them already picked). */
-export function StaffLinkCard({ person }: { person: BookingStaff }) {
-  const business = useBusiness();
-  const settings = useBookingSettings();
-  if (!settings) return null;
-  return (
-    <Card title={person.isOwner ? 'Your Personal Booking Link' : `${person.name}’s Booking Link`} icon={OwnerIcons.link}>
-      <Text style={styles.muted}>
-        Opens your booking page with {person.isOwner ? 'you' : person.name} already picked, showing only the services{' '}
-        {person.isOwner ? 'you do' : 'they do'}.
-      </Text>
-      {!person.active && <Text style={styles.warning}>They can’t be booked online right now, so customers won’t see them.</Text>}
-      <ShareLinkBox
-        link={bookingLink(settings.slug, person.id)}
-        shareText={`Book with ${person.name} at ${business?.businessName ?? 'our business'}`}
-      />
     </Card>
   );
 }

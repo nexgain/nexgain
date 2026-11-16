@@ -1,5 +1,5 @@
-// NexGain Bookings: times in the business's own time zone, link names and
-// prices in the business's currency. FAKE values only.
+// NexGain Bookings: times in the business's own time zone, link names, who does
+// which service and prices in the business's currency. FAKE values only.
 import { describe, expect, it, jest } from '@jest/globals';
 
 import {
@@ -16,6 +16,8 @@ import { parsePriceText } from '@/systems/bookings/components/owner/staff-prices
 import {
   bookingLink,
   cancellationFeeFor,
+  doesService,
+  type BookingService,
   cleanSlug,
   currencyCode,
   depositFor,
@@ -68,8 +70,34 @@ describe('booking links', () => {
     expect(cleanSlug('  --Fade  Lab-- ')).toBe('fade-lab');
     expect(cleanSlug('!!!')).toBe('');
     expect(bookingLink('fade-lab')).toBe('https://nexgain.github.io/nexgain/book/?b=fade-lab');
-    // A staff member's personal link.
-    expect(bookingLink('fade-lab', 'staff-1')).toBe('https://nexgain.github.io/nexgain/book/?b=fade-lab&s=staff-1');
+  });
+});
+
+describe('who does which service, at what price', () => {
+  const staff = [
+    { id: 'john', name: 'John Fake', isOwner: false, active: true } as BookingStaff,
+    { id: 'sarah', name: 'Sarah Fake', isOwner: false, active: true } as BookingStaff,
+    { id: 'owner', name: 'Owner Fake', isOwner: true, active: false } as BookingStaff,
+  ];
+  const fade = { id: 'fade', price: 45 } as BookingService;
+  // John $50, Sarah blank (the usual $45); the owner doesn't do the work.
+  const prices = new Map<string, number | null>([
+    [priceKey('john', 'fade'), 50],
+    [priceKey('sarah', 'fade'), null],
+    [priceKey('owner', 'fade'), null],
+  ]);
+
+  it('only people who ticked the service, and can be booked', () => {
+    expect(doesService('john', 'fade', prices)).toBe(true);
+    expect(doesService('john', 'beard', prices)).toBe(false);
+    expect(staffForService(fade, staff, prices).map((s) => s.id)).toEqual(['john', 'sarah']);
+    expect(staffForService({ ...fade, id: 'beard' }, staff, prices)).toEqual([]);
+  });
+
+  it('their own price, or the usual one when blank', () => {
+    expect(priceFor(fade, 'john', prices)).toBe(50);
+    expect(priceFor(fade, 'sarah', prices)).toBe(45);
+    expect(priceFor(fade, null, prices)).toBe(45);
   });
 });
 
@@ -81,18 +109,6 @@ describe('prices in the business’s currency', () => {
     expect(formatPrice(40, { currency: 'AUD' })).toBe('$40.00');
     expect(formatPrice(40, { currency: 'GBP' })).toBe('£40.00');
     expect(formatPrice(1234.5, { currency: 'USD', whole: true })).toBe('$1,235');
-  });
-});
-
-describe('who does a service', () => {
-  const fakeStaff = [
-    { id: 'a', name: 'Alex', active: true },
-    { id: 'b', name: 'Blake', active: true },
-    { id: 'c', name: 'Casey', active: false },
-  ] as BookingStaff[];
-  it('is everyone bookable, or only the chosen staff', () => {
-    expect(staffForService({ staffIds: [] } as never, fakeStaff).map((s) => s.id)).toEqual(['a', 'b']);
-    expect(staffForService({ staffIds: ['b', 'c'] } as never, fakeStaff).map((s) => s.id)).toEqual(['b']);
   });
 });
 

@@ -13,9 +13,8 @@ import { DEFAULT_TIME_ZONE, zonedParts } from '@/systems/bookings/data/booking-t
 
 /** The public booking page. Change here if NexGain moves to its own domain. */
 export const BOOKING_PAGE_URL = 'https://nexgain.github.io/nexgain/book/';
-/** The booking page; with a staff id, their personal link (that person already picked). */
-export const bookingLink = (slug: string, staffId?: string) =>
-  `${BOOKING_PAGE_URL}?b=${encodeURIComponent(slug)}${staffId ? `&s=${encodeURIComponent(staffId)}` : ''}`;
+/** The business's one booking page (customers pick who they'd like there). */
+export const bookingLink = (slug: string) => `${BOOKING_PAGE_URL}?b=${encodeURIComponent(slug)}`;
 
 export type OpeningDay = { open: boolean; start: string; end: string };
 export type StaffDay = { working: boolean; start: string; end: string };
@@ -42,6 +41,10 @@ export type BookingSettings = {
   cancellationFeeType: 'fixed' | 'percent';
   cancellationFeeValue: number;
   cancellationFeeHours: number;
+  /** "Do you do the work yourself?" Yes = the owner can be booked and has a schedule. */
+  ownerWorks: boolean;
+  /** Booking business types chosen at sign-up (ids from constants/booking-business-types.ts). */
+  businessTypes: string[];
 };
 
 export type BookingStaff = {
@@ -65,8 +68,8 @@ export type BookingService = {
   description: string;
   durationMinutes: number;
   price: number | null;
-  /** Staff who do it; empty = everyone. */
-  staffIds: string[];
+  /** The group customers see it under, e.g. "Barber". */
+  category: string;
   active: boolean;
   sort: number;
 };
@@ -130,7 +133,7 @@ export const bookingServicesStore = createStore<BookingService[]>([]);
 export const timeOffStore = createStore<TimeOff[]>([]);
 export const bookingsStore = createStore<Booking[]>([]);
 /** Staff's own prices: "<staff id>:<service id>" -> price (see 20261122000000_booking_staff_prices.sql). */
-export const staffPricesStore = createStore<Map<string, number>>(new Map());
+export const staffPricesStore = createStore<Map<string, number | null>>(new Map());
 export const bookingsLoadStore = createStore<'idle' | 'loading' | 'ready' | 'error'>('idle');
 
 export const useBookingSettings = () => bookingSettingsStore.use();
@@ -169,6 +172,8 @@ type SettingsRow = {
   cancellation_fee_type?: BookingSettings['cancellationFeeType'];
   cancellation_fee_value?: number | string;
   cancellation_fee_hours?: number;
+  owner_works?: boolean;
+  business_types?: string[] | null;
 };
 type StaffRow = {
   id: string;
@@ -190,7 +195,7 @@ type ServiceRow = {
   description: string;
   duration_minutes: number;
   price: number | string | null;
-  staff_ids: string[] | null;
+  category?: string | null;
   active: boolean;
   sort: number;
 };
@@ -249,6 +254,8 @@ export const settingsFromRow = (r: SettingsRow): BookingSettings => ({
   cancellationFeeType: r.cancellation_fee_type ?? 'fixed',
   cancellationFeeValue: Number(r.cancellation_fee_value ?? 0),
   cancellationFeeHours: r.cancellation_fee_hours ?? 24,
+  ownerWorks: r.owner_works ?? true,
+  businessTypes: r.business_types ?? [],
 });
 
 const staffFromRow = (r: StaffRow): BookingStaff => ({
@@ -269,7 +276,7 @@ const serviceFromRow = (r: ServiceRow): BookingService => ({
   description: r.description ?? '',
   durationMinutes: r.duration_minutes,
   price: r.price === null ? null : Number(r.price),
-  staffIds: r.staff_ids ?? [],
+  category: r.category ?? '',
   active: r.active,
   sort: r.sort,
 });
@@ -354,7 +361,7 @@ export async function loadBookingsData() {
     const [settings, staff, services, timeOff, bookings, prices] = await Promise.all([
       supabase.from('booking_settings').select('*').maybeSingle<SettingsRow>(),
       supabase.from('booking_staff').select('*').order('sort').order('name'),
-      supabase.from('booking_services').select('id, name, description, duration_minutes, price, staff_ids, active, sort').order('sort').order('name'),
+      supabase.from('booking_services').select('*').order('sort').order('name'),
       supabase
         .from('booking_time_off')
         .select('id, staff_id, starts_at, ends_at, status, note')
@@ -371,7 +378,10 @@ export async function loadBookingsData() {
     bookingsStore.set(bookings);
     // Not there until the staff prices file has been run: everyone pays the usual price.
     staffPricesStore.set(
-      new Map(((prices.data ?? []) as { staff_id: string; service_id: string; price: number | string }[]).map((r) => [priceKey(r.staff_id, r.service_id), Number(r.price)])),
+      new Map(((prices.data ?? []) as { staff_id: string; service_id: string; price: number | string | null }[]).map((r) => [
+          priceKey(r.staff_id, r.service_id),
+          r.price === null ? null : Number(r.price),
+        ])),
     );
     bookingsLoadStore.set('ready');
   } catch (e) {
@@ -451,6 +461,7 @@ function settingsColumns(p: Partial<BookingSettings>) {
   if (p.cancellationFeeType !== undefined) c.cancellation_fee_type = p.cancellationFeeType;
   if (p.cancellationFeeValue !== undefined) c.cancellation_fee_value = p.cancellationFeeValue;
   if (p.cancellationFeeHours !== undefined) c.cancellation_fee_hours = p.cancellationFeeHours;
+  if (p.ownerWorks !== undefined) c.owner_works = p.ownerWorks;
   return c;
 }
 
@@ -469,6 +480,19 @@ export async function updateBookingSettings(changes: Partial<BookingSettings>): 
   if (error.code === '23505') return 'That link name is already taken. Please try another.';
   return friendly(error.message);
 }
+
+/**
+ * "Do you do the work yourself?" Yes = the owner is on the booking page and has
+ * a schedule; No = they aren't and don't (the database turns their staff row on/off).
+ */
+export async function setOwnerWorks(works: boolean): Promise<string | null> {
+  const error = await updateBookingSettings({ ownerWorks: works });
+  if (!error) bookingStaffStore.set((list) => list.map((s) => (s.isOwner ? { ...s, active: works } : s)));
+  return error;
+}
+
+/** Whether the owner shows on the calendar and booking page (they do the work themselves). */
+export const ownerWorks = (settings: BookingSettings | null) => settings?.ownerWorks ?? true;
 
 /** A link name from what the owner typed: "Jo's Cuts!" -> "jos-cuts". */
 export function cleanSlug(text: string) {
@@ -492,7 +516,7 @@ export async function saveService(draft: ServiceDraft): Promise<string | null> {
     description: draft.description.trim(),
     duration_minutes: draft.durationMinutes,
     price: draft.price,
-    staff_ids: draft.staffIds,
+    category: draft.category.trim(),
     active: draft.active,
     updated_at: new Date().toISOString(),
   };
@@ -662,12 +686,6 @@ export function bookingsOnDay(bookings: Booking[], dateKey: string, timeZone: st
   );
 }
 
-/** Who can do a service (everyone when it has no staff list), only those who can be booked. */
-export function staffForService(service: BookingService | null | undefined, staff: BookingStaff[]) {
-  const active = staff.filter((s) => s.active);
-  if (!service || service.staffIds.length === 0) return active;
-  return active.filter((s) => service.staffIds.includes(s.id));
-}
 
 // ---------------------------------------------------------------------------
 // Money in the business's own currency (AUD, GBP, USD...)
@@ -755,36 +773,102 @@ export function reminderText(b: Booking) {
 }
 
 // ---------------------------------------------------------------------------
-// Staff prices: a staff member's own price for a service (else the usual price)
+// Who does which service, at what price (see 20261125000000_bookings_staff_services.sql)
+// A row = this person does it; its price is theirs (blank = the usual price).
 // ---------------------------------------------------------------------------
 
 export const priceKey = (staffId: string, serviceId: string) => `${staffId}:${serviceId}`;
 
+/** Whether this person does the service (ticked in My Services & Prices). */
+export const doesService = (staffId: string, serviceId: string, prices: Map<string, number | null>) => prices.has(priceKey(staffId, serviceId));
+
 /** What this person charges for the service: their own price, or the service's usual price. */
-export function priceFor(service: Pick<BookingService, 'id' | 'price'>, staffId: string | null, prices: Map<string, number>) {
+export function priceFor(service: Pick<BookingService, 'id' | 'price'>, staffId: string | null, prices: Map<string, number | null>) {
   if (!staffId) return service.price;
   const own = prices.get(priceKey(staffId, service.id));
-  return own === undefined ? service.price : own;
+  return own === undefined || own === null ? service.price : own;
 }
 
-/** Owner: set a staff member's own price for a service, or null to use the usual price. */
-export async function setStaffPrice(staffId: string, serviceId: string, price: number | null): Promise<string | null> {
+/** Bookable people who do the service. */
+export function staffForService(service: BookingService | null | undefined, staff: BookingStaff[], prices = staffPricesStore.get()) {
+  if (!service) return staff.filter((s) => s.active);
+  return staff.filter((s) => s.active && doesService(s.id, service.id, prices));
+}
+
+/**
+ * A person does (or stops doing) a service, at their own price (null = the usual
+ * price). Staff change their own; the owner can change anyone's.
+ */
+export async function setStaffService(staffId: string, serviceId: string, does: boolean, price: number | null): Promise<string | null> {
   const id = businessId();
   if (!id) return 'Bookings aren’t set up yet.';
-  const { error } =
-    price === null
-      ? await supabase.from('booking_staff_prices').delete().eq('staff_id', staffId).eq('service_id', serviceId)
-      : await supabase
-          .from('booking_staff_prices')
-          .upsert({ staff_id: staffId, service_id: serviceId, business_id: id, price, updated_at: new Date().toISOString() });
-  if (error) return error.code === '42P01' ? 'Staff prices aren’t set up yet. Run the staff prices database file first.' : friendly(error.message);
+  const { error } = !does
+    ? await supabase.from('booking_staff_prices').delete().eq('staff_id', staffId).eq('service_id', serviceId)
+    : await supabase
+        .from('booking_staff_prices')
+        .upsert({ staff_id: staffId, service_id: serviceId, business_id: id, price, updated_at: new Date().toISOString() });
+  if (error) return error.code === '42P01' ? 'Staff services aren’t set up yet. Run the database file first.' : friendly(error.message);
   staffPricesStore.set((map) => {
     const next = new Map(map);
-    if (price === null) next.delete(priceKey(staffId, serviceId));
+    if (!does) next.delete(priceKey(staffId, serviceId));
     else next.set(priceKey(staffId, serviceId), price);
     return next;
   });
   return null;
+}
+
+/** The services in the order customers see them. */
+export const sortedServices = (list: BookingService[]) => [...list].sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
+
+/** Moves a service up or down past the next one in its category (the order customers see). */
+export async function moveService(serviceId: string, direction: -1 | 1): Promise<string | null> {
+  const before = sortedServices(bookingServicesStore.get());
+  const i = before.findIndex((x) => x.id === serviceId);
+  if (i < 0) return null;
+  const same = (x: BookingService) => x.category.trim() === before[i].category.trim() && x.active === before[i].active;
+  let j = i + direction;
+  while (j >= 0 && j < before.length && !same(before[j])) j += direction;
+  if (j < 0 || j >= before.length) return null;
+  const list = [...before];
+  [list[i], list[j]] = [list[j], list[i]];
+  const renumbered = list.map((x, n) => ({ ...x, sort: n }));
+  const changed = renumbered.filter((x) => before.find((y) => y.id === x.id)?.sort !== x.sort);
+  bookingServicesStore.set(renumbered);
+  const results = await Promise.all(changed.map((x) => supabase.from('booking_services').update({ sort: x.sort }).eq('id', x.id)));
+  const failed = results.find((r) => r.error);
+  if (failed?.error) {
+    bookingServicesStore.set(before);
+    return friendly(failed.error.message);
+  }
+  return null;
+}
+
+/**
+ * Saves the booking choices from owner sign-up, once the business exists: the
+ * business types, "do you do the work yourself?", and the services (each
+ * staff member, including the owner, gets them at the usual price).
+ */
+export async function saveBookingSignup(
+  forBusinessId: string,
+  choices: { typeIds: string[]; ownerWorks: boolean; services: { name: string; minutes: number; price: number | null; category: string }[] },
+): Promise<string | null> {
+  const { error: settingsError } = await supabase
+    .from('booking_settings')
+    .update({ owner_works: choices.ownerWorks, business_types: choices.typeIds, updated_at: new Date().toISOString() })
+    .eq('business_id', forBusinessId);
+  if (settingsError) return friendly(settingsError.message);
+  if (choices.services.length === 0) return null;
+  const { error } = await supabase.from('booking_services').insert(
+    choices.services.map((x, n) => ({
+      business_id: forBusinessId,
+      name: x.name.trim().slice(0, 100),
+      duration_minutes: x.minutes,
+      price: x.price,
+      category: x.category.slice(0, 100),
+      sort: n,
+    })),
+  );
+  return error ? friendly(error.message) : null;
 }
 
 // ---------------------------------------------------------------------------

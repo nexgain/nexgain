@@ -19,6 +19,7 @@ import {
 } from '@/systems/bookings/data/booking-time';
 import {
   addManualBooking,
+  doesService,
   formatPrice,
   depositText,
   moveBooking,
@@ -30,6 +31,7 @@ import {
   useBookingSettings,
   useBookingStaff,
   useBusinessTimeZone,
+  useStaffPrices,
   type BookingStatus,
 } from '@/systems/bookings/data/bookings';
 
@@ -76,11 +78,12 @@ function NewBooking({ date: startDate, staffId: startStaff, time: startTime }: {
   const timeZone = useBusinessTimeZone();
   const services = useBookingServices().filter((s) => s.active);
   const staff = useBookingStaff();
+  const prices = useStaffPrices();
   const [serviceId, setServiceId] = useState<string>(
-    services.find((s) => !startStaff || s.staffIds.length === 0 || s.staffIds.includes(startStaff))?.id ?? services[0]?.id ?? '',
+    services.find((s) => !startStaff || doesService(startStaff, s.id, prices))?.id ?? services[0]?.id ?? '',
   );
   const service = services.find((s) => s.id === serviceId) ?? null;
-  const who = staffForService(service, staff);
+  const who = staffForService(service, staff, prices);
   const [staffId, setStaffId] = useState<string>(startStaff && who.some((s) => s.id === startStaff) ? startStaff : (who[0]?.id ?? ''));
   const [date, setDate] = useState(startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? startDate : todayIn(timeZone));
   const [time, setTime] = useState(startTime && /^\d{2}:\d{2}$/.test(startTime) ? startTime : '09:00');
@@ -105,12 +108,12 @@ function NewBooking({ date: startDate, staffId: startStaff, time: startTime }: {
 
   function pickService(id: string) {
     setServiceId(id);
-    const nextWho = staffForService(services.find((s) => s.id === id), staff);
+    const nextWho = staffForService(services.find((s) => s.id === id), staff, prices);
     if (!nextWho.some((s) => s.id === staffId)) setStaffId(nextWho[0]?.id ?? '');
   }
 
   async function save() {
-    if (!staffId) return setMessage({ tone: 'error', text: 'Nobody can do this service. Check its staff in Bookings Settings.' });
+    if (!staffId) return setMessage({ tone: 'error', text: 'Nobody does this service yet. Tick it for someone in Employees › their profile › Services & Prices.' });
     setBusy(true);
     const error = await addManualBooking({
       serviceId,

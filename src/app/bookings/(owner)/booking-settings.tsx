@@ -22,6 +22,7 @@ import {
   bookingLink,
   cleanSlug,
   removeTimeOff,
+  setOwnerWorks,
   updateBookingSettings,
   useBookingServices,
   useBookingSettings,
@@ -180,7 +181,11 @@ export default function BookingSettingsScreen() {
       </Card>
 
       <Card title="Opening Hours" icon={OwnerIcons.clock}>
-        <Text style={styles.muted}>When you (the owner) can be booked, in {timeZoneLabel(timeZone)} time. Staff can be booked when they’re rostered on.</Text>
+        <Text style={styles.muted}>
+          {settings.ownerWorks
+            ? `When you (the owner) can be booked, in ${timeZoneLabel(timeZone)} time. Staff can be booked when they’re rostered on.`
+            : `Your opening hours, in ${timeZoneLabel(timeZone)} time. Staff can be booked when they’re rostered on.`}
+        </Text>
         <WeekHours
           days={settings.openingHours.map((d) => ({ on: d.open, start: d.start, end: d.end }))}
           onLabel="Open"
@@ -190,12 +195,31 @@ export default function BookingSettingsScreen() {
       </Card>
 
       <Card title="Staff" icon={OwnerIcons.people}>
-        <Text style={styles.muted}>Who customers can book and their days off. Staff can be booked when they’re rostered on (Roster).</Text>
+        <SwitchRow
+          label="Do you do the work yourself?"
+          hint={
+            settings.ownerWorks
+              ? 'Yes: you’re on your booking page with your own services, prices and schedule.'
+              : 'No: you aren’t on your booking page and have no schedule. Customers book your staff.'
+          }
+          value={settings.ownerWorks}
+          onChange={async (works) => {
+            const error = await setOwnerWorks(works);
+            setMessage(
+              error
+                ? { tone: 'error', text: error }
+                : { tone: 'ok', text: works ? 'Customers can book you now.' : 'You’re off the booking page. Customers book your staff.' },
+            );
+          }}
+        />
+        <Text style={styles.muted}>Who customers can book, their services and prices, and their days off. Staff can be booked when they’re rostered on (Roster).</Text>
         {staff.map((s, i) => (
           <ListRow
             key={s.id}
             title={s.isOwner ? `${s.name} (you)` : s.name}
-            subtitle={!s.active ? 'Can’t be booked' : s.isOwner ? 'Bookable in your opening hours' : 'Bookable when rostered'}
+            subtitle={
+              s.isOwner && !s.active ? 'Doesn’t do the work' : !s.active ? 'Can’t be booked' : s.isOwner ? 'Bookable in your opening hours' : 'Bookable when rostered'
+            }
             muted={!s.active}
             showDivider={i > 0}
             onPress={() => router.push({ pathname: '/bookings/booking-staff/[id]', params: { id: s.id } })}

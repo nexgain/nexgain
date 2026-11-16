@@ -46,6 +46,7 @@ export default function EmployeeLayout() {
           <Stack.Screen name="account/[section]" options={{ title: '' }} />
           <Stack.Screen name="availability" options={{ title: 'My Availability', ...menuPage }} />
           <Stack.Screen name="booking-hours" options={{ title: 'My Days Off' }} />
+          <Stack.Screen name="my-services" options={{ title: 'My Services & Prices' }} />
           <Stack.Screen name="profile" options={{ title: 'My Profile', ...menuPage }} />
           <Stack.Screen name="super-details" options={{ title: 'Super Details' }} />
           <Stack.Screen name="payslip/[id]" options={{ title: 'Payslip' }} />

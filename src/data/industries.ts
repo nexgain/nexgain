@@ -1,7 +1,7 @@
 // Built-in list of industries used by owner sign-up: the smart industry
 // search, pre-filled business details and recommended services.
-// `lines` are service businesses (System 1); `bookings` are businesses whose
-// customers book appointments (System 2, NexGain Bookings).
+// These are service businesses (System 1). Booking businesses (System 2,
+// NexGain Bookings) have their own list: src/systems/bookings/constants/booking-business-types.ts.
 // Each line: 'Industry name | search keywords | Service, Service, ...'
 // Services are listed most common first; the first few are ticked by default.
 import type { SymbolViewProps } from 'expo-symbols';
@@ -162,16 +162,6 @@ const CATEGORIES: Category[] = [
       'Cosmetic Tattooing | brows microblading cosmetic tattoo | Microblading, Lip Blush, Eyeliner Tattoo, Touch Ups',
       'Mobile Hairdresser | hairdresser mobile hair | Home Haircuts, Hair Colouring, Aged Care Visits, Event Styling',
     ],
-    bookings: [
-      'Hair Salon | hairdresser hair salon stylist hairdressing | Haircuts, Hair Colouring, Highlights, Blow Dry & Styling, Hair Treatments, Bridal Hair, Keratin Smoothing',
-      'Barber | barbershop barber haircut men fade fades | Men\'s Haircuts, Fades, Beard Trims, Hot Towel Shaves, Kids Cuts',
-      'Beauty & Make-up Artist | beauty salon therapist beautician makeup make-up mua artist | Facials, Waxing, Lash Tint, Brow Shaping, Spray Tans, Skin Treatments',
-      'Nail Salon | nails nail salon manicure pedicure technician | Manicures, Pedicures, Gel Nails, Acrylic Nails, Nail Art, Nail Removal',
-      'Lash & Brow | eyelash lash extensions brows | Lash Extensions, Lash Lift, Brow Lamination, Brow Tint, Lash Infills',
-      'Skin Clinic | skin clinic laser dermal | Skin Consultations, Laser Treatments, Chemical Peels, Microneedling, Anti-Ageing Treatments',
-      'Tattoo & Piercing | tattoo artist ink piercing piercer piercings studio | Custom Tattoos, Flash Tattoos, Cover Ups, Tattoo Touch Ups, Ear Piercing, Body Piercing',
-      'Day Spa | spa day spa relaxation pamper | Spa Packages, Massages, Facials, Body Treatments, Couples Packages, Manicures & Pedicures',
-    ],
   },
   {
     name: 'Health & Wellness',
@@ -190,11 +180,6 @@ const CATEGORIES: Category[] = [
       'Acupuncture | acupuncturist chinese medicine | Acupuncture Sessions, Cupping, Chinese Herbal Medicine',
       'Optometry | optometrist eyes glasses | Eye Tests, Contact Lens Fitting, Glasses, Children\'s Vision',
     ],
-    bookings: [
-      'Massage | massage remedial therapist therapy | Remedial Massage, Relaxation Massage, Sports Massage, Pregnancy Massage, Mobile Massage',
-      'Physio | physio physiotherapist rehab physiotherapy | Initial Assessments, Treatment Sessions, Sports Injuries, Rehabilitation, Dry Needling',
-      'Chiropractor | chiropractor chiro spine chiropractic | Chiropractic Adjustments, Initial Consultations, Posture Assessments, Sports Chiropractic',
-    ],
   },
   {
     name: 'Fitness',
@@ -208,11 +193,6 @@ const CATEGORIES: Category[] = [
       'Dance School | dance classes teacher | Kids Dance Classes, Adult Dance Classes, Private Dance Lessons, Wedding Dance',
       'Sports Coaching | coach sports coaching | Private Coaching, Group Clinics, Holiday Camps, Team Training',
       'Golf Instruction | golf lessons coach | Private Golf Lessons, Group Clinics, Club Fitting',
-    ],
-    bookings: [
-      'Personal Trainer | personal trainer pt fitness gym coach training | 1-on-1 Training, Group Training, Online Coaching, Nutrition Coaching, Fitness Assessments, Outdoor Bootcamps',
-      'Fitness Classes & Studio | fitness classes class studio bootcamp hiit group | Group Classes, Bootcamp, HIIT Classes, Class Packs, Intro Sessions, Private Sessions',
-      'Yoga & Pilates | yoga pilates reformer instructor teacher studio | Group Yoga Classes, Reformer Classes, Mat Pilates, Private Sessions, Workshops, Clinical Pilates',
     ],
   },
   {
@@ -230,9 +210,6 @@ const CATEGORIES: Category[] = [
       'Mobile Vet | vet mobile veterinarian | Home Vet Consultations, Vaccinations, In-Home Euthanasia',
       'Horse Services | equine farrier horse | Farrier Services, Horse Training, Agistment, Horse Float Transport',
       'Aquarium Services | aquarium fish tank | Aquarium Setup, Tank Cleaning, Aquarium Maintenance',
-    ],
-    bookings: [
-      'Dog Groomer | dog groomer pet grooming wash | Full Groom, Wash & Dry, Nail Clipping, Mobile Grooming, De-shedding, Puppy Groom',
     ],
   },
   {
@@ -285,10 +262,6 @@ const CATEGORIES: Category[] = [
       'Copywriting | writer content copywriter | Website Copy, Blog Writing, Marketing Copy, Editing & Proofreading',
       'Picture Framing | framing framer frames | Custom Framing, Canvas Stretching, Mirror Framing',
     ],
-    bookings: [
-      'Photographer | photographer photos photo photography | Wedding Photography, Portrait Sessions, Event Photography, Commercial Photography, Real Estate Photography, Product Photography',
-      'Music Teacher | music teacher piano guitar singing lessons | Piano Lessons, Guitar Lessons, Singing Lessons, Drum Lessons',
-    ],
   },
   {
     name: 'Professional Services',
@@ -325,10 +298,6 @@ const CATEGORIES: Category[] = [
       'Language School | languages language lessons | Group Language Classes, Private Language Lessons, Online Language Classes',
       'Training & Workshops | trainer workshops courses first aid | Workshops, Corporate Training, First Aid Courses, Online Courses',
     ],
-    bookings: [
-      'Tutor | tutor tutoring lessons | Maths Tutoring, English Tutoring, Science Tutoring, Exam Preparation, Online Tutoring',
-      'Driving Instructor | driving instructor lessons school | Driving Lessons, Driving Test Preparation, Automatic Lessons, Manual Lessons',
-    ],
   },
   {
     name: 'Transport & Logistics',
@@ -354,14 +323,6 @@ const CATEGORIES: Category[] = [
       'Home Nursing | nurse nursing home nursing | Home Nursing, Wound Care, Medication Management, Post-Hospital Care',
       'Funeral Services | funeral director funerals | Funeral Arrangements, Cremations, Memorial Services, Pre-Paid Funerals',
     ],
-  },
-  {
-    name: 'Other Bookings',
-    icon: { ios: 'calendar', android: 'event', web: 'event' },
-    businessType: 'Sole Trader',
-    vehicles: '0',
-    lines: [],
-    bookings: ['Other (needs bookings) | other appointments appointment bookings booking | Appointments, Consultations, Follow-up Appointments, Packages'],
   },
 ];
 

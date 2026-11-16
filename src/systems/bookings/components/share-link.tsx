@@ -1,6 +1,5 @@
-// NexGain Bookings: a booking link with Copy, Share and a QR code. Used by the
-// owner's business link and each staff member's personal link, and by staff
-// for their own link. No card around it, so it fits owner and employee screens.
+// NexGain Bookings: the booking link with Copy, Share and a QR code. Used on
+// the owner's and staff screens. No card around it, so it fits both.
 import { useMemo, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import { Linking, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';

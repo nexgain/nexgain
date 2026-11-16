@@ -30,6 +30,8 @@ import { businessUsesSuper } from '@/data/super-rules';
 import { savePayrollBank } from '@/data/pay-runs';
 import { homeFor, type SystemType } from '@/data/systems';
 import { countryNeedsBank, EMPTY_PAYER } from '@/lib/payment-files';
+import { StepBookingServices } from '@/systems/bookings/components/signup/step-booking-services';
+import { saveBookingSignup } from '@/systems/bookings/data/bookings';
 
 const STEPS = [
   { title: 'Create your account', subtitle: "Let's get started. Create your NexGain owner account." },
@@ -47,6 +49,7 @@ const TEAM_STEP = 7;
 
 /** Which system the business uses: the chosen industry's, or the owner's choice for their own industry. */
 function systemOfSignup(data: SignupData): SystemType {
+  if (data.systemType === 'bookings' && data.bookingTypes.length > 0) return 'bookings';
   const industry = data.industry?.category ? findIndustry(data.industry.name) : null;
   return industry?.system ?? (data.systemType === 'bookings' ? 'bookings' : 'service');
 }
@@ -138,6 +141,17 @@ export default function OwnerSignupScreen() {
       });
       await saveBusinessPayment().catch((e) => console.warn('Could not save bank details:', e.message));
       if (business.id) await saveSignupApps(business.id, data.apps);
+      // NexGain Bookings: the business types, "do you do the work yourself?" and the services.
+      if (business.id && systemOfSignup(data) === 'bookings') {
+        const saved = await saveBookingSignup(business.id, {
+          typeIds: data.bookingTypes,
+          ownerWorks: data.ownerWorks ?? true,
+          services: data.bookingServices
+            .filter((x) => x.selected && x.name.trim())
+            .map((x) => ({ name: x.name, minutes: x.minutes, price: x.price, category: x.category })),
+        });
+        if (saved) console.warn('Your services were not saved; they can be added in Services & Prices.', saved);
+      }
       // New Zealand: the owner's bank decides which payroll file to make (changeable in Payroll bank details).
       if (business.id && countryNeedsBank(data.country) && data.bank) {
         await savePayrollBank({ ...EMPTY_PAYER, country: data.country, bankName: data.bank }).catch(() =>
@@ -226,7 +240,7 @@ export default function OwnerSignupScreen() {
       {step === 0 && <StepAccount {...stepProps} />}
       {step === 1 && <StepBusiness {...stepProps} />}
       {step === 2 && <StepType {...stepProps} />}
-      {step === 3 && <StepServices {...stepProps} />}
+      {step === 3 && (systemOfSignup(data) === 'bookings' ? <StepBookingServices {...stepProps} /> : <StepServices {...stepProps} />)}
       {step === 4 && <StepSubscription {...stepProps} />}
       {step === 5 && <StepFinancial {...stepProps} />}
       {step === 6 && <StepConnect {...stepProps} accountCreated={accountCreated} ensureAccount={async () => accountCreated || createAccount()} />}

@@ -7,6 +7,7 @@ import { Button, Field, Icon, Input, SignupColors as C, type IconName } from '@/
 import { IndustrySearch } from '@/components/signup/industry-search';
 import type { StepProps } from '@/components/signup/types';
 import type { SystemType } from '@/data/systems';
+import { BookingTypePicker } from '@/systems/bookings/components/signup/booking-type-picker';
 
 /** The two NexGain systems, chosen before the industry (see src/data/systems.ts). */
 const SYSTEMS: { id: SystemType; title: string; subtitle: string; icon: IconName }[] = [
@@ -42,7 +43,13 @@ export function StepBusiness({ data, update, onNext }: StepProps) {
     businessName: !data.businessName.trim() && 'Enter your business name.',
     abn: abnDigits.length > 0 && abnDigits.length !== 11 && 'An ABN has 11 digits.',
     systemType: !data.systemType && 'Choose what your business needs.',
-    industry: !data.industry && 'Search for your industry and choose one from the list (or use your own).',
+    industry:
+      !data.industry &&
+      (data.systemType === 'bookings'
+        ? data.bookingTypes.length
+          ? 'Type your type of business.'
+          : 'Choose your type of business.'
+        : 'Search for your industry and choose one from the list (or use your own).'),
   };
 
   async function pickLogo() {
@@ -134,7 +141,7 @@ export function StepBusiness({ data, update, onNext }: StepProps) {
                 key={system.id}
                 onPress={() =>
                   // Switching clears the industry: each choice has its own list.
-                  selected ? undefined : update({ systemType: system.id, industry: null, industryText: '' })
+                  selected ? undefined : update({ systemType: system.id, industry: null, industryText: '', bookingTypes: [] })
                 }
                 accessibilityRole="radio"
                 accessibilityState={{ selected }}
@@ -154,7 +161,11 @@ export function StepBusiness({ data, update, onNext }: StepProps) {
         </View>
       </Field>
 
-      {data.systemType && (
+      {data.systemType === 'bookings' && (
+        <BookingTypePicker data={data} update={update} hasError={tried && !!errors.industry} error={tried && errors.industry} />
+      )}
+
+      {data.systemType === 'service' && (
         <Field label="Business industry" error={tried && errors.industry}>
           <IndustrySearch
             system={data.systemType}

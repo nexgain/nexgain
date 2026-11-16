@@ -4,16 +4,20 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ConfirmDialog } from '@/systems/bookings/components/owner/confirm-dialog';
 import { ChoiceRow, SaveNote } from '@/systems/bookings/components/owner/booking-ui';
-import { Checkbox, FormField, SwitchRow, TextField } from '@/systems/bookings/components/owner/form';
+import { FormField, SwitchRow, TextField } from '@/systems/bookings/components/owner/form';
 import { Button, Card, goBack, OwnerScreen, PageHeader } from '@/systems/bookings/components/owner/ui';
 import { Colors as C, Spacing } from '@/constants/theme';
 import { formatDuration } from '@/systems/bookings/data/booking-time';
 import {
   currencyCode,
   deleteService,
+  formatPrice,
+  priceFor,
   saveService,
+  staffForService,
   useBookingServices,
   useBookingStaff,
+  useStaffPrices,
   type BookingService,
 } from '@/systems/bookings/data/bookings';
 
@@ -30,7 +34,7 @@ function parsePrice(text: string): number | null | undefined {
   return Number(t);
 }
 
-// Bookings settings > a service: its name, length, price and who does it.
+// Bookings settings > a service: its name, category, length and usual price.
 export default function BookingServiceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const services = useBookingServices();
@@ -42,7 +46,9 @@ export default function BookingServiceScreen() {
   const [description, setDescription] = useState(existing?.description ?? '');
   const [duration, setDuration] = useState(existing?.durationMinutes ?? 30);
   const [price, setPrice] = useState(existing?.price === null || existing?.price === undefined ? '' : String(existing.price));
-  const [staffIds, setStaffIds] = useState<string[]>(existing?.staffIds ?? []);
+  const [category, setCategory] = useState(existing?.category ?? '');
+  const prices = useStaffPrices();
+  const categories = [...new Set(services.map((s) => s.category.trim()).filter(Boolean))];
   const [active, setActive] = useState(existing?.active ?? true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
@@ -59,10 +65,7 @@ export default function BookingServiceScreen() {
     );
   }
 
-  const everyone = staffIds.length === 0;
-  function toggleStaff(staffId: string) {
-    setStaffIds((ids) => (ids.includes(staffId) ? ids.filter((x) => x !== staffId) : [...ids, staffId]));
-  }
+  const doers = existing ? staffForService(existing, staff, prices) : [];
 
   async function save() {
     const parsed = parsePrice(price);
@@ -75,8 +78,7 @@ export default function BookingServiceScreen() {
       description,
       durationMinutes: duration,
       price: parsed,
-      // Anyone who has since left isn't kept on the list.
-      staffIds: staffIds.filter((sid) => staff.some((s) => s.id === sid)),
+      category,
       active,
     };
     const error = await saveService(draft);
@@ -112,6 +114,29 @@ export default function BookingServiceScreen() {
             accessibilityLabel="Service description"
           />
         </FormField>
+        <FormField label="Category (optional)">
+          <TextField
+            value={category}
+            onChangeText={setCategory}
+            placeholder="e.g. Barber, Colour, Kids"
+            maxLength={100}
+            accessibilityLabel="Category"
+          />
+        </FormField>
+        {categories.length > 0 && (
+          <View style={styles.chips}>
+            {categories.map((c) => (
+              <Pressable
+                key={c}
+                onPress={() => setCategory(c)}
+                accessibilityRole="button"
+                accessibilityLabel={`Category ${c}`}
+                style={[styles.chip, category.trim() === c && styles.chipOn]}>
+                <Text style={[styles.chipText, category.trim() === c && styles.chipTextOn]}>{c}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
         <ChoiceRow label="How long it takes" choices={DURATIONS} value={duration} onChange={setDuration} />
         <FormField label={`Price (${currencyCode()})`}>
           <TextField
@@ -132,29 +157,24 @@ export default function BookingServiceScreen() {
       </Card>
 
       <Card title="Who Does It">
-        <Pressable
-          onPress={() => setStaffIds([])}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: everyone }}
-          style={styles.check}>
-          <Checkbox checked={everyone} />
-          <Text style={styles.title}>Everyone</Text>
-        </Pressable>
-        {staff.map((s) => {
-          const checked = !everyone && staffIds.includes(s.id);
-          return (
-            <Pressable
-              key={s.id}
-              onPress={() => toggleStaff(s.id)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked }}
-              style={[styles.check, styles.divider]}>
-              <Checkbox checked={checked} />
-              <Text style={styles.title}>{s.isOwner ? `${s.name} (you)` : s.name}</Text>
-            </Pressable>
-          );
-        })}
-        <Text style={styles.muted}>Customers only see the people who do this service.</Text>
+        {isNew ? (
+          <Text style={styles.muted}>
+            Everyone gets a new service at this price. Each person can untick it or set their own price in their Services & Prices.
+          </Text>
+        ) : doers.length === 0 ? (
+          <Text style={styles.muted}>Nobody does this yet, so customers can’t book it. Tick it on someone’s Services & Prices.</Text>
+        ) : (
+          doers.map((s, i) => {
+            const own = priceFor(existing!, s.id, prices);
+            return (
+              <View key={s.id} style={[styles.check, i > 0 && styles.divider]}>
+                <Text style={[styles.title, styles.flex]}>{s.isOwner ? `${s.name} (you)` : s.name}</Text>
+                <Text style={styles.title}>{own === null ? 'No price' : formatPrice(own)}</Text>
+              </View>
+            );
+          })
+        )}
+        {!isNew && <Text style={styles.muted}>People choose their own services and prices. Change them on each person’s profile.</Text>}
       </Card>
 
       <SaveNote message={message} />
@@ -189,6 +209,11 @@ const styles = StyleSheet.create({
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.border },
   row: { flexDirection: 'row', gap: Spacing.two },
   flex: { flex: 1 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.one, marginTop: -Spacing.one },
+  chip: { borderWidth: 1, borderColor: C.border, borderRadius: 999, paddingHorizontal: Spacing.two, minHeight: 36, justifyContent: 'center' },
+  chipOn: { borderColor: C.accent, backgroundColor: C.accentSoft },
+  chipText: { color: C.text, fontSize: 14 },
+  chipTextOn: { color: C.accent, fontWeight: '600' },
   deleteRow: { alignItems: 'center', paddingVertical: Spacing.three },
   delete: { color: C.danger, fontSize: 15, fontWeight: '600' },
 });

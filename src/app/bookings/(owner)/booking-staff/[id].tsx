@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { StaffLinkCard } from '@/systems/bookings/components/owner/booking-link-card';
 import { StaffPricesCard } from '@/systems/bookings/components/owner/staff-prices-card';
 import { SaveNote } from '@/systems/bookings/components/owner/booking-ui';
 import { DateField, FormField, SwitchRow, TextField } from '@/systems/bookings/components/owner/form';
@@ -13,6 +12,7 @@ import { addDays, format12h, formatDayKey, todayIn, zonedParts, zonedToIso } fro
 import {
   addTimeOff,
   removeTimeOff,
+  setOwnerWorks,
   setTimeOffStatus,
   updateStaff,
   useBookingSettings,
@@ -29,8 +29,9 @@ const toDate = (key: string) => {
 };
 const toKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-// Bookings settings > a staff member: the name customers see, whether they can
-// be booked, their own working hours and their days off.
+// Bookings settings > a staff member: their services and prices, the name
+// customers see, whether they can be booked (for the owner: "Do you do the work
+// yourself?"), when they can be booked and their days off.
 export default function BookingStaffScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const person = useBookingStaff().find((s) => s.id === id) ?? null;
@@ -87,8 +88,7 @@ export default function BookingStaffScreen() {
       <PageHeader onBack={() => goBack('/bookings/booking-settings')} title={person.isOwner ? `${person.name} (you)` : person.name} />
       <SaveNote message={message} />
 
-      <StaffPricesCard person={person} />
-      <StaffLinkCard person={person} />
+      {person.isOwner && !person.active ? null : <StaffPricesCard person={person} />}
 
       <Card title="Booking Page" icon={OwnerIcons.person}>
         <FormField label="Name customers see">
@@ -101,19 +101,35 @@ export default function BookingStaffScreen() {
             accessibilityLabel="Name customers see"
           />
         </FormField>
-        <SwitchRow
-          label="Can be booked online"
-          hint={person.active ? 'Shown on your booking page.' : 'Hidden: customers can’t book them.'}
-          value={person.active}
-          onChange={async (active) => report(await updateStaff(person.id, { active }), active ? 'They can be booked again.' : 'They can’t be booked now.')}
-        />
+        {person.isOwner ? (
+          <SwitchRow
+            label="Do you do the work yourself?"
+            hint={
+              person.active
+                ? 'Yes: you’re on your booking page with your own services, prices and schedule.'
+                : 'No: you aren’t on your booking page and have no schedule or appointments. Customers book your staff.'
+            }
+            value={person.active}
+            onChange={async (works) =>
+              report(await setOwnerWorks(works), works ? 'Customers can book you now.' : 'You’re off the booking page. Customers book your staff.')
+            }
+          />
+        ) : (
+          <SwitchRow
+            label="Can be booked online"
+            hint={person.active ? 'Shown on your booking page.' : 'Hidden: customers can’t book them.'}
+            value={person.active}
+            onChange={async (active) => report(await updateStaff(person.id, { active }), active ? 'They can be booked again.' : 'They can’t be booked now.')}
+          />
+        )}
       </Card>
 
       <Card title="When They Can Be Booked" icon={OwnerIcons.clock}>
         {person.isOwner ? (
           <Text style={styles.muted}>
-            You can be booked any time you’re open (Opening Hours in Bookings Settings). Turn off “Can be booked online” above, or add days off below, for
-            times you’re away.
+            {person.active
+              ? 'You can be booked any time you’re open (Opening Hours in Bookings Settings). Add days off below for times you’re away.'
+              : 'You don’t do the work yourself, so customers can’t book you. Turn on “Do you do the work yourself?” above to change that.'}
           </Text>
         ) : (
           <>

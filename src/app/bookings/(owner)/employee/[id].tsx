@@ -59,11 +59,10 @@ import { fromDateKey } from '@/data/shifts';
 import { TAX_ESTIMATE_NOTE } from '@/data/tax';
 import { supabase } from '@/lib/supabase';
 import { EmployeeSuperCard } from '@/systems/bookings/components/owner/employee-super-card';
-import { StaffLinkCard } from '@/systems/bookings/components/owner/booking-link-card';
 import { StaffPricesCard } from '@/systems/bookings/components/owner/staff-prices-card';
 import { myStaff, useBookingStaff } from '@/systems/bookings/data/bookings';
 
-// NexGain Bookings adds "Bookings": their own prices and booking link.
+// NexGain Bookings adds "Bookings": the services they do and their own prices.
 const TABS = ['Details', 'Bookings', 'Pay & Payroll', 'Qualifications', 'Documents', 'Availability', 'Job Notes'] as const;
 type Tab = (typeof TABS)[number];
 
@@ -71,7 +70,7 @@ const STATUSES: readonly EmployeeStatus[] = ['active', 'on_leave', 'inactive'];
 
 const dateText = (key: string | null) => (key ? formatShortDate(fromDateKey(key)) : '—');
 
-/** NexGain Bookings: this employee's prices and personal booking link. */
+/** NexGain Bookings: the services this employee does and their own prices. */
 function BookingsTab({ employeeId }: { employeeId: string }) {
   const person = myStaff(useBookingStaff(), employeeId);
   if (!person) {
@@ -81,12 +80,7 @@ function BookingsTab({ employeeId }: { employeeId: string }) {
       </Card>
     );
   }
-  return (
-    <>
-      <StaffPricesCard person={person} />
-      <StaffLinkCard person={person} />
-    </>
-  );
+  return <StaffPricesCard person={person} />;
 }
 
 // One employee's profile, opened from the Employees list or the Roster.

@@ -28,6 +28,7 @@ export function Icon({ name, color, size = 18 }: { name: IconName; color: string
 export const OwnerIcons = {
   chevron: { ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' },
   chevronDown: { ios: 'chevron.down', android: 'expand_more', web: 'expand_more' },
+  chevronUp: { ios: 'chevron.up', android: 'expand_less', web: 'expand_less' },
   calendar: { ios: 'calendar', android: 'calendar_month', web: 'calendar_month' },
   bell: { ios: 'bell.fill', android: 'notifications', web: 'notifications' },
   money: { ios: 'dollarsign.circle.fill', android: 'payments', web: 'payments' },

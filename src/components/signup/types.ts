@@ -4,6 +4,7 @@
 import type { EmailApp } from '@/data/business';
 import type { ChosenApp } from '@/data/business-apps';
 import type { SystemType } from '@/data/systems';
+import type { ServiceDraft } from '@/systems/bookings/constants/booking-business-types';
 
 export type SelectedIndustry = {
   name: string;
@@ -25,6 +26,8 @@ export type SignupData = {
   systemType: SystemType | null;
   industryText: string;
   industry: SelectedIndustry | null;
+  /** NexGain Bookings only: the business types chosen (ids from booking-business-types.ts), main one first. */
+  bookingTypes: string[];
   // Step 3
   businessType: string;
   teamSize: string;
@@ -36,6 +39,12 @@ export type SignupData = {
   services: string[];
   /** Industry the Step 4 services were suggested for. */
   servicesFor: string | null;
+  /** NexGain Bookings only: the services customers can book (name, length, price). */
+  bookingServices: ServiceDraft[];
+  /** The booking types the services were suggested for. */
+  bookingServicesFor: string | null;
+  /** NexGain Bookings only: "Do you do the work yourself?" (null until answered). */
+  ownerWorks: boolean | null;
   // Step 6
   financialYearStartMonth: number;
   gstRegistered: boolean;
@@ -70,6 +79,7 @@ export const EMPTY_SIGNUP: SignupData = {
   systemType: null,
   industryText: '',
   industry: null,
+  bookingTypes: [],
   businessType: 'Service Business',
   teamSize: '1–5',
   vehicles: '0',
@@ -77,6 +87,9 @@ export const EMPTY_SIGNUP: SignupData = {
   prefilledFor: null,
   services: [],
   servicesFor: null,
+  bookingServices: [],
+  bookingServicesFor: null,
+  ownerWorks: null,
   financialYearStartMonth: 7,
   gstRegistered: true,
   currency: 'AUD – Australian Dollar',
