@@ -71,6 +71,8 @@ export type BusinessProfile = {
    * ('service') or NexGain Bookings ('bookings'). Set at sign-up; missing = 'service'.
    */
   systemType?: SystemType;
+  /** Time zone, e.g. "Europe/London". Used by NexGain Bookings; System 1 shows Brisbane time. */
+  timezone?: string;
 };
 
 /**
@@ -207,6 +209,7 @@ type BusinessRow = {
   link_expenses_to_jobs?: boolean | null;
   pay_schedule?: { frequency?: string; start_day?: number; anchor?: string; from?: string | null } | null;
   system_type?: string | null;
+  timezone?: string | null;
 };
 
 export function fromRow(row: BusinessRow): BusinessProfile {
@@ -256,6 +259,7 @@ export function fromRow(row: BusinessRow): BusinessProfile {
     linkExpensesToJobs: row.link_expenses_to_jobs ?? false,
     paySchedule: payScheduleFromRow(row.pay_schedule),
     systemType: row.system_type === 'bookings' ? 'bookings' : 'service',
+    timezone: row.timezone || 'Australia/Brisbane',
   };
 }
 
@@ -283,6 +287,7 @@ function toColumns(p: Partial<BusinessProfile>) {
   if (p.superIncludes !== undefined) cols.pay_item_super = p.superIncludes;
   if (p.manualTaxRate !== undefined) cols.manual_tax_rate = p.manualTaxRate;
   if (p.linkExpensesToJobs !== undefined) cols.link_expenses_to_jobs = p.linkExpensesToJobs;
+  if (p.timezone !== undefined) cols.timezone = p.timezone;
   if (p.paySchedule !== undefined) {
     cols.pay_schedule = {
       frequency: p.paySchedule.frequency,

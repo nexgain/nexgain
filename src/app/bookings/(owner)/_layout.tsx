@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import { OwnerDesktopShell } from '@/systems/bookings/components/owner/owner-desktop-shell';
 import { Colors } from '@/constants/theme';
+import { useBookingsSync } from '@/systems/bookings/data/bookings';
 
 // Owner section: the tab bar ((tabs)/_layout.tsx) with every other owner page
 // (Jobs, Job Details, Business Profile, Reminders, Integrations, Roster...)
@@ -16,6 +17,8 @@ export const unstable_settings = {
 };
 
 export default function OwnerLayout() {
+  // Services, staff, settings and bookings, kept live (a customer booking online shows straight away).
+  useBookingsSync();
   return (
     <>
       {/* Dark status bar icons on the light owner screens. */}

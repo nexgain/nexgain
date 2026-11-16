@@ -46,6 +46,13 @@ export const OwnerIcons = {
   check: { ios: 'checkmark.circle.fill', android: 'check_circle', web: 'check_circle' },
   play: { ios: 'play.fill', android: 'play_arrow', web: 'play_arrow' },
   info: { ios: 'info.circle.fill', android: 'info', web: 'info' },
+  link: { ios: 'link', android: 'link', web: 'link' },
+  copy: { ios: 'doc.on.doc', android: 'content_copy', web: 'content_copy' },
+  share: { ios: 'square.and.arrow.up', android: 'share', web: 'share' },
+  plus: { ios: 'plus', android: 'add', web: 'add' },
+  scissors: { ios: 'scissors', android: 'content_cut', web: 'content_cut' },
+  person: { ios: 'person.fill', android: 'person', web: 'person' },
+  storefront: { ios: 'storefront.fill', android: 'storefront', web: 'storefront' },
 } as const satisfies Record<string, IconName>;
 
 const WIDE_WIDTH = 720;

@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { EmployeeDesktopShell } from '@/systems/bookings/components/employee/employee-desktop-shell';
 import { EmployeeColors as C } from '@/constants/employee-theme';
 import { useIsDesktop } from '@/hooks/use-desktop';
+import { useBookingsSync } from '@/systems/bookings/data/bookings';
 
 // The Employee section uses a light theme; the rest of the app stays dark.
 const employeeNavigationTheme = {
@@ -23,6 +24,8 @@ export const unstable_settings = {
 };
 
 export default function EmployeeLayout() {
+  // Their bookings, kept live (a customer booking them shows straight away).
+  useBookingsSync();
   // On a computer, pages in the side menu are main pages: no back arrow in their header.
   const desktop = useIsDesktop();
   const menuPage = desktop ? { headerLeft: () => null } : {};

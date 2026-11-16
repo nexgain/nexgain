@@ -34,6 +34,7 @@ import { useDocs } from '@/data/invoices';
 import { formatMoney, usePayslipRecords } from '@/data/payroll';
 import { indexReceipts, receiptStatus, useReceipts } from '@/data/receipts';
 import { GstTile } from '@/systems/bookings/components/owner/gst-tile';
+import { BookingLinkCard } from '@/systems/bookings/components/owner/booking-link-card';
 
 const NO_INSIGHTS = 'No insights yet — check back once you have more activity data.';
 
@@ -87,6 +88,8 @@ export default function OwnerDashboardScreen() {
           </Pressable>
         }
       />
+
+      <BookingLinkCard showSettingsLink />
 
       <StatGrid columns={2}>
         <Pressable

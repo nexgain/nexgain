@@ -38,6 +38,12 @@ export default function OwnerMoreScreen() {
             onPress={() => router.navigate({ pathname: '/bookings/alerts', params: { from: 'menu' } } as Href)}
           />
           <ActionRow
+            icon={OwnerIcons.calendar}
+            label="Bookings Settings"
+            onPress={() => router.navigate('/bookings/booking-settings')}
+            showDivider
+          />
+          <ActionRow
             icon={{ ios: 'briefcase.fill', android: 'work', web: 'work' }}
             label="Jobs"
             onPress={() => router.navigate('/bookings/jobs')}
