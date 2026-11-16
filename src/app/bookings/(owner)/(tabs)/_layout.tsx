@@ -52,7 +52,7 @@ export default function OwnerTabsLayout() {
       <Tabs.Screen
         name="calendar"
         options={{
-          title: 'Calendar',
+          title: 'Bookings',
           tabBarIcon: (props) => (
             <TabIcon
               name={{ ios: 'calendar', android: 'calendar_month', web: 'calendar_month' }}

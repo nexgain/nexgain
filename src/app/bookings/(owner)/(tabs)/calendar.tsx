@@ -1,417 +1,370 @@
 import { useState } from 'react';
-import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { EventEditor } from '@/systems/bookings/components/owner/event-editor';
-import { EventRow } from '@/systems/bookings/components/owner/jobs-ui';
-import { Button, Card, Icon, OwnerScreen, PageHeader, TabRow } from '@/systems/bookings/components/owner/ui';
+import { Segmented } from '@/systems/bookings/components/owner/invoices-ui';
+import { Button, Card, EmptyState, Icon, OwnerIcons, OwnerScreen, PageHeader } from '@/systems/bookings/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
-import { WEEKDAY_NAMES } from '@/data/availability';
-import { useBusiness } from '@/data/business';
-import { addDaysKey, todayKey } from '@/data/business-time';
-import { EVENT_TYPE_INFO, EVENT_TYPES, useCalendarEvents, type CalendarEvent, type EventDraft } from '@/data/calendar';
-import { useClients } from '@/data/clients';
-import { useCurrentEmployee } from '@/data/current-employee';
-import { formatShortDate, formatWeekday } from '@/data/employee-roster';
-import { useDocs } from '@/data/invoices';
-import { useJobs, type Job } from '@/data/jobs';
-import { fromDateKey } from '@/data/shifts';
-import { useClearParamsOnLeave } from '@/lib/clear-params';
+import {
+  blockPosition,
+  bookingSpan,
+  dayWindow,
+  HOUR_HEIGHT,
+  timeAtY,
+  timeOffSpans,
+  weekDays,
+} from '@/systems/bookings/data/booking-calendar';
+import {
+  addDays,
+  format12h,
+  formatDayKey,
+  formatTimeIn,
+  minutesOf,
+  timeOfMinutes,
+  todayIn,
+  weekdayOf,
+  zonedParts,
+} from '@/systems/bookings/data/booking-time';
+import {
+  bookingsOnDay,
+  formatPrice,
+  useBookings,
+  useBookingSettings,
+  useBookingsLoad,
+  useBookingStaff,
+  useBusinessTimeZone,
+  useTimeOff,
+  type Booking,
+  type BookingStaff,
+} from '@/systems/bookings/data/bookings';
 
-const VIEWS = ['Month', 'Week', 'Day'] as const;
-type View_ = (typeof VIEWS)[number];
+type CalendarView = 'day' | 'week';
+const VIEWS = [
+  { value: 'day', label: 'Day' },
+  { value: 'week', label: 'Week' },
+] as const;
+const COLUMN_WIDTH = 150;
+const GUTTER = 52;
 
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
+const STATUS_STYLE: Record<Booking['status'], { background: string; border: string; label: string | null }> = {
+  confirmed: { background: C.accentSoft, border: C.accent, label: null },
+  completed: { background: C.successSoft, border: C.success, label: 'Completed' },
+  no_show: { background: C.dangerSoft, border: C.danger, label: 'No-show' },
+  cancelled: { background: C.neutralSoft, border: C.neutral, label: 'Cancelled' },
+};
 
-/** Monday of the week containing `key`. */
-function weekStart(key: string) {
-  return addDaysKey(key, -((fromDateKey(key).getDay() + 6) % 7));
-}
+const openBooking = (id: string) => router.push({ pathname: '/bookings/booking/[id]', params: { id } });
+const addBooking = (params: { date: string; staff?: string; time?: string }) =>
+  router.push({ pathname: '/bookings/booking/[id]', params: { id: 'new', ...params } });
 
-function monthStart(key: string) {
-  return `${key.slice(0, 7)}-01`;
-}
+// Bookings tab (NexGain Bookings): every staff member's bookings by day or
+// week. Tap a booking to see, move or cancel it; tap an empty spot (or "Add")
+// to book a walk-in or phone booking by hand.
+export default function BookingsCalendarScreen() {
+  const timeZone = useBusinessTimeZone();
+  const today = todayIn(timeZone);
+  const [view, setView] = useState<CalendarView>('day');
+  const [day, setDay] = useState(today);
+  const [only, setOnly] = useState<string | null>(null);
+  const bookings = useBookings();
+  const settings = useBookingSettings();
+  const load = useBookingsLoad();
+  const staff = useBookingStaff();
+  const timeOff = useTimeOff();
 
-function addMonths(key: string, n: number) {
-  const d = fromDateKey(monthStart(key));
-  d.setMonth(d.getMonth() + n);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-}
-
-function dayLabel(key: string) {
-  const d = fromDateKey(key);
-  return `${formatWeekday(d)} ${formatShortDate(d)}`;
-}
-
-// The owner's calendar: jobs, material deliveries and other reminders. Owner only.
-export default function CalendarScreen() {
-  const me = useCurrentEmployee();
-  const business = useBusiness();
-  const events = useCalendarEvents();
-  const jobs = useJobs();
-  const clients = useClients();
-  const docs = useDocs();
-  const today = todayKey();
-  const [view, setView] = useState<View_>('Month');
-  const [selected, setSelected] = useState(today);
-  const [draft, setDraft] = useState<EventDraft | null>(null);
-
-  // Opened from a job's delivery list: open that event.
-  const params = useLocalSearchParams<{ event?: string; date?: string }>();
-  const [openedParam, setOpenedParam] = useState<string | null>(null);
-  // Opened from an AI Assistant job card ("View in Calendar"): show that day.
-  const [openedDate, setOpenedDate] = useState<string | null>(null);
-  if (params.date && params.date !== openedDate && /^\d{4}-\d{2}-\d{2}$/.test(params.date)) {
-    setOpenedDate(params.date);
-    setSelected(params.date);
-  } else if (!params.date && openedDate !== null) {
-    setOpenedDate(null);
-  }
-  if (params.event && params.event !== openedParam) {
-    setOpenedParam(params.event);
-    const e = events.find((x) => x.id === params.event);
-    if (e && e.type !== 'job' && e.type !== 'quote') {
-      setSelected(e.date);
-      setDraft(draftFrom(e));
-    }
-  } else if (!params.event && openedParam !== null) {
-    setOpenedParam(null);
-  }
-  useClearParamsOnLeave({ event: params.event, date: params.date });
-
-  if (me) return <Redirect href="/bookings/home" />;
-
-  const clientName = (id: string | null) => clients.find((c) => c.id === id)?.name ?? '';
-  const jobLabel = (job: Job) => [clientName(job.clientId), job.title].filter(Boolean).join(' · ');
-  const on = (key: string) => events.filter((e) => e.date === key);
-
-  function open(e: CalendarEvent) {
-    if (e.type === 'job' && e.jobId) router.push({ pathname: '/bookings/job/[id]', params: { id: e.jobId } });
-    // Quote entries follow their quote: open it to change the date or time.
-    else if (e.type === 'quote' && e.quoteId) router.navigate({ pathname: '/bookings/invoices/[id]', params: { id: e.quoteId } });
-    else if (e.type !== 'quote') setDraft(draftFrom(e));
-  }
-
-  function addNew() {
-    setDraft({
-      type: 'delivery',
-      title: '',
-      date: selected,
-      start: '08:00',
-      end: '09:00',
-      jobId: null,
-      address: '',
-      notes: '',
-      supplier: '',
-      deliveryItems: '',
-    });
-  }
-
-  function subtitle(e: CalendarEvent) {
-    if (e.type === 'job') return clientName(e.clientId) || e.address;
-    if (e.type === 'delivery') return e.supplier || e.address;
-    if (e.type === 'quote') return docs.find((d) => d.id === e.quoteId)?.client.name || e.address;
-    return e.address;
-  }
-
-  const step = (dir: 1 | -1) =>
-    setSelected((s) => (view === 'Month' ? addMonths(s, dir) : addDaysKey(s, view === 'Week' ? 7 * dir : dir)));
-
-  const rangeLabel =
-    view === 'Month'
-      ? `${MONTH_NAMES[fromDateKey(selected).getMonth()]} ${selected.slice(0, 4)}`
-      : view === 'Week'
-        ? `${formatShortDate(fromDateKey(weekStart(selected)), false)} – ${formatShortDate(fromDateKey(addDaysKey(weekStart(selected), 6)))}`
-        : dayLabel(selected);
-
-  const upcoming = events
-    .filter((e) => e.type !== 'other' && e.endsAt >= new Date().toISOString() && e.status !== 'completed' && e.status !== 'cancelled')
-    .slice(0, 6);
-
-  const dayList = (key: string, emptyText = 'Nothing booked.') => {
-    const items = on(key);
-    return items.length === 0 ? (
-      <Text style={styles.muted}>{emptyText}</Text>
-    ) : (
-      items.map((e, i) => <EventRow key={e.id} event={e} subtitle={subtitle(e)} showDivider={i > 0} onPress={() => open(e)} />)
-    );
-  };
+  // Active staff, plus anyone (e.g. who has since left) with a booking showing.
+  const shown = staff.filter((s) => s.active || bookings.some((b) => b.staffId === s.id && b.status !== 'cancelled'));
+  const columns = only ? shown.filter((s) => s.id === only) : shown;
+  const step = view === 'day' ? 1 : 7;
+  const label =
+    view === 'day'
+      ? `${day === today ? 'Today, ' : ''}${formatDayKey(day, true)}`
+      : `${formatDayKey(weekDays(day)[0])} – ${formatDayKey(weekDays(day)[6])}`;
 
   return (
     <OwnerScreen>
       <PageHeader
-        title="Calendar"
-        subtitle="Jobs, deliveries and reminders in one place."
-        right={<Button label="Add Event" icon={{ ios: 'plus', android: 'add', web: 'add' }} onPress={addNew} />}
+        title="Bookings"
+        subtitle="Everyone’s appointments. Online bookings appear here straight away."
+        right={<Button label="Add" icon={OwnerIcons.plus} onPress={() => addBooking({ date: day, staff: only ?? undefined })} />}
       />
 
-      <View style={styles.controls}>
-        <TabRow tabs={VIEWS} active={view} onChange={setView} />
-        <View style={styles.rangeNav}>
-          <NavArrow direction={-1} onPress={() => step(-1)} />
-          <Pressable onPress={() => setSelected(today)} accessibilityRole="button" accessibilityLabel="Go to today" style={styles.flex}>
-            <Text style={styles.rangeLabel}>{rangeLabel}</Text>
-          </Pressable>
-          <NavArrow direction={1} onPress={() => step(1)} />
-        </View>
-        <View style={styles.legend}>
-          {EVENT_TYPES.map((t) => (
-            <View key={t} style={styles.legendItem}>
-              <Icon name={EVENT_TYPE_INFO[t].icon} color={EVENT_TYPE_INFO[t].color} size={13} />
-              <Text style={styles.legendText}>{EVENT_TYPE_INFO[t].label}</Text>
-            </View>
-          ))}
-          <View style={styles.legendItem}>
-            <Icon name={{ ios: 'checkmark', android: 'check', web: 'check' }} color={C.textSecondary} size={13} />
-            <Text style={styles.legendText}>Completed</Text>
-          </View>
-        </View>
+      <Segmented options={VIEWS} value={view} onChange={setView} />
+
+      <View style={styles.nav}>
+        <Pressable onPress={() => setDay(addDays(day, -step))} accessibilityRole="button" accessibilityLabel={`Previous ${view}`} hitSlop={8} style={styles.navButton}>
+          <Icon name={{ ios: 'chevron.left', android: 'chevron_left', web: 'chevron_left' }} color={C.text} size={16} />
+        </Pressable>
+        <Pressable onPress={() => setDay(today)} accessibilityRole="button" accessibilityLabel="Go to today" style={styles.navLabel}>
+          <Text style={styles.navText}>{label}</Text>
+          {day !== today && <Text style={styles.todayLink}>Today</Text>}
+        </Pressable>
+        <Pressable onPress={() => setDay(addDays(day, step))} accessibilityRole="button" accessibilityLabel={`Next ${view}`} hitSlop={8} style={styles.navButton}>
+          <Icon name={OwnerIcons.chevron} color={C.text} size={16} />
+        </Pressable>
       </View>
 
-      {view === 'Month' && (
-        <>
-          <MonthGrid selected={selected} today={today} events={events} onSelect={setSelected} />
-          <Card title={dayLabel(selected)}>{dayList(selected, 'Nothing booked on this day. Tap "Add Event" to add a delivery or reminder.')}</Card>
-        </>
+      {shown.length > 1 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          {[{ id: null as string | null, name: 'Everyone' }, ...shown].map((s) => {
+            const on = only === s.id;
+            return (
+              <Pressable
+                key={s.id ?? 'all'}
+                onPress={() => setOnly(s.id)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+                style={[styles.chip, on && styles.chipOn]}>
+                <Text style={[styles.chipText, on && styles.chipTextOn]}>{s.name}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       )}
 
-      {view === 'Week' &&
-        Array.from({ length: 7 }, (_, i) => addDaysKey(weekStart(selected), i)).map((key) => (
-          <Card key={key} title={`${dayLabel(key)}${key === today ? ' · Today' : ''}`}>
-            {dayList(key)}
-          </Card>
-        ))}
-
-      {view === 'Day' && <Card title={`${dayLabel(selected)}${selected === today ? ' · Today' : ''}`}>{dayList(selected)}</Card>}
-
-      <Card title="Upcoming" icon={{ ios: 'clock.fill', android: 'schedule', web: 'schedule' }}>
-        {upcoming.length === 0 ? (
-          <Text style={styles.muted}>No upcoming jobs or deliveries.</Text>
-        ) : (
-          upcoming.map((e, i) => (
-            <EventRow key={e.id} event={e} subtitle={subtitle(e)} showDate showDivider={i > 0} onPress={() => open(e)} />
-          ))
-        )}
-      </Card>
-
-      {draft && business?.id && (
-        <EventEditor draft={draft} jobs={jobs} jobLabel={jobLabel} businessId={business.id} onClose={() => setDraft(null)} />
+      {load !== 'ready' && bookings.length === 0 ? (
+        <Card>
+          <Text style={styles.muted}>{load === 'error' ? 'Couldn’t load bookings. Check your internet connection.' : 'Loading bookings…'}</Text>
+        </Card>
+      ) : columns.length === 0 ? (
+        <Card>
+          <EmptyState icon={OwnerIcons.people} message="Nobody can be booked yet. Turn on staff in Bookings Settings." />
+        </Card>
+      ) : view === 'day' ? (
+        <DayGrid
+          day={day}
+          today={today}
+          timeZone={timeZone}
+          columns={columns}
+          bookings={bookings}
+          openingDay={settings?.openingHours[weekdayOf(day)]}
+          timeOff={timeOff}
+        />
+      ) : (
+        <WeekList days={weekDays(day)} today={today} timeZone={timeZone} bookings={bookings.filter((b) => !only || b.staffId === only)} staff={staff} />
       )}
     </OwnerScreen>
   );
 }
 
-function draftFrom(e: CalendarEvent): EventDraft {
-  return {
-    id: e.id,
-    type: e.type === 'other' ? 'other' : 'delivery',
-    title: e.title,
-    date: e.date,
-    start: e.start,
-    end: e.end,
-    jobId: e.jobId,
-    address: e.address,
-    notes: e.notes,
-    supplier: e.supplier,
-    deliveryItems: e.deliveryItems,
-  };
-}
-
-function NavArrow({ direction, onPress }: { direction: 1 | -1; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={direction === 1 ? 'Next' : 'Previous'}
-      hitSlop={6}
-      style={({ pressed }) => [styles.navArrow, pressed && styles.pressed]}>
-      <Icon
-        name={
-          direction === 1
-            ? { ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }
-            : { ios: 'chevron.left', android: 'chevron_left', web: 'chevron_left' }
-        }
-        color={C.text}
-        size={14}
-      />
-    </Pressable>
-  );
-}
-
-function MonthGrid({
-  selected,
+function DayGrid({
+  day,
   today,
-  events,
-  onSelect,
+  timeZone,
+  columns,
+  bookings,
+  openingDay,
+  timeOff,
 }: {
-  selected: string;
+  day: string;
   today: string;
-  events: CalendarEvent[];
-  onSelect: (key: string) => void;
+  timeZone: string;
+  columns: BookingStaff[];
+  bookings: Booking[];
+  openingDay: { open: boolean; start: string; end: string } | undefined;
+  timeOff: ReturnType<typeof useTimeOff>;
 }) {
-  const first = monthStart(selected);
-  const gridStart = weekStart(first);
-  const month = first.slice(0, 7);
-  const cells = Array.from({ length: 42 }, (_, i) => addDaysKey(gridStart, i));
-  const weeks = Array.from({ length: 6 }, (_, w) => cells.slice(w * 7, w * 7 + 7)).filter((week) =>
-    week.some((k) => k.startsWith(month)),
-  );
+  const onDay = bookingsOnDay(bookings, day, timeZone).filter((b) => columns.some((c) => c.id === b.staffId));
+  const window = dayWindow(openingDay, onDay.map((b) => bookingSpan(b, timeZone)));
+  const hours = Array.from({ length: (window.end - window.start) / 60 }, (_, i) => window.start + i * 60);
+  const height = ((window.end - window.start) / 60) * HOUR_HEIGHT;
+  const now = zonedParts(new Date(), timeZone);
+  const nowMinutes = minutesOf(now.time);
 
   return (
-    <Card>
-      <View style={styles.monthRow}>
-        {WEEKDAY_NAMES.map((name) => (
-          <Text key={name} style={[styles.monthHeader, styles.flex]}>
-            {name.slice(0, 1)}
-          </Text>
-        ))}
-      </View>
-      {weeks.map((week) => (
-        <View key={week[0]} style={styles.monthRow}>
-          {week.map((key) => {
-            const dayEvents = events.filter((e) => e.date === key);
-            const inMonth = key.startsWith(month);
-            const isSelected = key === selected;
-            return (
-              <Pressable
-                key={key}
-                onPress={() => onSelect(key)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isSelected }}
-                accessibilityLabel={`${dayLabel(key)}, ${dayEvents.length} event${dayEvents.length === 1 ? '' : 's'}`}
-                style={({ pressed }) => [
-                  styles.monthCell,
-                  key === today && styles.monthToday,
-                  isSelected && styles.monthSelected,
-                  pressed && styles.pressed,
-                ]}>
-                <Text style={[styles.monthDay, !inMonth && styles.monthDayOut, isSelected && styles.monthDaySelected]}>
-                  {Number(key.slice(8))}
+    <Card style={styles.gridCard}>
+      {!openingDay?.open && <Text style={styles.closed}>You’re closed on {formatDayKey(day, true).split(' ')[0]}s. You can still add bookings by hand.</Text>}
+      <ScrollView horizontal showsHorizontalScrollIndicator={columns.length > 2}>
+        <View>
+          <View style={styles.headerRow}>
+            <View style={{ width: GUTTER }} />
+            {columns.map((s) => (
+              <View key={s.id} style={[styles.columnHeader, { width: COLUMN_WIDTH }]}>
+                <Text style={styles.columnName} numberOfLines={1}>
+                  {s.name}
                 </Text>
-                <View style={styles.dots}>
-                  {dayEvents.slice(0, 3).map((e) => {
-                    const done = e.type === 'job' && (e.status === 'completed' || e.status === 'cancelled');
-                    return <View key={e.id} style={[styles.dot, { backgroundColor: done ? C.textSecondary : EVENT_TYPE_INFO[e.type].color }]} />;
+                <Text style={styles.muted}>{onDay.filter((b) => b.staffId === s.id).length} booked</Text>
+              </View>
+            ))}
+          </View>
+          <View style={[styles.gridRow, { height }]}>
+            <View style={{ width: GUTTER }}>
+              {hours.map((h, i) => (
+                <Text key={h} style={[styles.hourLabel, { top: i * HOUR_HEIGHT }]}>
+                  {format12h(timeOfMinutes(h)).replace(':00', '')}
+                </Text>
+              ))}
+            </View>
+            {columns.map((s) => (
+              <Pressable
+                key={s.id}
+                onPress={(e) => addBooking({ date: day, staff: s.id, time: timeOfMinutes(timeAtY(e.nativeEvent.locationY, window)) })}
+                accessibilityRole="button"
+                accessibilityLabel={`Add a booking with ${s.name}`}
+                style={[styles.column, { width: COLUMN_WIDTH, height }]}>
+                {hours.map((h, i) => (
+                  <View key={h} style={[styles.hourLine, { top: i * HOUR_HEIGHT }]} />
+                ))}
+                {timeOffSpans(timeOff, s.id, day, timeZone).map((span, i) => {
+                  const pos = blockPosition(span, window);
+                  return <View key={`off-${i}`} style={[styles.timeOff, pos]} pointerEvents="none" />;
+                })}
+                {onDay
+                  .filter((b) => b.staffId === s.id)
+                  .map((b) => {
+                    const pos = blockPosition(bookingSpan(b, timeZone), window);
+                    const look = STATUS_STYLE[b.status];
+                    return (
+                      <Pressable
+                        key={b.id}
+                        onPress={() => openBooking(b.id)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${formatTimeIn(b.startsAt, timeZone)}, ${b.customerName}, ${b.serviceName}`}
+                        style={[styles.block, pos, { backgroundColor: look.background, borderLeftColor: look.border }]}>
+                        <Text style={styles.blockTime} numberOfLines={1}>
+                          {formatTimeIn(b.startsAt, timeZone)}
+                          {look.label ? ` · ${look.label}` : ''}
+                        </Text>
+                        {pos.height >= 34 && (
+                          <Text style={styles.blockName} numberOfLines={1}>
+                            {b.customerName}
+                          </Text>
+                        )}
+                        {pos.height >= 50 && (
+                          <Text style={styles.blockService} numberOfLines={1}>
+                            {b.serviceName}
+                          </Text>
+                        )}
+                      </Pressable>
+                    );
                   })}
-                  {dayEvents.length > 3 && <Text style={styles.more}>+</Text>}
-                </View>
+                {day === today && nowMinutes >= window.start && nowMinutes <= window.end && (
+                  <View style={[styles.nowLine, { top: ((nowMinutes - window.start) / 60) * HOUR_HEIGHT }]} pointerEvents="none" />
+                )}
               </Pressable>
-            );
-          })}
+            ))}
+          </View>
         </View>
-      ))}
+      </ScrollView>
+      <Text style={styles.muted}>Tap an empty spot to add a booking there. Grey = time off.</Text>
     </Card>
   );
 }
 
+function WeekList({
+  days,
+  today,
+  timeZone,
+  bookings,
+  staff,
+}: {
+  days: string[];
+  today: string;
+  timeZone: string;
+  bookings: Booking[];
+  staff: BookingStaff[];
+}) {
+  const nameOf = (id: string) => staff.find((s) => s.id === id)?.name ?? '';
+  return (
+    <>
+      {days.map((d) => {
+        const list = bookingsOnDay(bookings, d, timeZone);
+        const takings = list.filter((b) => b.status !== 'no_show').reduce((sum, b) => sum + (b.price ?? 0), 0);
+        return (
+          <Card key={d}>
+            <View style={styles.weekHeader}>
+              <Text style={[styles.weekDay, d === today && { color: C.accent }]}>{d === today ? `Today, ${formatDayKey(d)}` : formatDayKey(d, true)}</Text>
+              <Text style={styles.muted}>
+                {list.length} booking{list.length === 1 ? '' : 's'}
+              </Text>
+            </View>
+            {list.length === 0 ? (
+              <Pressable onPress={() => addBooking({ date: d })} accessibilityRole="button" hitSlop={6}>
+                <Text style={styles.addLink}>+ Add a booking</Text>
+              </Pressable>
+            ) : (
+              list.map((b, i) => {
+                const look = STATUS_STYLE[b.status];
+                return (
+                  <Pressable
+                    key={b.id}
+                    onPress={() => openBooking(b.id)}
+                    accessibilityRole="button"
+                    style={({ pressed }) => [styles.weekRow, i > 0 && styles.divider, pressed && styles.pressed]}>
+                    <View style={[styles.dot, { backgroundColor: look.border }]} />
+                    <Text style={styles.weekTime}>{formatTimeIn(b.startsAt, timeZone)}</Text>
+                    <View style={styles.flex}>
+                      <Text style={styles.columnName} numberOfLines={1}>
+                        {b.customerName}
+                      </Text>
+                      <Text style={styles.muted} numberOfLines={1}>
+                        {[b.serviceName, nameOf(b.staffId), look.label].filter(Boolean).join(' · ')}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })
+            )}
+            {takings > 0 && <Text style={styles.muted}>Booked value: {formatPrice(takings, { whole: takings % 1 === 0 })}</Text>}
+          </Card>
+        );
+      })}
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  muted: {
-    color: C.textSecondary,
-    fontSize: 13,
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  controls: {
-    gap: Spacing.three - 4,
-  },
-  rangeNav: {
-    flexDirection: 'row',
+  muted: { color: C.textSecondary, fontSize: 13, lineHeight: 18 },
+  nav: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  navButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
-    gap: Spacing.two,
-    padding: Spacing.two,
-    borderRadius: Radius.medium,
+    justifyContent: 'center',
+    backgroundColor: C.surface,
     borderWidth: 1,
     borderColor: C.border,
-    backgroundColor: C.surface,
   },
-  rangeLabel: {
-    color: C.text,
-    fontSize: 15,
-    fontWeight: '700',
-    textAlign: 'center',
+  navLabel: { flex: 1, alignItems: 'center' },
+  navText: { color: C.text, fontSize: 16, fontWeight: '700', textAlign: 'center' },
+  todayLink: { color: C.accent, fontSize: 13, fontWeight: '600' },
+  chips: { gap: Spacing.two, paddingVertical: Spacing.one },
+  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: Radius.pill, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface },
+  chipOn: { backgroundColor: C.accent, borderColor: C.accent },
+  chipText: { color: C.text, fontSize: 14, fontWeight: '600' },
+  chipTextOn: { color: C.onAccent },
+  gridCard: { paddingHorizontal: Spacing.two },
+  closed: { color: C.warning, fontSize: 14, fontWeight: '600' },
+  headerRow: { flexDirection: 'row' },
+  columnHeader: { paddingHorizontal: 6, paddingBottom: Spacing.two },
+  columnName: { color: C.text, fontSize: 15, fontWeight: '600' },
+  gridRow: { flexDirection: 'row' },
+  hourLabel: { position: 'absolute', left: 0, color: C.textSecondary, fontSize: 11, marginTop: -7 },
+  column: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: C.border },
+  hourLine: { position: 'absolute', left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: C.border },
+  timeOff: { position: 'absolute', left: 0, right: 0, backgroundColor: C.neutralSoft, opacity: 0.9 },
+  block: {
+    position: 'absolute',
+    left: 3,
+    right: 3,
+    borderRadius: 6,
+    borderLeftWidth: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    overflow: 'hidden',
   },
-  navArrow: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: C.surfaceRaised,
-  },
-  legend: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.three,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  legendText: {
-    color: C.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  monthRow: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  monthHeader: {
-    color: C.textSecondary,
-    fontSize: 12,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  monthCell: {
-    flex: 1,
-    aspectRatio: 1,
-    maxHeight: 72,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-    borderRadius: Radius.medium - 4,
-    backgroundColor: C.surfaceRaised,
-  },
-  monthToday: {
-    borderWidth: 1.5,
-    borderColor: C.accent,
-  },
-  monthSelected: {
-    backgroundColor: C.accent,
-  },
-  monthDay: {
-    color: C.text,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  monthDayOut: {
-    color: C.textMuted,
-  },
-  monthDaySelected: {
-    color: C.onAccent,
-  },
-  dots: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    height: 6,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  more: {
-    color: C.textSecondary,
-    fontSize: 9,
-    fontWeight: '700',
-  },
+  blockTime: { color: C.text, fontSize: 11, fontWeight: '700' },
+  blockName: { color: C.text, fontSize: 13, fontWeight: '600' },
+  blockService: { color: C.textSecondary, fontSize: 12 },
+  nowLine: { position: 'absolute', left: 0, right: 0, height: 2, backgroundColor: C.danger },
+  weekHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  weekDay: { color: C.text, fontSize: 16, fontWeight: '700' },
+  weekRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingVertical: Spacing.two },
+  weekTime: { color: C.text, fontSize: 14, fontWeight: '700', width: 72 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.border },
+  pressed: { opacity: 0.6 },
+  flex: { flex: 1 },
+  addLink: { color: C.accent, fontSize: 15, fontWeight: '600' },
 });

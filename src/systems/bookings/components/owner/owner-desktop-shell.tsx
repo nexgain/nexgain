@@ -38,10 +38,10 @@ export function OwnerDesktopShell({ children }: { children: ReactNode }) {
           match: ['/bookings/dashboard', '/bookings/revenue', '/bookings/expenses'],
         },
         {
-          label: 'Calendar',
+          label: 'Bookings',
           icon: { ios: 'calendar', android: 'calendar_month', web: 'calendar_month' },
           href: '/bookings/calendar',
-          match: ['/bookings/calendar'],
+          match: ['/bookings/calendar', '/bookings/booking/'],
         },
         {
           label: 'Transactions',
