@@ -1,6 +1,6 @@
 // Supabase Edge Function: NexGain Bookings appointment reminders. Emails each
 // customer before their appointment (the business's "reminder_hours", default
-// 24 hours before) from the owner's connected Gmail or Outlook, and records
+// 24 hours before) by email (_shared/messaging.ts: Resend, or the owner's Gmail/Outlook), and records
 // the result on the booking (sent, failed with the reason, or skipped).
 //
 // Called by the timer (pg_cron, every 15 minutes, see
@@ -12,9 +12,9 @@
 // Setup: deploy as "booking-reminders" with "Verify JWT" OFF (the timer has no
 // login; the password is checked here). Secret: REMINDERS_CRON_SECRET (the same
 // one job reminders use).
-import { bookingPageUrl, money, ownerMailAccount, sendBookingEmail, whenText } from '../_shared/booking-mail.ts';
+import { bookingPageUrl, money, whenText } from '../_shared/booking-mail.ts';
 import { adminDb, CORS, env, reply } from '../_shared/connections.ts';
-import { ReconnectNeeded } from '../_shared/mail.ts';
+import { sendEmail } from '../_shared/messaging.ts';
 
 type Db = ReturnType<typeof adminDb>;
 
@@ -82,27 +82,29 @@ async function sendDue(db: Db) {
   if (error) throw new Error(error.message);
   let sent = 0;
   let failed = 0;
-  const accounts = new Map<string, Awaited<ReturnType<typeof ownerMailAccount>>>();
   for (const r of (data ?? []) as Due[]) {
-    try {
-      if (!accounts.has(r.business_id)) accounts.set(r.business_id, await ownerMailAccount(db, r.business_id, r.email_app, r.reminder_provider));
-      const account = accounts.get(r.business_id);
-      if (!account) {
-        await record(db, r.booking_id, 'failed', 'No Gmail or Outlook account is connected. Connect one in More › Integrations.');
-        failed++;
-        continue;
-      }
-      const { subject, body } = reminderMessage(r);
-      await sendBookingEmail(db, account, r.customer_email, subject, body, r.business_name);
+    // Through _shared/messaging.ts: Resend once it's set up, otherwise the owner's Gmail or Outlook.
+    const { subject, body } = reminderMessage(r);
+    const result = await sendEmail(db, {
+      businessId: r.business_id,
+      to: r.customer_email,
+      subject,
+      text: body,
+      fromName: r.business_name,
+      replyTo: r.business_email,
+    });
+    if (result.sent) {
       await record(db, r.booking_id, 'sent');
       sent++;
-    } catch (e) {
-      const reason =
-        e instanceof ReconnectNeeded
-          ? 'NexGain can’t send from your email account any more. Connect it again in More › Integrations.'
-          : 'The email couldn’t be sent. NexGain will try again shortly.';
-      console.error('booking-reminders send:', e instanceof Error ? e.message : e);
-      await record(db, r.booking_id, 'failed', reason);
+    } else {
+      await record(
+        db,
+        r.booking_id,
+        'failed',
+        /connected/.test(result.reason)
+          ? 'No email account is connected. Connect Gmail or Outlook in More › Integrations.'
+          : 'The email couldn’t be sent. NexGain will try again shortly.',
+      );
       failed++;
     }
   }

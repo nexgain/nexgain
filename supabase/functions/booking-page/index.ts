@@ -23,8 +23,9 @@
 // Setup: deploy as "booking-page" with "Verify JWT" OFF (customers aren't
 // signed in). Optional secret BOOKING_PAGE_URL: the page's address, for the
 // links in emails (default: the GitHub Pages address).
-import { bookingPageUrl, EMAIL, money, ownerMailAccount, sendBookingEmail, whenText } from '../_shared/booking-mail.ts';
+import { bookingPageUrl, EMAIL, money, whenText } from '../_shared/booking-mail.ts';
 import { adminDb } from '../_shared/connections.ts';
+import { sendEmail, sendSms } from '../_shared/messaging.ts';
 import { chargeCancellationFee, refundDeposit, takeDeposit } from '../_shared/paymentService.ts';
 
 type Db = ReturnType<typeof adminDb>;
@@ -75,24 +76,62 @@ type View = {
   start: string;
   customerName: string;
   customerEmail: string;
+  customerPhone?: string;
+  /** 'email', 'sms' or 'both' (how the customer wants to hear from us). */
+  confirmBy?: 'email' | 'sms' | 'both';
+  canChange?: boolean;
+  cancelNoticeHours?: number;
   cancellationPolicy: string;
   depositAmount?: number | string;
   paymentStatus?: string;
   cancellationFee?: number | string;
+  feePolicy?: { enabled: boolean; type: 'fixed' | 'percent'; value: number | string; hours: number };
   business: { name: string; timezone: string; phone: string; email: string; currency: string };
 };
 
 // ---------- Emails to the customer ----------
 
-function message(kind: 'booked' | 'moved' | 'cancelled', view: View) {
+type Kind = 'booked' | 'moved' | 'cancelled';
+
+/** The deposit and cancellation terms, in one or two sentences. */
+function policyLines(view: View) {
+  const lines: string[] = [];
+  const cur = view.business.currency;
+  const fee = view.feePolicy;
+  const deposit = Number(view.depositAmount ?? 0);
+  if (fee?.enabled && Number(fee.value) > 0) {
+    const amount = fee.type === 'percent' ? `${Number(fee.value)}% of the price` : money(Number(fee.value), cur);
+    lines.push(`Cancelling less than ${fee.hours} hours before: a cancellation fee of ${amount}${deposit > 0 ? ', taken from your deposit' : ''}.`);
+  } else if (view.cancelNoticeHours) {
+    lines.push(`You can change or cancel online up to ${view.cancelNoticeHours} hours before${deposit > 0 ? ', and your deposit is refunded' : ''}.`);
+  }
+  if (view.cancellationPolicy.trim()) lines.push(view.cancellationPolicy.trim());
+  return lines;
+}
+
+/** "$15.00 paid" / "$15.00 refunded" / null. */
+function depositLine(view: View) {
+  const deposit = Number(view.depositAmount ?? 0);
+  if (deposit <= 0) return null;
+  const amount = money(deposit, view.business.currency);
+  if (view.paymentStatus === 'refunded') return Number(view.cancellationFee ?? 0) > 0 ? `${amount} paid (the rest refunded)` : `${amount} refunded`;
+  if (view.paymentStatus === 'paid') return `${amount} paid`;
+  return null;
+}
+
+/** The email: business, service, staff, date, time, price, deposit, policy and the change/cancel link. */
+export function emailMessage(kind: Kind, view: View) {
   const { day, time } = whenText(view.start, view.business.timezone);
   const b = view.business;
+  const cur = b.currency;
   const subject =
     kind === 'cancelled'
       ? `Cancelled: your booking with ${b.name}`
       : kind === 'moved'
         ? `Changed: your booking with ${b.name} on ${day}`
         : `Confirmed: your booking with ${b.name} on ${day}`;
+  const deposit = depositLine(view);
+  const fee = Number(view.cancellationFee ?? 0);
   const lines = [
     `Hi ${view.customerName},`,
     '',
@@ -102,35 +141,68 @@ function message(kind: 'booked' | 'moved' | 'cancelled', view: View) {
         ? `Your booking with ${b.name} has been changed. Here are the new details.`
         : `Thanks for booking with ${b.name}. Here are your details.`,
     '',
+    `Business: ${b.name}`,
     `Service: ${view.service} (${view.duration} minutes)`,
     `With: ${view.staff}`,
     `Date: ${day}`,
     `Time: ${time}`,
-    ...(view.price !== null && kind !== 'cancelled' ? [`Price: ${money(Number(view.price), view.business.currency)}`] : []),
+    ...(view.price !== null && kind !== 'cancelled' ? [`Price: ${money(Number(view.price), cur)}`] : []),
+    ...(deposit ? [`Deposit: ${deposit}`] : []),
+    ...(kind === 'cancelled' && fee > 0 ? [`Cancellation fee: ${money(fee, cur)}`] : []),
   ];
   if (kind !== 'cancelled') {
-    lines.push('', `Need to change or cancel? ${bookingPageUrl()}?m=${view.token}`);
-    if (view.cancellationPolicy.trim()) lines.push('', `Cancellation policy: ${view.cancellationPolicy.trim()}`);
+    const policy = policyLines(view);
+    if (policy.length) lines.push('', 'Cancellation policy:', ...policy);
+    lines.push('', `Change or cancel your booking: ${bookingPageUrl()}?m=${view.token}`);
   }
   lines.push('', 'Thanks,', b.name, ...(b.phone ? [`Phone: ${b.phone}`] : []), ...(b.email ? [`Email: ${b.email}`] : []));
   return { subject, body: lines.join('\n') };
 }
 
-/** Emails the customer from the owner's connected account. Never stops the booking if it can't. */
-async function emailCustomer(db: Db, token: string, kind: 'booked' | 'moved' | 'cancelled', view: View) {
-  try {
-    if (!EMAIL.test(view.customerEmail)) return false;
-    const { data: bk } = await db.from('bookings').select('business_id').eq('manage_token', token).maybeSingle();
-    if (!bk) return false;
-    const account = await ownerMailAccount(db, bk.business_id);
-    if (!account) return false; // no Gmail or Outlook connected: the confirmation screen is the confirmation
-    const { subject, body } = message(kind, view);
-    await sendBookingEmail(db, account, view.customerEmail, subject, body, view.business.name);
-    return true;
-  } catch (e) {
-    console.error('booking-page email:', e instanceof Error ? e.message : e);
-    return false;
+/** The text message: the same, short. */
+export function smsMessage(kind: Kind, view: View) {
+  const { day, time } = whenText(view.start, view.business.timezone);
+  const b = view.business;
+  const cur = b.currency;
+  const shortDay = day.replace(/ \d{4}$/, '');
+  if (kind === 'cancelled') {
+    const fee = Number(view.cancellationFee ?? 0);
+    return `${b.name}: your ${view.service} on ${shortDay} at ${time} is cancelled.${fee > 0 ? ` Cancellation fee ${money(fee, cur)}.` : ''}`;
   }
+  const price = view.price !== null ? ` ${money(Number(view.price), cur)}` : '';
+  const deposit = depositLine(view);
+  const fee = view.feePolicy?.enabled && Number(view.feePolicy.value) > 0 ? ` Late cancellation (under ${view.feePolicy.hours}h) fee applies.` : '';
+  return (
+    `${b.name}: ${kind === 'moved' ? 'booking changed' : 'booked'}! ${view.service} with ${view.staff}, ${shortDay} at ${time}.${price}` +
+    `${deposit ? ` Deposit ${deposit}.` : ''}${fee} Change/cancel: ${bookingPageUrl()}?m=${view.token}`
+  );
+}
+
+/**
+ * Sends the customer their confirmation (or change / cancellation) the way they
+ * chose: email, text or both. Never stops the booking if it can't.
+ */
+async function notifyCustomer(db: Db, token: string, kind: Kind, view: View) {
+  const sent = { email: false, sms: false };
+  try {
+    const { data: bk } = await db.from('bookings').select('business_id').eq('manage_token', token).maybeSingle();
+    if (!bk) return sent;
+    const by = view.confirmBy ?? 'email';
+    if ((by === 'email' || by === 'both') && EMAIL.test(view.customerEmail)) {
+      const { subject, body } = emailMessage(kind, view);
+      const r = await sendEmail(db, { businessId: bk.business_id, to: view.customerEmail, subject, text: body, fromName: view.business.name, replyTo: view.business.email });
+      sent.email = r.sent;
+    }
+    if ((by === 'sms' || by === 'both') && view.customerPhone) {
+      const { data: biz } = await db.from('businesses').select('country').eq('id', bk.business_id).maybeSingle();
+      const r = await sendSms({ to: view.customerPhone, country: biz?.country ?? null, text: smsMessage(kind, view) });
+      sent.sms = r.sent;
+      if (!r.sent) console.warn('booking-page sms:', r.reason);
+    }
+  } catch (e) {
+    console.error('booking-page notify:', e instanceof Error ? e.message : e);
+  }
+  return sent;
 }
 
 // ---------- Payments (all through _shared/paymentService.ts) ----------
@@ -280,6 +352,12 @@ Deno.serve(async (req) => {
     }
     let booking = result.booking;
     // Money: take the deposit after booking; refund it / charge the fee after cancelling.
+    // How the customer wants their confirmation: email, text or both.
+    if (kind === 'booked') {
+      const confirmBy = ['email', 'sms', 'both'].includes(body.confirmBy) ? body.confirmBy : 'email';
+      await db.from('bookings').update({ confirm_by: confirmBy }).eq('manage_token', booking.token);
+      booking = { ...booking, confirmBy };
+    }
     if (kind === 'booked' && Number(booking.depositAmount ?? 0) > 0) {
       const paid = await settleDeposit(db, booking, typeof body.paymentToken === 'string' ? body.paymentToken : null);
       if (!paid) return reply(402, { error: 'payment', message: MESSAGES.payment });
@@ -289,8 +367,8 @@ Deno.serve(async (req) => {
       await settleCancellation(db, booking, Number(result.fee ?? 0));
       booking = (await rpc(db, 'booking_by_token', { p_token: booking.token })) ?? booking;
     }
-    const emailed = await emailCustomer(db, booking.token, kind, booking);
-    return reply(200, { booking, emailed });
+    const sent = await notifyCustomer(db, booking.token, kind, booking);
+    return reply(200, { booking, emailed: sent.email, texted: sent.sms });
   } catch {
     return reply(500, { error: 'server', message: 'Something went wrong. Please try again.' });
   }
