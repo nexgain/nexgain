@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon, Input, SignupColors as C } from '@/components/signup/fields';
 import type { SelectedIndustry } from '@/components/signup/types';
 import { categoryIcon, searchIndustries } from '@/data/industries';
+import type { SystemType } from '@/data/systems';
 
 /**
  * Smart search box for the business industry: suggestions appear underneath as
@@ -14,16 +15,19 @@ export function IndustrySearch({
   onChangeText,
   onSelect,
   hasError,
+  system,
 }: {
   text: string;
   selected: SelectedIndustry | null;
   onChangeText: (text: string) => void;
   onSelect: (industry: SelectedIndustry) => void;
   hasError?: boolean;
+  /** Only this system's industries (service or bookings). */
+  system?: SystemType;
 }) {
   const query = text.trim();
   const showSuggestions = query.length > 0 && !(selected && selected.name === text);
-  const matches = showSuggestions ? searchIndustries(query) : [];
+  const matches = showSuggestions ? searchIndustries(query, 8, system) : [];
   const exact = matches.some((m) => m.name.toLowerCase() === query.toLowerCase());
 
   return (
@@ -31,7 +35,7 @@ export function IndustrySearch({
       <Input
         value={text}
         onChangeText={onChangeText}
-        placeholder="Start typing, e.g. carpentry, dog grooming..."
+        placeholder={system === 'bookings' ? 'Start typing, e.g. barber, hair salon...' : 'Start typing, e.g. carpentry, cleaning...'}
         autoCorrect={false}
         accessibilityLabel="Business industry"
         icon={{ ios: 'magnifyingglass', android: 'search', web: 'search' }}

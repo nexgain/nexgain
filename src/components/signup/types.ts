@@ -3,6 +3,7 @@
 // profile at the end. The password is never saved.
 import type { EmailApp } from '@/data/business';
 import type { ChosenApp } from '@/data/business-apps';
+import type { SystemType } from '@/data/systems';
 
 export type SelectedIndustry = {
   name: string;
@@ -20,6 +21,8 @@ export type SignupData = {
   businessName: string;
   logo: string | null;
   abn: string;
+  /** Jobs & quotes (System 1) or customer bookings (NexGain Bookings). Blank until chosen. */
+  systemType: SystemType | null;
   industryText: string;
   industry: SelectedIndustry | null;
   // Step 3
@@ -64,6 +67,7 @@ export const EMPTY_SIGNUP: SignupData = {
   businessName: '',
   logo: null,
   abn: '',
+  systemType: null,
   industryText: '',
   industry: null,
   businessType: 'Service Business',

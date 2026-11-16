@@ -8,6 +8,8 @@ import { AuthInput } from '@/components/auth/auth-input';
 import { AuthScreen, comingSoon } from '@/components/auth/auth-screen';
 import { OptionCard } from '@/components/auth/option-card';
 import { AuthColors as C } from '@/components/auth/theme';
+import { businessStore } from '@/data/business';
+import { homeFor } from '@/data/systems';
 import { logIn, sendPasswordReset, setNewPassword, signInFromResetLink, signInWithResetCode } from '@/lib/auth';
 
 /** "Owner Access" / "Employee Access": choose Log In or Sign Up. */
@@ -86,7 +88,8 @@ export function LoginScreen({
     try {
       const problem = await logIn(email, password, accountType);
       if (problem) setError(problem);
-      else router.replace(destination);
+      // The business's system decides which app opens: System 1 or NexGain Bookings.
+      else router.replace(homeFor(accountType, businessStore.get()));
     } catch {
       setError("Can't reach NexGain. Check your internet connection and try again.");
     } finally {

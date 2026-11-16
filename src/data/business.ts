@@ -6,6 +6,7 @@ import { Platform } from 'react-native';
 import type { PaySchedule } from '@/data/pay-schedule';
 import { businessUsesGst } from '@/data/super-rules';
 import { createStore } from '@/data/store';
+import type { SystemType } from '@/data/systems';
 import { supabase } from '@/lib/supabase';
 
 /** Australian GST rate, charged on quotes and invoices when GST registered. */
@@ -65,6 +66,11 @@ export type BusinessProfile = {
   linkExpensesToJobs?: boolean;
   /** Weekly or fortnightly, and the day pay periods start (see src/data/pay-schedule.ts). Missing = weekly, Monday to Sunday. */
   paySchedule?: PaySchedule;
+  /**
+   * Which NexGain system the business uses (see src/data/systems.ts): System 1
+   * ('service') or NexGain Bookings ('bookings'). Set at sign-up; missing = 'service'.
+   */
+  systemType?: SystemType;
 };
 
 /**
@@ -200,6 +206,7 @@ type BusinessRow = {
   manual_tax_rate?: number | string | null;
   link_expenses_to_jobs?: boolean | null;
   pay_schedule?: { frequency?: string; start_day?: number; anchor?: string; from?: string | null } | null;
+  system_type?: string | null;
 };
 
 export function fromRow(row: BusinessRow): BusinessProfile {
@@ -248,6 +255,7 @@ export function fromRow(row: BusinessRow): BusinessProfile {
     manualTaxRate: row.manual_tax_rate === null || row.manual_tax_rate === undefined ? null : Number(row.manual_tax_rate),
     linkExpensesToJobs: row.link_expenses_to_jobs ?? false,
     paySchedule: payScheduleFromRow(row.pay_schedule),
+    systemType: row.system_type === 'bookings' ? 'bookings' : 'service',
   };
 }
 
@@ -338,7 +346,18 @@ export async function createBusinessOnline(profile: Omit<BusinessProfile, 'id' |
     .update({ email_app: profile.emailApp, business_email: profile.businessEmail, country: profile.country })
     .eq('id', created.id);
   if (emailError) console.warn('Could not save email settings:', emailError.message);
-  const saved = { ...created, emailApp: profile.emailApp, businessEmail: profile.businessEmail, country: profile.country };
+  // NexGain Bookings businesses (System 2). Service businesses keep the database default.
+  if (profile.systemType === 'bookings') {
+    const { error: systemError } = await supabase.from('businesses').update({ system_type: 'bookings' }).eq('id', created.id);
+    if (systemError) console.warn('Could not save the booking system:', systemError.message);
+  }
+  const saved = {
+    ...created,
+    emailApp: profile.emailApp,
+    businessEmail: profile.businessEmail,
+    country: profile.country,
+    systemType: profile.systemType === 'bookings' ? ('bookings' as const) : ('service' as const),
+  };
   businessStore.set(saved);
   return saved;
 }

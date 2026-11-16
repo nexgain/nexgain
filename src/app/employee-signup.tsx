@@ -13,6 +13,8 @@ import { StepSuccess } from '@/components/employee-signup/step-success';
 import { EMPTY_EMPLOYEE_SIGNUP, employeeSteps, type EmployeeSignupData, type EmployeeStepId } from '@/components/employee-signup/types';
 import { SignupColors as C } from '@/components/signup/fields';
 import { SignupShell } from '@/components/signup/signup-shell';
+import { businessStore } from '@/data/business';
+import { homeFor } from '@/data/systems';
 import { signUp } from '@/lib/auth';
 import { completeEmployeeSignup, findInvite, saveQualifications } from '@/lib/employee-signup';
 import { reloadSession } from '@/lib/session';
@@ -140,7 +142,7 @@ export default function EmployeeSignupScreen() {
   if (step === SUCCESS) {
     return (
       <SignupShell steps={stepNames} complete step={REVIEW} title="" onBack={() => {}} onSelectStep={() => {}}>
-        <StepSuccess businessName={joinedBusiness} failedUploads={failedUploads} onDashboard={() => router.replace('/home')} />
+        <StepSuccess businessName={joinedBusiness} failedUploads={failedUploads} onDashboard={() => router.replace(homeFor('employee', businessStore.get()))} />
       </SignupShell>
     );
   }

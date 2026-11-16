@@ -3,9 +3,26 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Button, Field, Icon, Input, SignupColors as C } from '@/components/signup/fields';
+import { Button, Field, Icon, Input, SignupColors as C, type IconName } from '@/components/signup/fields';
 import { IndustrySearch } from '@/components/signup/industry-search';
 import type { StepProps } from '@/components/signup/types';
+import type { SystemType } from '@/data/systems';
+
+/** The two NexGain systems, chosen before the industry (see src/data/systems.ts). */
+const SYSTEMS: { id: SystemType; title: string; subtitle: string; icon: IconName }[] = [
+  {
+    id: 'service',
+    title: 'Jobs & quotes',
+    subtitle: 'Trades, cleaning, repairs and other businesses that quote and do jobs.',
+    icon: { ios: 'hammer.fill', android: 'construction', web: 'construction' },
+  },
+  {
+    id: 'bookings',
+    title: 'Customer bookings',
+    subtitle: 'Barbers, salons, trainers and others whose customers book appointments.',
+    icon: { ios: 'calendar', android: 'event', web: 'event' },
+  },
+];
 
 // Keeps the saved logo small enough to store on the phone (~1.5 MB as text).
 const MAX_LOGO_CHARS = 2_000_000;
@@ -24,6 +41,7 @@ export function StepBusiness({ data, update, onNext }: StepProps) {
   const errors = {
     businessName: !data.businessName.trim() && 'Enter your business name.',
     abn: abnDigits.length > 0 && abnDigits.length !== 11 && 'An ABN has 11 digits.',
+    systemType: !data.systemType && 'Choose what your business needs.',
     industry: !data.industry && 'Search for your industry and choose one from the list (or use your own).',
   };
 
@@ -107,21 +125,53 @@ export function StepBusiness({ data, update, onNext }: StepProps) {
         />
       </Field>
 
-      <Field label="Business industry" error={tried && errors.industry}>
-        <IndustrySearch
-          text={data.industryText}
-          selected={data.industry}
-          onChangeText={(industryText) =>
-            update({
-              industryText,
-              // Typing again clears the previous choice until a new one is picked.
-              industry: data.industry && data.industry.name === industryText ? data.industry : null,
-            })
-          }
-          onSelect={(industry) => update({ industry, industryText: industry.name })}
-          hasError={tried && !!errors.industry}
-        />
+      <Field label="What does your business need?" error={tried && errors.systemType}>
+        <View style={styles.systems} accessibilityRole="radiogroup" accessibilityLabel="What does your business need?">
+          {SYSTEMS.map((system) => {
+            const selected = data.systemType === system.id;
+            return (
+              <Pressable
+                key={system.id}
+                onPress={() =>
+                  // Switching clears the industry: each choice has its own list.
+                  selected ? undefined : update({ systemType: system.id, industry: null, industryText: '' })
+                }
+                accessibilityRole="radio"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`${system.title}. ${system.subtitle}`}
+                style={({ pressed }) => [styles.system, selected && styles.systemSelected, pressed && styles.pressed]}>
+                <View style={[styles.systemIcon, selected && styles.systemIconSelected]}>
+                  <Icon name={system.icon} color={selected ? C.onPrimary : C.primary} size={18} />
+                </View>
+                <View style={styles.systemText}>
+                  <Text style={styles.systemTitle}>{system.title}</Text>
+                  <Text style={styles.systemSubtitle}>{system.subtitle}</Text>
+                </View>
+                {selected && <Icon name={{ ios: 'checkmark.circle.fill', android: 'check_circle', web: 'check_circle' }} color={C.primary} size={20} />}
+              </Pressable>
+            );
+          })}
+        </View>
       </Field>
+
+      {data.systemType && (
+        <Field label="Business industry" error={tried && errors.industry}>
+          <IndustrySearch
+            system={data.systemType}
+            text={data.industryText}
+            selected={data.industry}
+            onChangeText={(industryText) =>
+              update({
+                industryText,
+                // Typing again clears the previous choice until a new one is picked.
+                industry: data.industry && data.industry.name === industryText ? data.industry : null,
+              })
+            }
+            onSelect={(industry) => update({ industry, industryText: industry.name })}
+            hasError={tried && !!errors.industry}
+          />
+        </Field>
+      )}
 
       <Button
         label="Next"
@@ -138,6 +188,48 @@ export function StepBusiness({ data, update, onNext }: StepProps) {
 const styles = StyleSheet.create({
   pressed: {
     opacity: 0.7,
+  },
+  systems: {
+    gap: 10,
+  },
+  system: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: C.border,
+    backgroundColor: C.field,
+  },
+  systemSelected: {
+    borderColor: C.primary,
+    backgroundColor: C.primarySoft,
+  },
+  systemIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.primarySoft,
+  },
+  systemIconSelected: {
+    backgroundColor: C.primary,
+  },
+  systemText: {
+    flex: 1,
+    gap: 2,
+  },
+  systemTitle: {
+    color: C.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  systemSubtitle: {
+    color: C.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
   },
   upload: {
     alignItems: 'center',

@@ -28,6 +28,7 @@ import { reloadSession } from '@/lib/session';
 import { saveDefaultFund } from '@/data/employee-super';
 import { businessUsesSuper } from '@/data/super-rules';
 import { savePayrollBank } from '@/data/pay-runs';
+import { homeFor, type SystemType } from '@/data/systems';
 import { countryNeedsBank, EMPTY_PAYER } from '@/lib/payment-files';
 
 const STEPS = [
@@ -43,6 +44,12 @@ const STEPS = [
 
 const EMAIL_STEP = 6;
 const TEAM_STEP = 7;
+
+/** Which system the business uses: the chosen industry's, or the owner's choice for their own industry. */
+function systemOfSignup(data: SignupData): SystemType {
+  const industry = data.industry?.category ? findIndustry(data.industry.name) : null;
+  return industry?.system ?? (data.systemType === 'bookings' ? 'bookings' : 'service');
+}
 
 /** The business details from sign-up, in the shape the rest of the app uses. */
 function toProfile(data: SignupData): Omit<BusinessProfile, 'id' | 'inviteCode' | 'createdAt'> {
@@ -72,6 +79,7 @@ function toProfile(data: SignupData): Omit<BusinessProfile, 'id' | 'inviteCode' 
     businessEmail: data.businessEmail.trim(),
     phone: '',
     reminders: DEFAULT_REMINDER_SETTINGS,
+    systemType: systemOfSignup(data),
   };
 }
 
@@ -186,7 +194,8 @@ export default function OwnerSignupScreen() {
     updateBusinessPayment({ accountName: data.bankAccountName, bsb: data.bankBsb, account: data.bankAccountNumber });
     const businessId = businessStore.get()?.id;
     if (businessId) saveSignupApps(businessId, data.apps).catch(() => {});
-    router.replace('/dashboard');
+    // Booking businesses open NexGain Bookings; everyone else the usual dashboard.
+    router.replace(homeFor('owner', businessStore.get()));
   }
 
   const stepProps = { data, update, onNext: goNext };
@@ -196,7 +205,11 @@ export default function OwnerSignupScreen() {
       steps={STEP_NAMES}
       step={step}
       title={STEPS[step].title}
-      subtitle={STEPS[step].subtitle}
+      subtitle={
+        step === 3 && systemOfSignup(data) === 'bookings'
+          ? 'Choose the services you offer. Customers pick from these when they book.'
+          : STEPS[step].subtitle
+      }
       onBack={goBack}
       onSelectStep={(s) => {
         setError(null);

@@ -1,8 +1,12 @@
-// Built-in list of service-based industries used by owner sign-up: the smart
-// industry search, pre-filled business details and recommended services.
+// Built-in list of industries used by owner sign-up: the smart industry
+// search, pre-filled business details and recommended services.
+// `lines` are service businesses (System 1); `bookings` are businesses whose
+// customers book appointments (System 2, NexGain Bookings).
 // Each line: 'Industry name | search keywords | Service, Service, ...'
 // Services are listed most common first; the first few are ticked by default.
 import type { SymbolViewProps } from 'expo-symbols';
+
+import type { SystemType } from '@/data/systems';
 
 type IconName = SymbolViewProps['name'];
 
@@ -12,6 +16,8 @@ export type Industry = {
   category: string;
   keywords: string[];
   services: string[];
+  /** Which NexGain system a business of this type uses. */
+  system: SystemType;
 };
 
 type Category = {
@@ -19,7 +25,10 @@ type Category = {
   icon: IconName;
   businessType: string;
   vehicles: string;
+  /** Service businesses (System 1). */
   lines: string[];
+  /** Booking businesses (System 2, NexGain Bookings). */
+  bookings?: string[];
 };
 
 const CATEGORIES: Category[] = [
@@ -149,17 +158,19 @@ const CATEGORIES: Category[] = [
     businessType: 'Sole Trader',
     vehicles: '0',
     lines: [
-      'Hairdressing | hairdresser hair salon stylist | Haircuts, Hair Colouring, Highlights, Blow Dry & Styling, Hair Treatments, Bridal Hair, Keratin Smoothing',
-      'Barber | barbershop barber haircut men | Men\'s Haircuts, Fades, Beard Trims, Hot Towel Shaves, Kids Cuts',
-      'Beauty Therapy | beauty salon therapist beautician | Facials, Waxing, Lash Tint, Brow Shaping, Spray Tans, Skin Treatments',
-      'Nail Technician | nails nail salon manicure pedicure | Manicures, Pedicures, Gel Nails, Acrylic Nails, Nail Art, Nail Removal',
-      'Makeup Artist | makeup mua artist | Bridal Makeup, Event Makeup, Makeup Lessons, Photoshoot Makeup',
-      'Lash & Brow | eyelash lash extensions brows | Lash Extensions, Lash Lift, Brow Lamination, Brow Tint, Lash Infills',
       'Spray Tanning | tan tanning spray tan | Spray Tans, Mobile Tanning, Express Tans',
       'Cosmetic Tattooing | brows microblading cosmetic tattoo | Microblading, Lip Blush, Eyeliner Tattoo, Touch Ups',
-      'Skin Clinic | skin clinic laser dermal | Skin Consultations, Laser Treatments, Chemical Peels, Microneedling, Anti-Ageing Treatments',
-      'Tattoo Studio | tattoo artist ink | Custom Tattoos, Flash Tattoos, Cover Ups, Tattoo Touch Ups',
       'Mobile Hairdresser | hairdresser mobile hair | Home Haircuts, Hair Colouring, Aged Care Visits, Event Styling',
+    ],
+    bookings: [
+      'Hair Salon | hairdresser hair salon stylist hairdressing | Haircuts, Hair Colouring, Highlights, Blow Dry & Styling, Hair Treatments, Bridal Hair, Keratin Smoothing',
+      'Barber | barbershop barber haircut men fade fades | Men\'s Haircuts, Fades, Beard Trims, Hot Towel Shaves, Kids Cuts',
+      'Beauty & Make-up Artist | beauty salon therapist beautician makeup make-up mua artist | Facials, Waxing, Lash Tint, Brow Shaping, Spray Tans, Skin Treatments',
+      'Nail Salon | nails nail salon manicure pedicure technician | Manicures, Pedicures, Gel Nails, Acrylic Nails, Nail Art, Nail Removal',
+      'Lash & Brow | eyelash lash extensions brows | Lash Extensions, Lash Lift, Brow Lamination, Brow Tint, Lash Infills',
+      'Skin Clinic | skin clinic laser dermal | Skin Consultations, Laser Treatments, Chemical Peels, Microneedling, Anti-Ageing Treatments',
+      'Tattoo & Piercing | tattoo artist ink piercing piercer piercings studio | Custom Tattoos, Flash Tattoos, Cover Ups, Tattoo Touch Ups, Ear Piercing, Body Piercing',
+      'Day Spa | spa day spa relaxation pamper | Spa Packages, Massages, Facials, Body Treatments, Couples Packages, Manicures & Pedicures',
     ],
   },
   {
@@ -168,9 +179,6 @@ const CATEGORIES: Category[] = [
     businessType: 'Company',
     vehicles: '0',
     lines: [
-      'Massage Therapy | massage remedial therapist | Remedial Massage, Relaxation Massage, Sports Massage, Pregnancy Massage, Mobile Massage',
-      'Physiotherapy | physio physiotherapist rehab | Initial Assessments, Treatment Sessions, Sports Injuries, Rehabilitation, Dry Needling',
-      'Chiropractic | chiropractor chiro spine | Chiropractic Adjustments, Initial Consultations, Posture Assessments, Sports Chiropractic',
       'Myotherapy | myotherapist muscle | Myotherapy Sessions, Dry Needling, Cupping, Injury Management',
       'Podiatry | podiatrist feet foot | General Foot Care, Orthotics, Nail Surgery, Biomechanical Assessments',
       'Psychology & Counselling | psychologist counsellor therapy mental health | Individual Counselling, Couples Counselling, Telehealth Sessions, Assessments',
@@ -182,6 +190,11 @@ const CATEGORIES: Category[] = [
       'Acupuncture | acupuncturist chinese medicine | Acupuncture Sessions, Cupping, Chinese Herbal Medicine',
       'Optometry | optometrist eyes glasses | Eye Tests, Contact Lens Fitting, Glasses, Children\'s Vision',
     ],
+    bookings: [
+      'Massage | massage remedial therapist therapy | Remedial Massage, Relaxation Massage, Sports Massage, Pregnancy Massage, Mobile Massage',
+      'Physio | physio physiotherapist rehab physiotherapy | Initial Assessments, Treatment Sessions, Sports Injuries, Rehabilitation, Dry Needling',
+      'Chiropractor | chiropractor chiro spine chiropractic | Chiropractic Adjustments, Initial Consultations, Posture Assessments, Sports Chiropractic',
+    ],
   },
   {
     name: 'Fitness',
@@ -189,15 +202,17 @@ const CATEGORIES: Category[] = [
     businessType: 'Sole Trader',
     vehicles: '0',
     lines: [
-      'Personal Training | personal trainer pt fitness gym coach | 1-on-1 Training, Group Training, Online Coaching, Nutrition Coaching, Fitness Assessments, Outdoor Bootcamps',
-      'Yoga Studio | yoga instructor teacher | Group Yoga Classes, Private Yoga Sessions, Yoga Workshops, Corporate Yoga',
-      'Pilates Studio | pilates reformer instructor | Reformer Classes, Mat Pilates, Private Pilates Sessions, Clinical Pilates',
       'Gym | gym fitness centre | Gym Memberships, Group Classes, Personal Training, Casual Passes',
       'Martial Arts | karate boxing bjj taekwondo | Kids Martial Arts, Adult Classes, Private Lessons, Self Defence',
       'Swimming Lessons | swim school swimming teacher | Kids Swimming Lessons, Adult Swimming Lessons, Squad Training, Private Swimming Lessons',
       'Dance School | dance classes teacher | Kids Dance Classes, Adult Dance Classes, Private Dance Lessons, Wedding Dance',
       'Sports Coaching | coach sports coaching | Private Coaching, Group Clinics, Holiday Camps, Team Training',
       'Golf Instruction | golf lessons coach | Private Golf Lessons, Group Clinics, Club Fitting',
+    ],
+    bookings: [
+      'Personal Trainer | personal trainer pt fitness gym coach training | 1-on-1 Training, Group Training, Online Coaching, Nutrition Coaching, Fitness Assessments, Outdoor Bootcamps',
+      'Fitness Classes & Studio | fitness classes class studio bootcamp hiit group | Group Classes, Bootcamp, HIIT Classes, Class Packs, Intro Sessions, Private Sessions',
+      'Yoga & Pilates | yoga pilates reformer instructor teacher studio | Group Yoga Classes, Reformer Classes, Mat Pilates, Private Sessions, Workshops, Clinical Pilates',
     ],
   },
   {
@@ -206,7 +221,6 @@ const CATEGORIES: Category[] = [
     businessType: 'Sole Trader',
     vehicles: '1',
     lines: [
-      'Dog Grooming | dog groomer pet grooming dog wash | Full Groom, Wash & Dry, Nail Clipping, Mobile Grooming, De-shedding, Puppy Groom',
       'Dog Walking | dog walker pet walking | Dog Walking, Group Walks, Puppy Visits, Pet Sitting',
       'Pet Sitting | pet sitter house sitting pets | Home Visits, Overnight Stays, Pet Feeding, Medication Administration',
       'Dog Training | dog trainer obedience behaviour | Puppy School, Obedience Training, Behaviour Consultations, Private Training Sessions',
@@ -216,6 +230,9 @@ const CATEGORIES: Category[] = [
       'Mobile Vet | vet mobile veterinarian | Home Vet Consultations, Vaccinations, In-Home Euthanasia',
       'Horse Services | equine farrier horse | Farrier Services, Horse Training, Agistment, Horse Float Transport',
       'Aquarium Services | aquarium fish tank | Aquarium Setup, Tank Cleaning, Aquarium Maintenance',
+    ],
+    bookings: [
+      'Dog Groomer | dog groomer pet grooming wash | Full Groom, Wash & Dry, Nail Clipping, Mobile Grooming, De-shedding, Puppy Groom',
     ],
   },
   {
@@ -260,15 +277,17 @@ const CATEGORIES: Category[] = [
     businessType: 'Sole Trader',
     vehicles: '0',
     lines: [
-      'Photography | photographer photos photo | Wedding Photography, Portrait Sessions, Event Photography, Commercial Photography, Real Estate Photography, Product Photography',
       'Videography | videographer video filming | Wedding Videos, Corporate Videos, Event Videos, Social Media Content, Drone Footage',
       'Graphic Design | graphic designer branding logo | Logo Design, Branding, Print Design, Social Media Graphics, Signage Design',
       'Signwriting | signs signage signwriter | Shop Signs, Vehicle Signage, Banners, Window Graphics, Illuminated Signs',
       'Printing | printer print printing | Business Cards, Flyers, Banners, Brochures, Large Format Printing',
       'Drone Services | drone aerial | Aerial Photography, Roof Inspections, Drone Surveying, Real Estate Aerials',
-      'Music Lessons | music teacher piano guitar singing | Piano Lessons, Guitar Lessons, Singing Lessons, Drum Lessons',
       'Copywriting | writer content copywriter | Website Copy, Blog Writing, Marketing Copy, Editing & Proofreading',
       'Picture Framing | framing framer frames | Custom Framing, Canvas Stretching, Mirror Framing',
+    ],
+    bookings: [
+      'Photographer | photographer photos photo photography | Wedding Photography, Portrait Sessions, Event Photography, Commercial Photography, Real Estate Photography, Product Photography',
+      'Music Teacher | music teacher piano guitar singing lessons | Piano Lessons, Guitar Lessons, Singing Lessons, Drum Lessons',
     ],
   },
   {
@@ -301,12 +320,14 @@ const CATEGORIES: Category[] = [
     businessType: 'Sole Trader',
     vehicles: '0',
     lines: [
-      'Tutoring | tutor tutoring lessons | Maths Tutoring, English Tutoring, Science Tutoring, Exam Preparation, Online Tutoring',
-      'Driving School | driving instructor lessons | Driving Lessons, Driving Test Preparation, Automatic Lessons, Manual Lessons',
       'Childcare | child care daycare childcare | Long Day Care, Before & After School Care, Vacation Care',
       'Nanny & Babysitting | nanny babysitter babysitting | Babysitting, Nanny Services, School Pickups, Overnight Care',
       'Language School | languages language lessons | Group Language Classes, Private Language Lessons, Online Language Classes',
       'Training & Workshops | trainer workshops courses first aid | Workshops, Corporate Training, First Aid Courses, Online Courses',
+    ],
+    bookings: [
+      'Tutor | tutor tutoring lessons | Maths Tutoring, English Tutoring, Science Tutoring, Exam Preparation, Online Tutoring',
+      'Driving Instructor | driving instructor lessons school | Driving Lessons, Driving Test Preparation, Automatic Lessons, Manual Lessons',
     ],
   },
   {
@@ -334,6 +355,14 @@ const CATEGORIES: Category[] = [
       'Funeral Services | funeral director funerals | Funeral Arrangements, Cremations, Memorial Services, Pre-Paid Funerals',
     ],
   },
+  {
+    name: 'Other Bookings',
+    icon: { ios: 'calendar', android: 'event', web: 'event' },
+    businessType: 'Sole Trader',
+    vehicles: '0',
+    lines: [],
+    bookings: ['Other (needs bookings) | other appointments appointment bookings booking | Appointments, Consultations, Follow-up Appointments, Packages'],
+  },
 ];
 
 /** Services to suggest when the owner types their own industry. */
@@ -357,7 +386,10 @@ export const BUSINESS_TYPES = ['Service Business', 'Sole Trader', 'Partnership',
 const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
 export const INDUSTRIES: Industry[] = CATEGORIES.flatMap((category) =>
-  category.lines.map((line) => {
+  [
+    ...category.lines.map((line) => [line, 'service'] as const),
+    ...(category.bookings ?? []).map((line) => [line, 'bookings'] as const),
+  ].map(([line, system]) => {
     const [name, keywords, services] = line.split('|').map((part) => part.trim());
     return {
       id: slug(name),
@@ -365,6 +397,7 @@ export const INDUSTRIES: Industry[] = CATEGORIES.flatMap((category) =>
       category: category.name,
       keywords: keywords.toLowerCase().split(/\s+/).filter(Boolean),
       services: services.split(',').map((s) => s.trim()).filter(Boolean),
+      system,
     };
   }),
 );
@@ -394,13 +427,15 @@ const words = (text: string) => text.toLowerCase().split(/[^a-z0-9]+/).filter(Bo
 /**
  * Smart search: matches the start of any word in the industry name (best),
  * then the start of related keywords, then the category. Every typed word must match.
+ * With `system`, only that system's industries (service or bookings).
  */
-export function searchIndustries(query: string, limit = 8): Industry[] {
+export function searchIndustries(query: string, limit = 8, system?: SystemType): Industry[] {
   const terms = words(query);
   if (terms.length === 0) return [];
 
   const scored: { industry: Industry; score: number }[] = [];
   for (const industry of INDUSTRIES) {
+    if (system && industry.system !== system) continue;
     const nameWords = words(industry.name);
     const categoryWords = words(industry.category);
     let score = 0;
