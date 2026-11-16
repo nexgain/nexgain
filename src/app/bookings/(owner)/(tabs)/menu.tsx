@@ -7,8 +7,7 @@ import { useBusiness } from '@/data/business';
 import { useContractorInvoices } from '@/data/contractor-invoices';
 import { superStatusOf, useEmployeeSuper } from '@/data/employee-super';
 import { useEmployees } from '@/data/employees';
-import { useJobs } from '@/data/jobs';
-import { reminderProblems, useReminders } from '@/data/reminders';
+import { reminderProblems, useBookings } from '@/systems/bookings/data/bookings';
 import { ownerNotifications, useNotifications } from '@/data/notifications';
 import { businessUsesGst, businessUsesSuper } from '@/data/super-rules';
 import { logOut } from '@/lib/auth';
@@ -17,7 +16,8 @@ import { logOut } from '@/lib/auth';
 export default function OwnerMoreScreen() {
   const unread = ownerNotifications(useNotifications()).filter((n) => !n.read).length;
   const toReview = useContractorInvoices().filter((i) => i.status === 'sent').length;
-  const cantSend = reminderProblems(useJobs(), useReminders()).length;
+  // Appointment reminders that couldn’t be sent (NexGain Bookings).
+  const cantSend = reminderProblems(useBookings()).length;
   // Super: Australian businesses only.
   const usesSuper = businessUsesSuper(useBusiness());
   const usesGst = businessUsesGst(useBusiness());

@@ -37,6 +37,9 @@ function fake(local: string, over: Partial<Booking> = {}): Booking {
     source: 'online',
     cancelledBy: null,
     createdAt: start.toISOString(),
+    reminderStatus: null,
+    reminderReason: '',
+    reminderSentAt: null,
     ...over,
   };
 }

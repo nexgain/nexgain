@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { router } from 'expo-router';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { FormField, SwitchRow, TextField } from '@/systems/bookings/components/owner/form';
+import { ChoiceRow, SaveNote } from '@/systems/bookings/components/owner/booking-ui';
+import { FormField, SwitchRow } from '@/systems/bookings/components/owner/form';
 import { Segmented } from '@/systems/bookings/components/owner/invoices-ui';
-import { Badge, Button, Card, goBack, Icon, OwnerIcons, OwnerScreen, PageHeader } from '@/systems/bookings/components/owner/ui';
-import { Colors as C, Radius, Spacing } from '@/constants/theme';
-import { updateBusiness, useBusiness, type ReminderSettings } from '@/data/business';
-import { useClients } from '@/data/clients';
+import { Button, Card, goBack, OwnerScreen, PageHeader } from '@/systems/bookings/components/owner/ui';
+import { Colors as C, Spacing } from '@/constants/theme';
+import { updateBusiness, useBusiness } from '@/data/business';
 import {
   EMAIL_PROVIDER,
   emailAccounts,
@@ -16,111 +16,97 @@ import {
   useRefreshConnectedAccountsOnFocus,
   type Provider,
 } from '@/data/connected-accounts';
-import { jobWhen } from '@/systems/bookings/components/owner/jobs-ui';
-import { useJobs } from '@/data/jobs';
+import { formatDayKey, formatTimeIn, zonedParts } from '@/systems/bookings/data/booking-time';
 import {
-  DEFAULT_REMINDER_MESSAGE,
-  DEFAULT_REMINDER_SUBJECT,
-  REMINDER_TAGS,
   reminderProblems,
-  sendTestReminder,
-  useReminders,
-} from '@/data/reminders';
+  updateBookingSettings,
+  useBookings,
+  useBookingSettings,
+  useBusinessTimeZone,
+} from '@/systems/bookings/data/bookings';
 
 type EmailProvider = Extract<Provider, 'google' | 'microsoft'>;
-
 const PROVIDER_CHOICES: { value: EmailProvider; label: string }[] = [
   { value: 'google', label: 'Gmail' },
   { value: 'microsoft', label: 'Outlook' },
 ];
+const HOURS_CHOICES = [1, 2, 4, 12, 24, 48, 72].map((h) => ({
+  value: h,
+  label: h < 24 ? `${h} hour${h === 1 ? '' : 's'} before` : `${h / 24} day${h === 24 ? '' : 's'} before (${h} hours)`,
+}));
 
-type Message = { tone: 'ok' | 'error'; text: string };
-
-// More > Reminders: automatic reminder emails to clients, a week before and the day
-// before each job at 9:00 am. The server sends them (even with the app closed);
-// this screen changes the settings and lists any that couldn't be sent.
-export default function RemindersScreen() {
+// More > Reminders (NexGain Bookings): automatic reminder emails to customers
+// before their appointment, from the owner's own Gmail or Outlook. The server
+// sends them every 15 minutes, even when the app is closed.
+export default function BookingRemindersScreen() {
   const business = useBusiness();
-  // Email accounts only: business apps like Square can't send reminders.
+  const settings = useBookingSettings();
+  const timeZone = useBusinessTimeZone();
+  const problems = reminderProblems(useBookings());
   const accounts = emailAccounts(useConnectedAccounts());
-  // The same connection list the server sends with, checked fresh each time this screen opens.
   useRefreshConnectedAccountsOnFocus();
-  const jobs = useJobs();
-  const clients = useClients();
-  const problems = reminderProblems(jobs, useReminders());
+  const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
 
-  const [subject, setSubject] = useState(business?.reminders.subject || DEFAULT_REMINDER_SUBJECT);
-  const [message, setMessage] = useState(business?.reminders.message || DEFAULT_REMINDER_MESSAGE);
-  const [testing, setTesting] = useState(false);
-  const [result, setResult] = useState<Message | null>(null);
-
-  if (!business) {
+  if (!business || !settings) {
     return (
       <OwnerScreen>
         <PageHeader onBack={() => goBack()} title="Reminders" />
         <Card>
-          <Text style={styles.muted}>Finish owner sign-up to set up reminders.</Text>
+          <Text style={styles.muted}>Loading…</Text>
         </Card>
       </OwnerScreen>
     );
   }
 
-  const settings = business.reminders;
-  const save = (changes: Partial<ReminderSettings>) => updateBusiness({ reminders: { ...settings, ...changes } });
-  // The same choice the server makes (send-reminders pickAccount).
+  // The same choice the server makes (_shared/booking-mail.ts ownerMailAccount).
   const sender =
-    findAccount(accounts, settings.provider ?? undefined) ?? findAccount(accounts, EMAIL_PROVIDER[business.emailApp]) ?? accounts[0];
-  const both = accounts.length > 1;
-
-  // Wording that matches the default is saved as blank, so it follows any future improvements.
-  function changeSubject(text: string) {
-    setSubject(text);
-    save({ subject: text.trim() === DEFAULT_REMINDER_SUBJECT ? '' : text });
-  }
-  function changeMessage(text: string) {
-    setMessage(text);
-    save({ message: text.trim() === DEFAULT_REMINDER_MESSAGE ? '' : text });
-  }
-  function restoreDefault() {
-    setSubject(DEFAULT_REMINDER_SUBJECT);
-    setMessage(DEFAULT_REMINDER_MESSAGE);
-    save({ subject: '', message: '' });
-  }
-
-  async function sendTest() {
-    setTesting(true);
-    setResult(null);
-    const sent = await sendTestReminder(subject, message);
-    setTesting(false);
-    setResult(sent.error ? { tone: 'error', text: sent.error } : { tone: 'ok', text: `Test reminder sent to ${sent.to}. Check your inbox.` });
-  }
+    findAccount(accounts, business.reminders.provider ?? undefined) ?? findAccount(accounts, EMAIL_PROVIDER[business.emailApp]) ?? accounts[0];
+  const save = async (changes: Parameters<typeof updateBookingSettings>[0]) => {
+    const error = await updateBookingSettings(changes);
+    setMessage(error ? { tone: 'error', text: error } : { tone: 'ok', text: 'Saved.' });
+  };
 
   return (
     <OwnerScreen>
       <PageHeader
         onBack={() => goBack()}
         title="Reminders"
-        subtitle="Clients get an email at 9:00 am (Brisbane time) before their job, from your own Gmail or Outlook. They're sent automatically, even when the app is closed."
+        subtitle="Customers get an email before their appointment, from your own Gmail or Outlook. Sent automatically, even when the app is closed."
       />
+      <SaveNote message={message} />
 
-      <Card title="Automatic Reminders" icon={{ ios: 'bell.badge.fill', android: 'notifications_active', web: 'notifications_active' }}>
+      <Card title="Appointment Reminders" icon={{ ios: 'bell.badge.fill', android: 'notifications_active', web: 'notifications_active' }}>
         <SwitchRow
-          label="Send reminders to clients"
-          hint={settings.enabled ? 'On for every job, unless you turn it off on the job.' : 'Off: no reminders are sent.'}
-          value={settings.enabled}
-          onChange={(enabled) => save({ enabled })}
+          label="Send reminders to customers"
+          hint={settings.remindersEnabled ? 'On for every booking with an email address.' : 'Off: no reminders are sent.'}
+          value={settings.remindersEnabled}
+          onChange={(remindersEnabled) => save({ remindersEnabled })}
         />
-        <View style={styles.divider} />
+        <ChoiceRow
+          label="When"
+          hint="Bookings made after this point don’t get one: their confirmation email was just sent."
+          choices={HOURS_CHOICES}
+          value={settings.reminderHours}
+          onChange={(reminderHours) => save({ reminderHours })}
+        />
+        <Text style={styles.muted}>
+          The reminder has the appointment details and, while it can still be changed online, a link to change or cancel it.
+        </Text>
+      </Card>
+
+      <Card title="Sent From" icon={{ ios: 'envelope.fill', android: 'mail', web: 'mail' }}>
         {!sender ? (
           <>
-            <Text style={styles.warning}>
-              Connect Gmail or Outlook so reminders can be sent from your email address. Until then, reminders can&apos;t go out.
-            </Text>
+            <Text style={styles.warning}>Connect Gmail or Outlook so reminders and booking confirmations can be emailed. Until then, none can go out.</Text>
             <Button label="Connect Gmail or Outlook" variant="secondary" onPress={() => router.navigate('/bookings/integrations')} />
           </>
-        ) : both ? (
-          <FormField label="Send reminders from">
-            <Segmented options={PROVIDER_CHOICES} value={sender.provider as EmailProvider} onChange={(provider) => save({ provider })} />
+        ) : accounts.length > 1 ? (
+          <FormField label="Send from">
+            <Segmented
+              options={PROVIDER_CHOICES}
+              value={sender.provider as EmailProvider}
+              onChange={(provider) => updateBusiness({ reminders: { ...business.reminders, provider } })}
+            />
             <Text style={styles.muted}>{sender.email}</Text>
           </FormField>
         ) : (
@@ -128,151 +114,41 @@ export default function RemindersScreen() {
         )}
       </Card>
 
-      <Card title="When" icon={OwnerIcons.clock}>
-        <SwitchRow
-          label="1 week before"
-          hint="9:00 am, 7 days before the job. Skipped for jobs booked less than a week ahead."
-          value={settings.weekBefore}
-          onChange={(weekBefore) => save({ weekBefore })}
-        />
-        <View style={styles.divider} />
-        <SwitchRow
-          label="1 day before"
-          hint="9:00 am the day before. Jobs booked after that get it straight away."
-          value={settings.dayBefore}
-          onChange={(dayBefore) => save({ dayBefore })}
-        />
-        {!settings.enabled && (
-          <Text style={styles.muted}>Reminders are off, so none are sent yet. These choices apply once you turn them on.</Text>
-        )}
-      </Card>
-
-      <Card title="Message" icon={{ ios: 'envelope.fill', android: 'mail', web: 'mail' }}>
-        <FormField label="Subject">
-          <TextField
-            value={subject}
-            onChangeText={changeSubject}
-            onBlur={() => !subject.trim() && changeSubject(DEFAULT_REMINDER_SUBJECT)}
-            accessibilityLabel="Reminder subject"
-          />
-        </FormField>
-        <FormField label="Message">
-          <TextField
-            value={message}
-            onChangeText={changeMessage}
-            onBlur={() => !message.trim() && changeMessage(DEFAULT_REMINDER_MESSAGE)}
-            multiline
-            style={styles.message}
-            accessibilityLabel="Reminder message"
-          />
-        </FormField>
-        <Text style={styles.muted}>
-          These are filled in for each job: {REMINDER_TAGS.join(' ')}. A line is left out when what it needs is blank (for example,
-          no business phone saved).
-        </Text>
-        <Pressable onPress={restoreDefault} accessibilityRole="button" hitSlop={6}>
-          <Text style={styles.link}>Restore default wording</Text>
-        </Pressable>
-        {!business.phone.trim() && (
-          <Pressable onPress={() => router.navigate('/bookings/business-profile')} accessibilityRole="link" hitSlop={6}>
-            <Text style={styles.link}>Add your business phone number in Business Profile</Text>
-          </Pressable>
-        )}
-        <View style={styles.divider} />
-        <Button
-          label="Send test reminder"
-          variant="secondary"
-          icon={{ ios: 'paperplane.fill', android: 'send', web: 'send' }}
-          disabled={testing || !sender}
-          onPress={sendTest}
-        />
-        {testing && <ActivityIndicator color={C.accent} />}
-        {result && (
-          <Text style={[styles.result, result.tone === 'error' && { color: C.danger }]} accessibilityRole="alert">
-            {result.text}
-          </Text>
-        )}
-      </Card>
-
       <Card title="Couldn't Send" icon={{ ios: 'exclamationmark.triangle.fill', android: 'warning', web: 'warning' }}>
         {problems.length === 0 ? (
-          <Text style={styles.muted}>No problems. Any upcoming job whose reminder can&apos;t be sent shows here, with the reason.</Text>
+          <Text style={styles.muted}>No problems. Any upcoming appointment whose reminder can’t be sent shows here, with the reason.</Text>
         ) : (
-          problems.map(({ job, reminder }, i) => (
+          problems.map((b, i) => (
             <Pressable
-              key={reminder.id}
-              onPress={() => router.navigate({ pathname: '/bookings/job/[id]', params: { id: job.id } })}
+              key={b.id}
+              onPress={() => router.push({ pathname: '/bookings/booking/[id]', params: { id: b.id } })}
               accessibilityRole="button"
-              style={({ pressed }) => [styles.problem, i > 0 && styles.problemDivider, pressed && styles.pressed]}>
+              style={({ pressed }) => [styles.problem, i > 0 && styles.divider, pressed && styles.pressed]}>
               <View style={styles.flex}>
-                <Text style={styles.problemTitle}>{clients.find((c) => c.id === job.clientId)?.name || job.title}</Text>
-                <Text style={styles.muted}>
-                  {job.title} · {jobWhen(job)}
+                <Text style={styles.title}>
+                  {b.customerName} · {formatDayKey(zonedParts(b.startsAt, timeZone).date)}, {formatTimeIn(b.startsAt, timeZone)}
                 </Text>
-                <Text style={styles.problemReason}>{reminder.reason}</Text>
+                <Text style={styles.reason}>{b.reminderReason}</Text>
               </View>
-              <Badge label={reminder.kind === 'week' ? '1 week' : '1 day'} tone="danger" />
-              <Icon name={OwnerIcons.chevron} color={C.textSecondary} size={14} />
             </Pressable>
           ))
         )}
       </Card>
+      <Pressable onPress={() => router.navigate('/bookings/booking-settings')} accessibilityRole="link" hitSlop={6}>
+        <Text style={styles.link}>Bookings Settings</Text>
+      </Pressable>
     </OwnerScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  muted: {
-    color: C.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  warning: {
-    color: C.warning,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  link: {
-    color: C.accent,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: C.border,
-  },
-  message: {
-    minHeight: 260,
-  },
-  result: {
-    color: C.success,
-    fontSize: 14,
-  },
-  problem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-    paddingVertical: Spacing.two,
-    borderRadius: Radius.medium,
-  },
-  problemDivider: {
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  problemTitle: {
-    color: C.text,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  problemReason: {
-    color: C.danger,
-    fontSize: 13,
-    marginTop: 2,
-  },
+  muted: { color: C.textSecondary, fontSize: 14, lineHeight: 20 },
+  warning: { color: C.warning, fontSize: 14, lineHeight: 20, fontWeight: '600' },
+  title: { color: C.text, fontSize: 15, fontWeight: '600' },
+  reason: { color: C.danger, fontSize: 13, lineHeight: 18 },
+  problem: { paddingVertical: Spacing.two },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.border },
+  pressed: { opacity: 0.6 },
+  flex: { flex: 1 },
+  link: { color: C.accent, fontSize: 15, fontWeight: '600', textAlign: 'center' },
 });

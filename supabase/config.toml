@@ -60,3 +60,7 @@ verify_jwt = true
 # customer may see; the database functions check everything.
 [functions.booking-page]
 verify_jwt = false
+
+# NexGain Bookings reminders: called by the database timer (password checked inside).
+[functions.booking-reminders]
+verify_jwt = false

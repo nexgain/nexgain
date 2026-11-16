@@ -269,6 +269,14 @@ export default function BookingSettingsScreen() {
         <Button label="Add closed days" variant="secondary" icon={OwnerIcons.plus} onPress={addClosure} />
       </Card>
 
+      <Card title="Reminders" icon={OwnerIcons.bell}>
+        <ListRow
+          title={settings.remindersEnabled ? 'Reminder emails are on' : 'Reminder emails are off'}
+          subtitle={settings.remindersEnabled ? `Sent ${settings.reminderHours < 24 ? `${settings.reminderHours} hour${settings.reminderHours === 1 ? '' : 's'}` : `${settings.reminderHours / 24} day${settings.reminderHours === 24 ? '' : 's'}`} before each appointment` : 'Customers aren’t reminded'}
+          onPress={() => router.navigate('/bookings/reminders')}
+        />
+      </Card>
+
       <Card title="Booking Rules" icon={OwnerIcons.info}>
         <ChoiceRow
           label="Start times"

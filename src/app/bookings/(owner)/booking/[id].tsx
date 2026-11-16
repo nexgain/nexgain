@@ -21,6 +21,7 @@ import {
   addManualBooking,
   formatPrice,
   moveBooking,
+  reminderText,
   setBookingStatus,
   staffForService,
   useBookings,
@@ -243,6 +244,7 @@ function BookingDetails({ id }: { id: string }) {
           <Detail label="Cancelled by" value={booking.cancelledBy === 'customer' ? 'The customer (online)' : 'You'} />
         )}
         {booking.notes ? <Detail label="Notes" value={booking.notes} /> : null}
+        {reminderText(booking) ? <Detail label="Reminder" value={reminderText(booking)!} /> : null}
       </Card>
 
       <Card title="Customer" icon={OwnerIcons.person}>

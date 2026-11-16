@@ -23,8 +23,8 @@
 // Setup: deploy as "booking-page" with "Verify JWT" OFF (customers aren't
 // signed in). Optional secret BOOKING_PAGE_URL: the page's address, for the
 // links in emails (default: the GitHub Pages address).
-import { adminDb, EMAIL_PROVIDERS, type ProviderId } from '../_shared/connections.ts';
-import { ACCOUNT_COLUMNS, EMAIL, sendFromAccount, type AccountRow } from '../_shared/mail.ts';
+import { bookingPageUrl, EMAIL, money, ownerMailAccount, sendBookingEmail, whenText } from '../_shared/booking-mail.ts';
+import { adminDb } from '../_shared/connections.ts';
 
 type Db = ReturnType<typeof adminDb>;
 
@@ -78,25 +78,8 @@ type View = {
 
 // ---------- Emails to the customer ----------
 
-const EMAIL_APP_PROVIDER: Record<string, ProviderId> = { gmail: 'google', outlook: 'microsoft' };
-
-function when(view: View) {
-  const date = new Date(view.start);
-  const day = date.toLocaleDateString('en-GB', { timeZone: view.business.timezone, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const time = date.toLocaleTimeString('en-US', { timeZone: view.business.timezone, hour: 'numeric', minute: '2-digit' });
-  return { day, time };
-}
-
-function money(amount: number, currency: string) {
-  try {
-    return new Intl.NumberFormat('en', { style: 'currency', currency }).format(amount);
-  } catch {
-    return amount.toFixed(2);
-  }
-}
-
 function message(kind: 'booked' | 'moved' | 'cancelled', view: View) {
-  const { day, time } = when(view);
+  const { day, time } = whenText(view.start, view.business.timezone);
   const b = view.business;
   const subject =
     kind === 'cancelled'
@@ -120,7 +103,7 @@ function message(kind: 'booked' | 'moved' | 'cancelled', view: View) {
     ...(view.price !== null && kind !== 'cancelled' ? [`Price: ${money(Number(view.price), view.business.currency)}`] : []),
   ];
   if (kind !== 'cancelled') {
-    lines.push('', `Need to change or cancel? ${pageUrl()}?m=${view.token}`);
+    lines.push('', `Need to change or cancel? ${bookingPageUrl()}?m=${view.token}`);
     if (view.cancellationPolicy.trim()) lines.push('', `Cancellation policy: ${view.cancellationPolicy.trim()}`);
   }
   lines.push('', 'Thanks,', b.name, ...(b.phone ? [`Phone: ${b.phone}`] : []), ...(b.email ? [`Email: ${b.email}`] : []));
@@ -133,16 +116,10 @@ async function emailCustomer(db: Db, token: string, kind: 'booked' | 'moved' | '
     if (!EMAIL.test(view.customerEmail)) return false;
     const { data: bk } = await db.from('bookings').select('business_id').eq('manage_token', token).maybeSingle();
     if (!bk) return false;
-    const [{ data: biz }, { data: accounts }] = await Promise.all([
-      db.from('businesses').select('email_app, reminder_provider').eq('id', bk.business_id).maybeSingle(),
-      db.from('connected_accounts').select(ACCOUNT_COLUMNS).eq('business_id', bk.business_id).in('provider', EMAIL_PROVIDERS),
-    ]);
-    const list = (accounts ?? []) as AccountRow[];
-    const account =
-      list.find((a) => a.provider === biz?.reminder_provider) ?? list.find((a) => a.provider === EMAIL_APP_PROVIDER[biz?.email_app ?? '']) ?? list[0];
+    const account = await ownerMailAccount(db, bk.business_id);
     if (!account) return false; // no Gmail or Outlook connected: the confirmation screen is the confirmation
     const { subject, body } = message(kind, view);
-    await sendFromAccount(db, account, { to: view.customerEmail, subject, body, fromName: view.business.name, attachment: null });
+    await sendBookingEmail(db, account, view.customerEmail, subject, body, view.business.name);
     return true;
   } catch (e) {
     console.error('booking-page email:', e instanceof Error ? e.message : e);

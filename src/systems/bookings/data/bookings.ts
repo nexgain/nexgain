@@ -30,6 +30,8 @@ export type BookingSettings = {
   cancelNoticeHours: number;
   cancellationPolicy: string;
   reminderHours: number;
+  /** Automatic reminder emails to customers (see 20261120000000_booking_reminders.sql). */
+  remindersEnabled: boolean;
 };
 
 export type BookingStaff = {
@@ -90,6 +92,10 @@ export type Booking = {
   source: 'online' | 'owner';
   cancelledBy: 'customer' | 'business' | null;
   createdAt: string;
+  /** The reminder email: null (not yet), sending, sent, failed or skipped, and why. */
+  reminderStatus: 'sending' | 'sent' | 'failed' | 'skipped' | null;
+  reminderReason: string;
+  reminderSentAt: string | null;
 };
 
 export const DEFAULT_OPENING_HOURS: OpeningDay[] = [
@@ -137,6 +143,7 @@ type SettingsRow = {
   cancel_notice_hours: number;
   cancellation_policy: string;
   reminder_hours: number;
+  reminders_enabled?: boolean;
 };
 type StaffRow = {
   id: string;
@@ -182,6 +189,9 @@ type BookingRow = {
   source: 'online' | 'owner';
   cancelled_by: 'customer' | 'business' | null;
   created_at: string;
+  reminder_status?: Booking['reminderStatus'];
+  reminder_reason?: string;
+  reminder_sent_at?: string | null;
 };
 
 const validDays = <T,>(v: unknown): v is T[] => Array.isArray(v) && v.length === 7;
@@ -203,6 +213,7 @@ export const settingsFromRow = (r: SettingsRow): BookingSettings => ({
   cancelNoticeHours: r.cancel_notice_hours,
   cancellationPolicy: r.cancellation_policy ?? '',
   reminderHours: r.reminder_hours,
+  remindersEnabled: r.reminders_enabled ?? true,
 });
 
 const staffFromRow = (r: StaffRow): BookingStaff => ({
@@ -256,6 +267,9 @@ export const bookingFromRow = (r: BookingRow): Booking => ({
   source: r.source,
   cancelledBy: r.cancelled_by,
   createdAt: r.created_at,
+  reminderStatus: r.reminder_status ?? null,
+  reminderReason: r.reminder_reason ?? '',
+  reminderSentAt: r.reminder_sent_at ?? null,
 });
 
 const BOOKING_COLUMNS =
@@ -265,20 +279,30 @@ const BOOKING_COLUMNS =
 // Loading (and live updates)
 // ---------------------------------------------------------------------------
 
+/** Added by 20261120000000_booking_reminders.sql (left out until that has been run). */
+const REMINDER_COLUMNS = 'reminder_status, reminder_reason, reminder_sent_at';
+
 /** Bookings from about 13 months ago onwards (enough for a year of analytics). */
 async function fetchBookings() {
   const since = new Date(Date.now() - 400 * 86_400_000).toISOString();
   const all: Booking[] = [];
+  let columns = `${BOOKING_COLUMNS}, ${REMINDER_COLUMNS}`;
   for (let from = 0; from < 50_000; from += 1000) {
-    const { data, error } = await supabase
-      .from('bookings')
-      .select(BOOKING_COLUMNS)
-      .gte('starts_at', since)
-      .order('starts_at')
-      .order('id')
-      .range(from, from + 999);
+    const page = () =>
+      supabase
+        .from('bookings')
+        .select(columns)
+        .gte('starts_at', since)
+        .order('starts_at')
+        .order('id')
+        .range(from, from + 999);
+    let { data, error } = await page();
+    if (error?.code === '42703' && columns !== BOOKING_COLUMNS) {
+      columns = BOOKING_COLUMNS;
+      ({ data, error } = await page());
+    }
     if (error) throw error;
-    const rows = (data ?? []) as BookingRow[];
+    const rows = (data ?? []) as unknown as BookingRow[];
     all.push(...rows.map(bookingFromRow));
     if (rows.length < 1000) break;
   }
@@ -375,6 +399,7 @@ function settingsColumns(p: Partial<BookingSettings>) {
   if (p.cancelNoticeHours !== undefined) c.cancel_notice_hours = p.cancelNoticeHours;
   if (p.cancellationPolicy !== undefined) c.cancellation_policy = p.cancellationPolicy;
   if (p.reminderHours !== undefined) c.reminder_hours = p.reminderHours;
+  if (p.remindersEnabled !== undefined) c.reminders_enabled = p.remindersEnabled;
   return c;
 }
 
@@ -687,5 +712,23 @@ export async function answerHoursRequest(staffId: string, approve: boolean): Pro
       s.id === staffId ? { ...s, hours: approve ? person.requestedHours : s.hours, requestedHours: null, hoursRequestedAt: null } : s,
     ),
   );
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Appointment reminders (sent by the booking-reminders Edge Function)
+// ---------------------------------------------------------------------------
+
+/** Upcoming appointments whose reminder couldn't be sent (with the reason), soonest first. */
+export function reminderProblems(bookings: Booking[], now = new Date()) {
+  return bookings.filter((b) => b.status === 'confirmed' && b.reminderStatus === 'failed' && new Date(b.startsAt) > now);
+}
+
+/** "Sent", "Couldn't send: ...", "Not sent: ..." or null when it isn't due yet. */
+export function reminderText(b: Booking) {
+  if (b.reminderStatus === 'sent') return 'Reminder sent';
+  if (b.reminderStatus === 'sending') return 'Reminder sending…';
+  if (b.reminderStatus === 'failed') return `Reminder couldn’t be sent: ${b.reminderReason}`;
+  if (b.reminderStatus === 'skipped') return `No reminder: ${b.reminderReason}`;
   return null;
 }
