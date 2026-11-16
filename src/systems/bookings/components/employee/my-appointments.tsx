@@ -3,16 +3,20 @@ import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Card, employeeStyles, Icon, Icons } from '@/systems/bookings/components/employee/ui';
+import { ShareLinkBox } from '@/systems/bookings/components/share-link';
 import { EmployeeColors as C } from '@/constants/employee-theme';
 import { Radius, Spacing } from '@/constants/theme';
+import { useBusiness } from '@/data/business';
 import { useCurrentEmployee } from '@/data/current-employee';
 import { addDays, formatDayKey, formatDuration, formatTimeIn, todayIn } from '@/systems/bookings/data/booking-time';
 import {
+  bookingLink,
   bookingsOnDay,
   formatPrice,
   markMyBooking,
   myStaff,
   useBookings,
+  useBookingSettings,
   useBookingsLoad,
   useBookingStaff,
   useBusinessTimeZone,
@@ -36,6 +40,8 @@ export function MyAppointments() {
   const today = todayIn(timeZone);
   const me = myStaff(useBookingStaff(), useCurrentEmployee()?.id);
   const load = useBookingsLoad();
+  const settings = useBookingSettings();
+  const businessName = useBusiness()?.businessName ?? 'us';
   const all = useBookings().filter((b) => b.staffId === me?.id);
   const [day, setDay] = useState(today);
   const days = Array.from({ length: 15 }, (_, i) => addDays(today, i - 1));
@@ -84,6 +90,18 @@ export function MyAppointments() {
         </Card>
       ) : (
         list.map((b) => <AppointmentCard key={b.id} booking={b} timeZone={timeZone} />)
+      )}
+
+      {settings && (
+        <>
+          <Text style={employeeStyles.sectionLabel}>My booking link</Text>
+          <Card style={styles.card}>
+            <Text style={styles.muted}>
+              Share this so customers can book you directly. It opens the booking page with you already picked.
+            </Text>
+            <ShareLinkBox link={bookingLink(settings.slug, me.id)} shareText={`Book with ${me.name} at ${businessName}`} />
+          </Card>
+        </>
       )}
 
       <Pressable onPress={() => router.push('/bookings/booking-hours')} accessibilityRole="link" style={styles.hoursLink} hitSlop={6}>

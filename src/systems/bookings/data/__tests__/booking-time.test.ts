@@ -56,6 +56,8 @@ describe('booking links', () => {
     expect(cleanSlug('  --Fade  Lab-- ')).toBe('fade-lab');
     expect(cleanSlug('!!!')).toBe('');
     expect(bookingLink('fade-lab')).toBe('https://nexgain.github.io/nexgain/book/?b=fade-lab');
+    // A staff member's personal link.
+    expect(bookingLink('fade-lab', 'staff-1')).toBe('https://nexgain.github.io/nexgain/book/?b=fade-lab&s=staff-1');
   });
 });
 

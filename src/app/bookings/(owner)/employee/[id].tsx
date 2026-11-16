@@ -59,13 +59,29 @@ import { fromDateKey } from '@/data/shifts';
 import { TAX_ESTIMATE_NOTE } from '@/data/tax';
 import { supabase } from '@/lib/supabase';
 import { EmployeeSuperCard } from '@/systems/bookings/components/owner/employee-super-card';
+import { StaffLinkCard } from '@/systems/bookings/components/owner/booking-link-card';
+import { myStaff, useBookingStaff } from '@/systems/bookings/data/bookings';
 
-const TABS = ['Details', 'Pay & Payroll', 'Qualifications', 'Documents', 'Availability', 'Job Notes'] as const;
+// NexGain Bookings adds "Bookings": their booking link (and, later, their own prices).
+const TABS = ['Details', 'Bookings', 'Pay & Payroll', 'Qualifications', 'Documents', 'Availability', 'Job Notes'] as const;
 type Tab = (typeof TABS)[number];
 
 const STATUSES: readonly EmployeeStatus[] = ['active', 'on_leave', 'inactive'];
 
 const dateText = (key: string | null) => (key ? formatShortDate(fromDateKey(key)) : '—');
+
+/** NexGain Bookings: this employee's personal booking link. */
+function BookingsTab({ employeeId }: { employeeId: string }) {
+  const person = myStaff(useBookingStaff(), employeeId);
+  if (!person) {
+    return (
+      <Card>
+        <Text style={styles.muted}>They can’t be booked yet. They’re added automatically once they’ve joined with your invite code.</Text>
+      </Card>
+    );
+  }
+  return <StaffLinkCard person={person} />;
+}
 
 // One employee's profile, opened from the Employees list or the Roster.
 export default function EmployeeProfileScreen() {
@@ -154,6 +170,7 @@ export default function EmployeeProfileScreen() {
       <TabRow tabs={TABS} active={tab} onChange={setTab} />
 
       {tab === 'Details' && <DetailsTab employee={employee} />}
+      {tab === 'Bookings' && <BookingsTab employeeId={employee.id} />}
       {tab === 'Pay & Payroll' && <PayTab employee={employee} />}
       {tab === 'Qualifications' && <QualificationsTab employee={employee} />}
       {tab === 'Documents' && <DocumentsTab employee={employee} />}

@@ -13,7 +13,9 @@ import { DEFAULT_TIME_ZONE, zonedParts } from '@/systems/bookings/data/booking-t
 
 /** The public booking page. Change here if NexGain moves to its own domain. */
 export const BOOKING_PAGE_URL = 'https://nexgain.github.io/nexgain/book/';
-export const bookingLink = (slug: string) => `${BOOKING_PAGE_URL}?b=${encodeURIComponent(slug)}`;
+/** The booking page; with a staff id, their personal link (that person already picked). */
+export const bookingLink = (slug: string, staffId?: string) =>
+  `${BOOKING_PAGE_URL}?b=${encodeURIComponent(slug)}${staffId ? `&s=${encodeURIComponent(staffId)}` : ''}`;
 
 export type OpeningDay = { open: boolean; start: string; end: string };
 export type StaffDay = { working: boolean; start: string; end: string };

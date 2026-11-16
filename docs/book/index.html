@@ -3,6 +3,7 @@
   NexGain Bookings: a business's public booking page. Hosted free on GitHub Pages
   (this repo's docs/ folder), so customers book in any browser without the app:
     Book:              https://nexgain.github.io/nexgain/book/?b=<business link name>
+    Book one person:   https://nexgain.github.io/nexgain/book/?b=<business link name>&s=<staff id>
     Change or cancel:  https://nexgain.github.io/nexgain/book/?m=<secret code from the email>
 
   This page holds no business data and no keys. It asks the Supabase Edge
@@ -130,6 +131,8 @@
     var params = new URLSearchParams(location.search);
     var slug = (params.get('b') || '').trim().toLowerCase();
     var token = (params.get('m') || '').trim();
+    // A staff member's personal link (&s=): that person is already picked.
+    var staffParam = (params.get('s') || '').trim().toLowerCase();
 
     // ---------- Small helpers (text is always set with textContent, never as HTML) ----------
     function el(tag, attrs, children) {
@@ -302,12 +305,15 @@
     var page = null;
     var pickedService = null;
     var pickedStaff = null; // null = anyone available
+    var onlyStaff = null; // from a personal link: the only person shown
     var pickedSlot = null;
     var details = { name: '', phone: '', email: '', notes: '' };
 
     function staffFor(service) {
       return page.staff.filter(function (s) { return !service.staffIds.length || service.staffIds.indexOf(s.id) >= 0; });
     }
+    /** Whether the "Who would you like?" step is skipped (personal link, or only one person). */
+    function skipsStaff() { return !!onlyStaff || staffFor(pickedService).length <= 1; }
     function staffName(id) {
       var s = page.staff.filter(function (x) { return x.id === id; })[0];
       return s ? s.name : '';
@@ -320,6 +326,15 @@
         header(data.business);
         if (!data.accepting) { failed(data.business.name + ' isn’t taking online bookings right now.'); return; }
         if (!data.services.length || !data.staff.length) { failed('There’s nothing to book online yet.'); return; }
+        onlyStaff = data.staff.filter(function (x) { return x.id === staffParam; })[0] || null;
+        if (onlyStaff) {
+          // Only the services they do.
+          page.services = page.services.filter(function (sv) { return !sv.staffIds.length || sv.staffIds.indexOf(onlyStaff.id) >= 0; });
+          document.title = 'Book with ' + onlyStaff.name + ' · ' + data.business.name;
+          var sub = document.querySelector('#biz .muted');
+          if (sub) sub.textContent = 'Book with ' + onlyStaff.name;
+          if (!page.services.length) { failed(onlyStaff.name + ' doesn’t have any services to book online yet.'); return; }
+        }
         chooseService();
       }).catch(function (e) { failed(e.code === 'not_found' ? 'This booking page could not be found. Please check the link.' : e.message); });
     }
@@ -340,6 +355,7 @@
     }
 
     function chooseStaff() {
+      if (onlyStaff) { pickedStaff = onlyStaff.id; chooseTime(true); return; }
       var people = staffFor(pickedService);
       if (people.length <= 1) { pickedStaff = people.length ? people[0].id : null; chooseTime(true); return; }
       show([
@@ -408,7 +424,7 @@
           button,
         ]
       ));
-      show([backButton(function () { chooseTime(staffFor(pickedService).length <= 1); }), progress(4), el('h1', { text: 'Your details' }), form]);
+      show([backButton(function () { chooseTime(skipsStaff()); }), progress(4), el('h1', { text: 'Your details' }), form]);
     }
 
     function confirmBooking(button) {
@@ -424,7 +440,7 @@
         name: details.name, phone: details.phone, email: details.email, notes: details.notes })
         .then(function (r) { done(r.booking, r.emailed, 'booked'); })
         .catch(function (e) {
-          if (e.code === 'taken') { chooseTime(staffFor(pickedService).length <= 1); setTimeout(function () { alertBox(e.message); }, 0); }
+          if (e.code === 'taken') { chooseTime(skipsStaff()); setTimeout(function () { alertBox(e.message); }, 0); }
           else enterDetails(e.message);
         });
     }
