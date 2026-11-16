@@ -236,13 +236,13 @@ export default function DocDetailScreen() {
       {isQuote && doc.status === 'Accepted' && (
         <Card title="Accepted" icon={OwnerIcons.check}>
           <Text style={styles.muted}>
-            {answeredOn ? `${clientName} accepted this quote online on ${answeredOn}. ` : 'The client accepted this quote. '}
+            {answeredOn ? `${clientName} accepted this quote online on ${answeredOn}. ` : 'The customer accepted this quote. '}
             Convert it to an invoice, or confirm the job to pick a date and time and add it to your Jobs page and
             Calendar.
           </Text>
           <ConvertButton invoiceId={invoice?.id} onConvert={convert} />
           <Button
-            label="Confirm Job"
+            label="Confirm Appointment"
             variant="secondary"
             icon={OwnerIcons.calendar}
             onPress={() => router.push({ pathname: '/bookings/invoices/confirm/[id]', params: { id: doc.id } })}
@@ -251,11 +251,11 @@ export default function DocDetailScreen() {
       )}
       {isQuote && doc.status === 'Booked' && (
         <Card title="Booked" icon={OwnerIcons.calendar}>
-          <Text style={styles.muted}>This quote has been booked in as a job, so it can&apos;t be booked again.</Text>
+          <Text style={styles.muted}>This quote has been booked in as an appointment, so it can&apos;t be booked again.</Text>
           <ConvertButton invoiceId={invoice?.id} onConvert={convert} />
           {bookedJob && (
             <Button
-              label="View Job"
+              label="View Appointment"
               variant="secondary"
               onPress={() => router.navigate({ pathname: '/bookings/job/[id]', params: { id: bookedJob.id } })}
             />
@@ -285,7 +285,7 @@ export default function DocDetailScreen() {
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials(doc.client.name)}</Text>
           </View>
-          <Text style={styles.clientName}>{doc.client.name || 'No client name'}</Text>
+          <Text style={styles.clientName}>{doc.client.name || 'No customer name'}</Text>
         </View>
         <ContactRow
           icon={{ ios: 'mappin.and.ellipse', android: 'location_on', web: 'location_on' }}
@@ -297,21 +297,21 @@ export default function DocDetailScreen() {
           value={doc.client.phone}
           placeholder="No phone number"
           onPress={() => Linking.openURL(`tel:${doc.client.phone.replace(/\s/g, '')}`)}
-          actionLabel="Call client"
+          actionLabel="Call customer"
         />
         <ContactRow
           icon={{ ios: 'envelope.fill', android: 'mail', web: 'mail' }}
           value={doc.client.email}
           placeholder="No email"
           onPress={() => Linking.openURL(`mailto:${doc.client.email}`)}
-          actionLabel="Email client"
+          actionLabel="Email customer"
         />
       </Card>
 
-      <Card title="Job Details" icon={OwnerIcons.calendar}>
-        <DetailRow label="Job Type" value={doc.jobType} />
-        <DetailRow label="Job Date" value={dateText(doc.jobDate)} />
-        {doc.kind === 'quote' && <DetailRow label="Job Time" value={jobTimeText(doc) || null} />}
+      <Card title="Appointment Details" icon={OwnerIcons.calendar}>
+        <DetailRow label="Appointment Type" value={doc.jobType} />
+        <DetailRow label="Appointment Date" value={dateText(doc.jobDate)} />
+        {doc.kind === 'quote' && <DetailRow label="Appointment Time" value={jobTimeText(doc) || null} />}
         <DetailRow label="Notes" value={doc.description} />
       </Card>
 

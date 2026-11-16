@@ -11,7 +11,8 @@ import { docsForList, isListFilter, useDocs, type DocKind } from '@/data/invoice
 // /invoices/list?kind=quote&status=Sent shows every Sent quote, newest first.
 export default function DocListScreen() {
   const params = useLocalSearchParams<{ kind?: string; status?: string }>();
-  const kind: DocKind = params.kind === 'quote' ? 'quote' : 'invoice';
+  // NexGain Bookings: invoices only (no quotes).
+  const kind: DocKind = 'invoice';
   const filter = params.status && isListFilter(kind, params.status) ? params.status : 'all';
   const docs = useDocs();
   const [query, setQuery] = useState('');

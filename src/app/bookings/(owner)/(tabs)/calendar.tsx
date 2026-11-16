@@ -196,14 +196,16 @@ function DayGrid({
               ))}
             </View>
             {columns.map((s) => (
-              <Pressable
-                key={s.id}
-                onPress={(e) => addBooking({ date: day, staff: s.id, time: timeOfMinutes(timeAtY(e.nativeEvent.locationY, window)) })}
-                accessibilityRole="button"
-                accessibilityLabel={`Add a booking with ${s.name}`}
-                style={[styles.column, { width: COLUMN_WIDTH, height }]}>
+              <View key={s.id} style={[styles.column, { width: COLUMN_WIDTH, height }]}>
+                {/* The empty space: tap to add a booking at that time (behind the bookings, not around them). */}
+                <Pressable
+                  onPress={(e) => addBooking({ date: day, staff: s.id, time: timeOfMinutes(timeAtY(e.nativeEvent.locationY, window)) })}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Add a booking with ${s.name}`}
+                  style={StyleSheet.absoluteFill}
+                />
                 {hours.map((h, i) => (
-                  <View key={h} style={[styles.hourLine, { top: i * HOUR_HEIGHT }]} />
+                  <View key={h} style={[styles.hourLine, { top: i * HOUR_HEIGHT }]} pointerEvents="none" />
                 ))}
                 {timeOffSpans(timeOff, s.id, day, timeZone).map((span, i) => {
                   const pos = blockPosition(span, window);
@@ -241,7 +243,7 @@ function DayGrid({
                 {day === today && nowMinutes >= window.start && nowMinutes <= window.end && (
                   <View style={[styles.nowLine, { top: ((nowMinutes - window.start) / 60) * HOUR_HEIGHT }]} pointerEvents="none" />
                 )}
-              </Pressable>
+              </View>
             ))}
           </View>
         </View>

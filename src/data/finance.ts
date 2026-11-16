@@ -46,9 +46,12 @@ export type MoneyEntry = {
   title: string;
   subtitle: string;
   category: string;
-  source: 'invoice' | 'payroll' | 'expense';
+  /** 'booking' = a NexGain Bookings appointment (System 2 only). */
+  source: 'invoice' | 'payroll' | 'expense' | 'booking';
   /** The invoice (revenue) or expense this came from, to open it. */
   docId?: string;
+  /** The booking this came from (NexGain Bookings), to open it. */
+  bookingId?: string;
   expense?: Expense;
 };
 

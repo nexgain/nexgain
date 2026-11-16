@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
 import {
@@ -8,7 +7,6 @@ import {
   HeaderIconButton,
   KIND_LABEL,
   ScreenHeader,
-  Segmented,
   SummaryTile,
   SUMMARY,
 } from '@/systems/bookings/components/owner/invoices-ui';
@@ -16,38 +14,26 @@ import { Button, Card, EmptyState, OwnerIcons, OwnerScreen } from '@/systems/boo
 import { Spacing } from '@/constants/theme';
 import { docsForList, useDocs, type DocKind, type ListFilter, type SalesDoc } from '@/data/invoices';
 
-const KINDS = [
-  { value: 'invoice', label: 'Invoices' },
-  { value: 'quote', label: 'Quotes' },
-] as const;
-
-/** How many of the newest quotes / invoices this screen shows before "See more". */
+/** How many of the newest invoices this screen shows before "See more". */
 const RECENT_COUNT = 3;
 
 const newDoc = (kind: DocKind) => router.push({ pathname: '/bookings/invoices/new', params: { kind } });
 const openList = (kind: DocKind, status: ListFilter) =>
   router.push({ pathname: '/bookings/invoices/list', params: { kind, status } });
 
+// Invoices (NexGain Bookings): booking businesses don't use quotes, so this
+// is invoices only (System 1 has Invoices & Quotes).
 export default function InvoicesScreen() {
   const docs = useDocs();
-  // A list page that was opened on its own comes back here with ?kind=, keeping its side.
-  const params = useLocalSearchParams<{ kind?: string }>();
-  const [kind, setKind] = useState<DocKind>(params.kind === 'quote' ? 'quote' : 'invoice');
-  const [seenParam, setSeenParam] = useState(params.kind);
-  if (params.kind !== seenParam) {
-    setSeenParam(params.kind);
-    if (params.kind === 'quote' || params.kind === 'invoice') setKind(params.kind);
-  }
+  const kind: DocKind = 'invoice';
 
   return (
     <OwnerScreen>
       <ScreenHeader
-        title="Invoices & Quotes"
+        title="Invoices"
         onBack={() => router.navigate('/bookings/dashboard')}
         right={<HeaderIconButton icon="plus" label={`New ${KIND_LABEL[kind].one.toLowerCase()}`} onPress={() => newDoc(kind)} />}
       />
-
-      <Segmented options={KINDS} value={kind} onChange={setKind} />
 
       <View style={styles.tiles}>
         {SUMMARY[kind].map((s) => (

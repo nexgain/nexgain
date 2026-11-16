@@ -121,7 +121,7 @@ export function buildDocHtml(doc: SalesDoc, payment: BusinessPayment, { receipt 
         ${doc.client.email ? escape(doc.client.email) : ''}
       </div>
       <div>
-        <strong>Job</strong><br>
+        <strong>Appointment</strong><br>
         ${escape(doc.jobType ?? '—')}<br>
         ${dateText(doc.jobDate)}${doc.kind === 'quote' && jobTimeText(doc) ? `<br>${jobTimeText(doc)}` : ''}
       </div>

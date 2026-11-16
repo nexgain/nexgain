@@ -73,10 +73,10 @@ export function OwnerDesktopShell({ children }: { children: ReactNode }) {
       title: 'Business',
       items: [
         {
-          label: 'Jobs',
-          icon: { ios: 'briefcase.fill', android: 'work', web: 'work' },
-          href: '/bookings/jobs',
-          match: ['/bookings/jobs', '/bookings/job/'],
+          label: 'Bookings Settings',
+          icon: { ios: 'calendar.badge.clock', android: 'edit_calendar', web: 'edit_calendar' },
+          href: '/bookings/booking-settings',
+          match: ['/bookings/booking-settings', '/bookings/booking-service/', '/bookings/booking-staff/'],
         },
         {
           label: 'Roster',
@@ -145,7 +145,7 @@ export function OwnerDesktopShell({ children }: { children: ReactNode }) {
           match: ['/bookings/integrations'],
         },
         {
-          label: 'Services',
+          label: 'Invoice Items',
           icon: { ios: 'list.bullet.rectangle.fill', android: 'list_alt', web: 'list_alt' },
           href: '/bookings/services',
           match: ['/bookings/services'],

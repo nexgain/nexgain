@@ -24,7 +24,7 @@ import { fromDateKey, JOB_TYPES, toDateKey } from '@/data/shifts';
 import { currentGstRate, updateBusiness, useBusiness } from '@/data/business';
 import { dateToTime, timeToDate, toMinutes } from '@/data/time';
 
-const STEPS = ['Client & Job Details', 'Add Items', 'Review & Send'] as const;
+const STEPS = ['Customer & Appointment Details', 'Add Items', 'Review & Send'] as const;
 
 // Typed routes only list '/bookings/invoices/index' for a folder index screen.
 const INVOICES_HOME = '/bookings/invoices' as Href;
@@ -45,7 +45,8 @@ type Draft = {
 export default function NewDocScreen() {
   const params = useLocalSearchParams<{ kind?: string; id?: string; step?: string }>();
   const existing = params.id ? docsStore.get().find((d) => d.id === params.id) : undefined;
-  const kind: DocKind = existing?.kind ?? (params.kind === 'invoice' ? 'invoice' : 'quote');
+  // NexGain Bookings: new documents are always invoices (no quotes).
+  const kind: DocKind = existing?.kind ?? 'invoice';
   const label = KIND_LABEL[kind];
 
   const [step, setStep] = useState(() => Math.min(2, Math.max(0, Number(params.step ?? 0) || 0)));
@@ -153,7 +154,7 @@ export default function NewDocScreen() {
 
   function saveAndSend() {
     const problems = [
-      !draft.client.name.trim() && 'Add a client name.',
+      !draft.client.name.trim() && 'Add a customer name.',
       items.length === 0 && 'Add at least one item.',
       items.some((i) => !i.description) && 'Every item needs a description.',
       timeError,
@@ -215,9 +216,9 @@ export default function NewDocScreen() {
 
       {step === 0 && (
         <>
-          <Card title="Client Details" icon={OwnerIcons.people}>
-            <FormField label="Client Name">
-              <TextField value={draft.client.name} onChangeText={(name) => updateClient({ name })} accessibilityLabel="Client Name" autoCapitalize="words" />
+          <Card title="Customer Details" icon={OwnerIcons.people}>
+            <FormField label="Customer Name">
+              <TextField value={draft.client.name} onChangeText={(name) => updateClient({ name })} accessibilityLabel="Customer Name" autoCapitalize="words" />
             </FormField>
             <FormField label="Phone">
               <TextField value={draft.client.phone} onChangeText={(phone) => updateClient({ phone })} accessibilityLabel="Phone" keyboardType="phone-pad" />
@@ -236,18 +237,18 @@ export default function NewDocScreen() {
             </FormField>
           </Card>
 
-          <Card title="Job Details" icon={OwnerIcons.calendar}>
-            <FormField label="Job Type">
+          <Card title="Appointment Details" icon={OwnerIcons.calendar}>
+            <FormField label="Appointment Type">
               <FieldButton
                 value={draft.jobType}
-                placeholder="Select a job type"
+                placeholder="Select an appointment type"
                 icon={OwnerIcons.chevronDown}
                 onPress={() => setJobSheetOpen(true)}
-                accessibilityLabel="Job Type"
+                accessibilityLabel="Appointment Type"
               />
             </FormField>
-            <FormField label="Job Date">
-              <OptionalDateField label="Job Date" value={draft.jobDate} onChange={(jobDate) => update({ jobDate })} />
+            <FormField label="Appointment Date">
+              <OptionalDateField label="Appointment Date" value={draft.jobDate} onChange={(jobDate) => update({ jobDate })} />
             </FormField>
             {isQuote && (
               <>
@@ -297,11 +298,11 @@ export default function NewDocScreen() {
       {step === 2 && (
         <>
           <Card title="Review" icon={OwnerIcons.check}>
-            <ReviewRow label="Client" value={draft.client.name || '—'} />
+            <ReviewRow label="Customer" value={draft.client.name || '—'} />
             <ReviewRow label="Contact" value={[draft.client.phone, draft.client.email].filter(Boolean).join(' · ') || '—'} />
             <ReviewRow label="Address" value={draft.client.address || '—'} />
             <ReviewRow
-              label="Job"
+              label="Appointment"
               value={
                 [draft.jobType, draft.jobDate && formatShortDate(draft.jobDate), isQuote && timeText(draft.jobStart, draft.jobEnd)]
                   .filter(Boolean)
@@ -387,7 +388,7 @@ export default function NewDocScreen() {
 
       <OptionSheet
         visible={jobSheetOpen}
-        title="Job Type"
+        title="Appointment Type"
         options={jobOptions}
         value={draft.jobType}
         onSelect={(jobType) => update({ jobType })}
@@ -507,7 +508,7 @@ function NoTimeDialog({ onAnswer }: { onAnswer: (moveOn: boolean, dontShowAgain:
     <Modal visible transparent animationType="fade" onRequestClose={() => onAnswer(false, dontShow)}>
       <View style={styles.dialogBackdrop}>
         <View style={styles.dialog} accessibilityRole="alert">
-          <Text style={styles.dialogTitle}>You haven&apos;t selected a time for this job.</Text>
+          <Text style={styles.dialogTitle}>You haven&apos;t selected a time for this appointment.</Text>
           <Text style={styles.dialogText}>Do you want to continue without a time?</Text>
           <Pressable
             onPress={() => setDontShow((v) => !v)}

@@ -16,7 +16,7 @@ import {
 } from '@/systems/bookings/components/owner/ui';
 import { AiInsightsList } from '@/systems/bookings/components/owner/ai-ui';
 import { NotificationsSection } from '@/systems/bookings/components/owner/notifications-section';
-import { UpcomingSection } from '@/systems/bookings/components/owner/upcoming';
+import { TodayBookings } from '@/systems/bookings/components/owner/today-bookings';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { transactionItems, useBankAccounts, useBankTransactions } from '@/data/bank';
 import { ownerFirstName, useBusiness } from '@/data/business';
@@ -31,7 +31,9 @@ import {
   useExpenses,
 } from '@/data/finance';
 import { useDocs } from '@/data/invoices';
-import { formatMoney, usePayslipRecords } from '@/data/payroll';
+import { usePayslipRecords } from '@/data/payroll';
+import { bookingRevenueEntries } from '@/systems/bookings/data/booking-stats';
+import { formatPrice, useBookings, useBookingStaff } from '@/systems/bookings/data/bookings';
 import { indexReceipts, receiptStatus, useReceipts } from '@/data/receipts';
 import { GstTile } from '@/systems/bookings/components/owner/gst-tile';
 import { BookingLinkCard } from '@/systems/bookings/components/owner/booking-link-card';
@@ -53,7 +55,8 @@ export default function OwnerDashboardScreen() {
 
   // This month's money in and out, compared with last month.
   const [thisMonth, lastMonth] = financeRanges(now);
-  const revenue = revenueEntries(useDocs());
+  // Paid invoices plus bookings that have happened.
+  const revenue = [...revenueEntries(useDocs()), ...bookingRevenueEntries(useBookings(), useBookingStaff(), now)];
   const expenses = expenseEntries(useExpenses(), usePayslipRecords(), useEmployees());
   const revenueNow = sumEntries(inRange(revenue, thisMonth));
   const expensesNow = sumEntries(inRange(expenses, thisMonth));
@@ -95,12 +98,12 @@ export default function OwnerDashboardScreen() {
         <Pressable
           onPress={() => router.navigate('/bookings/revenue')}
           accessibilityRole="button"
-          accessibilityLabel={`Revenue this month ${formatMoney(revenueNow)}. Open revenue.`}
+          accessibilityLabel={`Revenue this month ${formatPrice(revenueNow)}. Open revenue.`}
           style={({ pressed }) => pressed && styles.pressed}>
           <StatCard
             icon={OwnerIcons.trendingUp}
             label="Revenue (This Month)"
-            value={formatMoney(revenueNow, { cents: false })}
+            value={formatPrice(revenueNow, { whole: true })}
             change={percentChange(revenueNow, sumEntries(inRange(revenue, lastMonth)))}
             changeLabel="vs last month"
           />
@@ -108,12 +111,12 @@ export default function OwnerDashboardScreen() {
         <Pressable
           onPress={() => router.navigate('/bookings/expenses' as Href)}
           accessibilityRole="button"
-          accessibilityLabel={`Expenses this month ${formatMoney(expensesNow)}. Open expenses.`}
+          accessibilityLabel={`Expenses this month ${formatPrice(expensesNow)}. Open expenses.`}
           style={({ pressed }) => pressed && styles.pressed}>
           <StatCard
             icon={OwnerIcons.card}
             label="Expenses (This Month)"
-            value={formatMoney(expensesNow, { cents: false })}
+            value={formatPrice(expensesNow, { whole: true })}
             change={percentChange(expensesNow, sumEntries(inRange(expenses, lastMonth)))}
             changeLabel="vs last month"
           />
@@ -143,7 +146,7 @@ export default function OwnerDashboardScreen() {
 
       {/* Side by side on a computer; stacked on phones as before. */}
       <DesktopColumns>
-        <UpcomingSection />
+        <TodayBookings />
         <NotificationsSection />
       </DesktopColumns>
 
@@ -155,9 +158,15 @@ export default function OwnerDashboardScreen() {
         <Card title="Quick Actions">
           <View>
             <ActionRow
+              icon={OwnerIcons.plus}
+              label="Add a Booking"
+              onPress={() => router.push({ pathname: '/bookings/booking/[id]', params: { id: 'new' } })}
+            />
+            <ActionRow
               icon={OwnerIcons.calendar}
               label="Create Roster"
               onPress={() => router.navigate('/bookings/roster')}
+              showDivider
             />
             <ActionRow
               icon={OwnerIcons.people}
@@ -174,7 +183,7 @@ export default function OwnerDashboardScreen() {
             />
             <ActionRow
               icon={OwnerIcons.receipt}
-              label="Invoices & Quotes"
+              label="Invoices"
               // Typed routes only list '/bookings/invoices/index' for a folder index screen.
               onPress={() => router.navigate('/bookings/invoices' as Href)}
               showDivider

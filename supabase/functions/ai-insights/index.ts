@@ -14,6 +14,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
 import { adminDb, CORS, env, ownerBusinessId, reply } from '../_shared/connections.ts';
+import { bookingInsights, type BookingRow } from '../_shared/ai/booking-insights.ts';
 import { runHealthCheck } from '../_shared/ai/insights.ts';
 import { loadSnapshot } from '../_shared/ai/snapshot.ts';
 import type { Insight, InsightArea } from '../_shared/ai/types.ts';
@@ -28,11 +29,32 @@ const NOTIFICATION_TYPE: Record<InsightArea, string> = {
 
 type ExistingRow = { id: string; key: string; status: string; notified_at: string | null };
 
+/** NexGain Bookings businesses only: no-shows, cancellations, booking revenue and quiet days. */
+async function bookingChecks(db: SupabaseClient, businessId: string): Promise<Insight[]> {
+  const { data: business } = await db.from('businesses').select('system_type, timezone, currency').eq('id', businessId).maybeSingle();
+  if (business?.system_type !== 'bookings') return [];
+  const { data, error } = await db
+    .from('bookings')
+    .select('status, price, starts_at, ends_at, cancelled_by, service_name')
+    .eq('business_id', businessId)
+    .gte('starts_at', new Date(Date.now() - 60 * 86_400_000).toISOString())
+    .lte('starts_at', new Date().toISOString())
+    .limit(5000);
+  if (error) {
+    console.warn('Could not load bookings for the health check:', error.message);
+    return [];
+  }
+  return bookingInsights((data ?? []) as BookingRow[], {
+    timeZone: (business.timezone as string) || 'Australia/Brisbane',
+    currency: String(business.currency ?? 'AUD').slice(0, 3).toUpperCase(),
+  });
+}
+
 /** Checks one business and brings its ai_insights rows up to date. Returns how many it found. */
 async function checkBusiness(db: SupabaseClient, businessId: string, ownerId: string | null) {
   const snapshot = await loadSnapshot(db, businessId);
   if (!snapshot) return 0;
-  const found = runHealthCheck(snapshot);
+  const found = [...runHealthCheck(snapshot), ...(await bookingChecks(db, businessId))];
   const nowIso = new Date().toISOString();
 
   const { data: existingData, error: readError } = await db

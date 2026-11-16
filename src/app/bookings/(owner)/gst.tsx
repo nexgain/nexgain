@@ -8,11 +8,13 @@ import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { formatDay, recentQuarters, useGstQuarter, type GstItem } from '@/data/gst';
 import { formatMoney } from '@/data/payroll';
 
-const SOURCE: Record<GstItem['source'], string> = { invoice: 'Invoice', receipt: 'Receipt', bank: 'Bank', expense: 'Expense' };
+// 'booking' = a NexGain Bookings appointment that has happened (see 20261118000100_bookings_gst.sql).
+const SOURCE: Record<string, string> = { invoice: 'Invoice', receipt: 'Receipt', bank: 'Bank', expense: 'Expense', booking: 'Booking' };
+const isBooking = (i: GstItem) => (i.source as string) === 'booking';
 const SHOWN = 8;
 
 // GST: one Australian quarter at a time (this one first, earlier ones from the
-// picker): GST collected on paid invoices, GST credits on expenses, and the
+// picker): GST collected on bookings and paid invoices, GST credits on expenses, and the
 // estimated GST to pay, with everything that makes them up.
 export default function GstScreen() {
   const quarters = recentQuarters();
@@ -68,7 +70,7 @@ export default function GstScreen() {
           <Text style={styles.error}>Couldn&apos;t load GST. Check your internet connection.</Text>
         ) : (
           <>
-            <Line label="GST collected" hint="On invoices paid this quarter" value={formatMoney(totals.collected)} />
+            <Line label="GST collected" hint="On bookings and invoices paid this quarter" value={formatMoney(totals.collected)} />
             <Line label="GST paid on expenses" hint="GST credits" value={`− ${formatMoney(totals.credits)}`} />
             <View style={styles.divider} />
             <Line
@@ -89,7 +91,7 @@ export default function GstScreen() {
         {error && <Text style={styles.error}>{error}</Text>}
       </Card>
 
-      <ItemList title="GST collected" icon={OwnerIcons.trendingUp} items={sales} empty="No paid invoices with GST this quarter." />
+      <ItemList title="GST collected" icon={OwnerIcons.trendingUp} items={sales} empty="No bookings or paid invoices with GST this quarter." />
       <ItemList title="GST credits (expenses)" icon={OwnerIcons.card} items={expenses} empty="No expenses with GST this quarter." />
 
       <View style={styles.notice}>
@@ -119,7 +121,9 @@ function ItemList({ title, icon, items, empty }: { title: string; icon: IconName
   const sorted = [...items].sort((a, b) => b.day.localeCompare(a.day));
   const shown = all ? sorted : sorted.slice(0, SHOWN);
   const open = (i: GstItem) =>
-    i.source === 'invoice'
+    isBooking(i)
+      ? router.push({ pathname: '/bookings/booking/[id]', params: { id: i.refId } })
+      : i.source === 'invoice'
       ? router.push({ pathname: '/bookings/invoices/[id]', params: { id: i.refId } })
       : i.source === 'bank'
         ? router.push({ pathname: '/bookings/transaction/[id]', params: { id: i.refId } })

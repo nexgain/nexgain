@@ -8,17 +8,23 @@ import { Colors as C, Spacing } from '@/constants/theme';
 import { formatShortDate } from '@/data/employee-roster';
 import { financeRanges, inRange, percentChange, revenueEntries, sumEntries } from '@/data/finance';
 import { docTotals, useDocs } from '@/data/invoices';
-import { formatMoney } from '@/data/payroll';
+import { bookingRevenueEntries } from '@/systems/bookings/data/booking-stats';
+import { formatPrice, useBookings, useBookingStaff } from '@/systems/bookings/data/bookings';
 
-// Money coming in: every invoice marked Paid, newest first. Opened from the
-// Revenue box on the Dashboard.
+const formatMoney = (amount: number) => formatPrice(amount);
+
+// Money coming in (NexGain Bookings): bookings that have happened and every
+// invoice marked Paid, newest first. Opened from the Revenue box on the Dashboard.
 export default function RevenueScreen() {
   const docs = useDocs();
   const ranges = financeRanges();
   const [rangeId, setRangeId] = useState('this-month');
   const range = ranges.find((r) => r.id === rangeId) ?? ranges[0];
 
-  const all = revenueEntries(docs);
+  const bookings = useBookings();
+  const staff = useBookingStaff();
+  const all = [...revenueEntries(docs), ...bookingRevenueEntries(bookings, staff)].sort((a, b) => b.date.getTime() - a.date.getTime());
+  const bookingCount = (list: typeof all) => list.filter((e) => e.source === 'booking').length;
   const entries = inRange(all, range);
   const total = sumEntries(entries);
   const previous = rangeId === 'this-month' ? sumEntries(inRange(all, ranges[1])) : null;
@@ -39,7 +45,8 @@ export default function RevenueScreen() {
         <Text style={styles.label}>Total received · {range.label.toLowerCase()}</Text>
         <Text style={styles.total}>{formatMoney(total)}</Text>
         <Text style={styles.muted}>
-          {entries.length} paid invoice{entries.length === 1 ? '' : 's'}
+          {bookingCount(entries)} booking{bookingCount(entries) === 1 ? '' : 's'} · {entries.length - bookingCount(entries)} paid invoice
+          {entries.length - bookingCount(entries) === 1 ? '' : 's'}
           {previous !== null ? ` · ${percentChange(total, previous) ?? '—'} vs last month` : ''}
         </Text>
         {outstanding.length > 0 && (
@@ -55,15 +62,19 @@ export default function RevenueScreen() {
             icon={OwnerIcons.receipt}
             message={
               all.length === 0
-                ? 'No payments yet. When you mark an invoice as Paid, it shows up here.'
-                : 'No invoices were paid in this period.'
+                ? 'Nothing yet. Bookings show up here once they’ve happened, and invoices once they’re marked Paid.'
+                : 'Nothing in this period.'
             }
           />
         ) : (
           entries.map((e, i) => (
             <Pressable
               key={e.id}
-              onPress={() => router.push({ pathname: '/bookings/invoices/[id]', params: { id: e.docId! } })}
+              onPress={() =>
+                e.source === 'booking'
+                  ? router.push({ pathname: '/bookings/booking/[id]', params: { id: e.bookingId! } })
+                  : router.push({ pathname: '/bookings/invoices/[id]', params: { id: e.docId! } })
+              }
               accessibilityRole="button"
               accessibilityLabel={`${e.title}, ${formatMoney(e.amount)}, paid ${formatShortDate(e.date)}`}
               style={({ pressed }) => [styles.row, i > 0 && styles.divider, pressed && styles.pressed]}>
@@ -86,7 +97,7 @@ export default function RevenueScreen() {
       </Card>
 
       <Text style={styles.footnote}>
-        Revenue comes from invoices marked as Paid, including GST. It isn&apos;t connected to your bank account yet.
+        Revenue is bookings once their time has passed (not cancelled or no-shows) plus invoices marked as Paid, including GST.
       </Text>
     </OwnerScreen>
   );

@@ -45,8 +45,8 @@ export default function OwnerMoreScreen() {
           />
           <ActionRow
             icon={{ ios: 'briefcase.fill', android: 'work', web: 'work' }}
-            label="Jobs"
-            onPress={() => router.navigate('/bookings/jobs')}
+            label="Appointments"
+            onPress={() => router.navigate('/bookings/calendar')}
             showDivider
           />
           <ActionRow
@@ -98,7 +98,7 @@ export default function OwnerMoreScreen() {
           />
           <ActionRow
             icon={{ ios: 'list.bullet.rectangle.fill', android: 'list_alt', web: 'list_alt' }}
-            label="Services"
+            label="Invoice Items"
             onPress={() => router.navigate('/bookings/services')}
             showDivider
           />

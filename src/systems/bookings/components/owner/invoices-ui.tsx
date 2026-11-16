@@ -268,7 +268,7 @@ export function DocCard({ doc, onPress }: { doc: SalesDoc; onPress: () => void }
       </View>
       <View style={styles.docText}>
         <Text style={styles.docTitle} numberOfLines={1}>
-          {doc.client.name || 'No client name'}
+          {doc.client.name || 'No customer name'}
         </Text>
         <Text style={styles.docMeta} numberOfLines={1}>
           {doc.number} · {formatShortDate(fromDateKey(date))}
