@@ -86,21 +86,6 @@ export default function OwnerTabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="invoices"
-        options={{
-          title: 'Invoices',
-          // Leaving the tab closes any open quote/invoice screens, so the tab
-          // always reopens on the Invoices list.
-          popToTopOnBlur: true,
-          tabBarIcon: (props) => (
-            <TabIcon
-              name={{ ios: 'doc.text.fill', android: 'receipt_long', web: 'receipt_long' }}
-              {...props}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="ai-assistant"
         options={{
           title: 'AI Assistant',

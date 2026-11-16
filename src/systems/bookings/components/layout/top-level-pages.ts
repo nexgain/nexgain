@@ -13,7 +13,6 @@ const TOP_LEVEL = new Set([
   '/bookings/calendar',
   '/bookings/transactions',
   '/bookings/payroll',
-  '/bookings/invoices',
   '/bookings/ai-assistant',
   '/bookings/jobs',
   '/bookings/roster',
@@ -25,7 +24,6 @@ const TOP_LEVEL = new Set([
   '/bookings/reminders',
   '/bookings/alerts',
   '/bookings/integrations',
-  '/bookings/services',
   '/bookings/business-profile',
   '/bookings/menu',
   // Employee

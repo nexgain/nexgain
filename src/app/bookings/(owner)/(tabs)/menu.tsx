@@ -97,12 +97,6 @@ export default function OwnerMoreScreen() {
             showDivider
           />
           <ActionRow
-            icon={{ ios: 'list.bullet.rectangle.fill', android: 'list_alt', web: 'list_alt' }}
-            label="Invoice Items"
-            onPress={() => router.navigate('/bookings/services')}
-            showDivider
-          />
-          <ActionRow
             icon={{ ios: 'building.2.fill', android: 'store', web: 'store' }}
             label="Business Profile"
             onPress={() => router.navigate('/bookings/business-profile')}

@@ -70,11 +70,9 @@ export default function RevenueScreen() {
           entries.map((e, i) => (
             <Pressable
               key={e.id}
-              onPress={() =>
-                e.source === 'booking'
-                  ? router.push({ pathname: '/bookings/booking/[id]', params: { id: e.bookingId! } })
-                  : router.push({ pathname: '/bookings/invoices/[id]', params: { id: e.docId! } })
-              }
+              // Bookings open; older paid invoices (from before invoices were removed) are just listed.
+              onPress={e.bookingId ? () => router.push({ pathname: '/bookings/booking/[id]', params: { id: e.bookingId! } }) : undefined}
+              disabled={!e.bookingId}
               accessibilityRole="button"
               accessibilityLabel={`${e.title}, ${formatMoney(e.amount)}, paid ${formatShortDate(e.date)}`}
               style={({ pressed }) => [styles.row, i > 0 && styles.divider, pressed && styles.pressed]}>

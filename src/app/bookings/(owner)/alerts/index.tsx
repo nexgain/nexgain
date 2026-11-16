@@ -14,7 +14,6 @@ import { OwnerScreen } from '@/systems/bookings/components/owner/ui';
 import {
   deleteNotification,
   groupByDate,
-  markRead,
   matchesFilter,
   matchesSearch,
   OWNER_FILTERS,
@@ -53,13 +52,8 @@ export default function OwnerNotificationsScreen() {
           palette={OWNER_PALETTE}
           onDelete={(n) => deleteNotification(n.id)}
           onOpen={(n) => {
-            // A customer accepting or declining a quote opens that quote.
-            if (n.relatedDocId) {
-              markRead(n.id);
-              router.push({ pathname: '/bookings/invoices/[id]', params: { id: n.relatedDocId } });
-            } else {
-              router.push({ pathname: '/bookings/alerts/[id]', params: { id: n.id } });
-            }
+            // NexGain Bookings has no quotes or invoices: every notification opens its own page.
+            router.push({ pathname: '/bookings/alerts/[id]', params: { id: n.id } });
           }}
         />
       )}

@@ -192,7 +192,8 @@ export function ResultCardView({ card }: { card: ResultCard }) {
       title = `${card.number} · ${formatMoney(card.total)}`;
       lines = [card.clientName, card.dueDate ? `Due ${formatShortDate(fromDateKey(card.dueDate))}` : ''].filter(Boolean);
       status = { label: card.status, tone: card.status === 'Overdue' ? 'danger' : card.status === 'Paid' ? 'success' : 'info' };
-      buttons = [{ label: card.number.startsWith('Q') ? 'View Quote' : 'View Invoice', onPress: go({ pathname: '/bookings/invoices/[id]', params: { id: card.id } }) }];
+      // NexGain Bookings has no invoice screens: shown without a button.
+      buttons = [];
       break;
     case 'client':
       title = card.name;

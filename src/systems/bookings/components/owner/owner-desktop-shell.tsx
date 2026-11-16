@@ -56,12 +56,6 @@ export function OwnerDesktopShell({ children }: { children: ReactNode }) {
           match: ['/bookings/payroll', '/bookings/payroll-bank'],
         },
         {
-          label: 'Invoices',
-          icon: { ios: 'doc.text.fill', android: 'receipt_long', web: 'receipt_long' },
-          href: '/bookings/invoices',
-          match: ['/bookings/invoices'],
-        },
-        {
           label: 'AI Assistant',
           icon: { ios: 'sparkles', android: 'auto_awesome', web: 'auto_awesome' },
           href: '/bookings/ai-assistant',
@@ -143,12 +137,6 @@ export function OwnerDesktopShell({ children }: { children: ReactNode }) {
           icon: { ios: 'puzzlepiece.extension.fill', android: 'extension', web: 'extension' },
           href: '/bookings/integrations',
           match: ['/bookings/integrations'],
-        },
-        {
-          label: 'Invoice Items',
-          icon: { ios: 'list.bullet.rectangle.fill', android: 'list_alt', web: 'list_alt' },
-          href: '/bookings/services',
-          match: ['/bookings/services'],
         },
         {
           label: 'Business Profile',

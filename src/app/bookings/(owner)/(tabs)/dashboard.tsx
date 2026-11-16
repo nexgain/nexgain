@@ -182,13 +182,6 @@ export default function OwnerDashboardScreen() {
               showDivider
             />
             <ActionRow
-              icon={OwnerIcons.receipt}
-              label="Invoices"
-              // Typed routes only list '/bookings/invoices/index' for a folder index screen.
-              onPress={() => router.navigate('/bookings/invoices' as Href)}
-              showDivider
-            />
-            <ActionRow
               icon={OwnerIcons.chart}
               label="View Reports"
               onPress={() => router.navigate('/bookings/analytics')}

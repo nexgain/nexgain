@@ -72,8 +72,6 @@ function UpcomingCard({ item }: { item: UpcomingItem }) {
   function open() {
     if (item.event.type === 'job' && item.event.jobId) {
       router.navigate({ pathname: '/bookings/job/[id]', params: { id: item.event.jobId } });
-    } else if (item.event.type === 'quote' && item.event.quoteId) {
-      router.navigate({ pathname: '/bookings/invoices/[id]', params: { id: item.event.quoteId } });
     } else {
       router.navigate({ pathname: '/bookings/calendar', params: { event: item.event.id } });
     }

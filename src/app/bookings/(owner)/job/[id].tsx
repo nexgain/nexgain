@@ -240,12 +240,6 @@ export default function JobDetailScreen() {
               </View>
             ))}
             <TotalsBlock {...docTotals(quote.items, quote.gstRate)} />
-            <Pressable
-              onPress={() => router.navigate({ pathname: '/bookings/invoices/[id]', params: { id: quote.id } })}
-              accessibilityRole="link"
-              hitSlop={6}>
-              <Text style={styles.link}>Open quote {quote.number}</Text>
-            </Pressable>
           </>
         )}
       </Card>

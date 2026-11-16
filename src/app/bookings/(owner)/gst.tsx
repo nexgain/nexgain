@@ -123,8 +123,6 @@ function ItemList({ title, icon, items, empty }: { title: string; icon: IconName
   const open = (i: GstItem) =>
     isBooking(i)
       ? router.push({ pathname: '/bookings/booking/[id]', params: { id: i.refId } })
-      : i.source === 'invoice'
-      ? router.push({ pathname: '/bookings/invoices/[id]', params: { id: i.refId } })
       : i.source === 'bank'
         ? router.push({ pathname: '/bookings/transaction/[id]', params: { id: i.refId } })
         : i.source === 'receipt'

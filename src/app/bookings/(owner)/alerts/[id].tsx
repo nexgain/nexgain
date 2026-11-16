@@ -15,8 +15,6 @@ const ACTION_ROUTES: Record<string, Href> = {
   'Open GST': '/bookings/gst',
   'Open Bookings': '/bookings/calendar',
   'Open Bookings Settings': '/bookings/booking-settings',
-  'View invoice': '/bookings/invoices' as Href,
-  'Create quote': { pathname: '/bookings/invoices/new', params: { kind: 'quote' } },
 };
 
 export default function OwnerNotificationDetail() {
@@ -68,8 +66,6 @@ export default function OwnerNotificationDetail() {
         ? openInvoice
         : label === 'View transaction' && n.relatedId
           ? () => router.navigate({ pathname: '/bookings/transaction/[id]', params: { id: n.relatedId! } })
-        : label === 'View quote' && n.relatedDocId
-          ? () => router.navigate({ pathname: '/bookings/invoices/[id]', params: { id: n.relatedDocId! } })
           : ACTION_ROUTES[label] === '/bookings/roster'
             ? openRoster
             : ACTION_ROUTES[label]
