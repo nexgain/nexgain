@@ -115,6 +115,8 @@ export const bookingStaffStore = createStore<BookingStaff[]>([]);
 export const bookingServicesStore = createStore<BookingService[]>([]);
 export const timeOffStore = createStore<TimeOff[]>([]);
 export const bookingsStore = createStore<Booking[]>([]);
+/** Staff's own prices: "<staff id>:<service id>" -> price (see 20261122000000_booking_staff_prices.sql). */
+export const staffPricesStore = createStore<Map<string, number>>(new Map());
 export const bookingsLoadStore = createStore<'idle' | 'loading' | 'ready' | 'error'>('idle');
 
 export const useBookingSettings = () => bookingSettingsStore.use();
@@ -123,6 +125,7 @@ export const useBookingServices = () => bookingServicesStore.use();
 export const useTimeOff = () => timeOffStore.use();
 export const useBookings = () => bookingsStore.use();
 export const useBookingsLoad = () => bookingsLoadStore.use();
+export const useStaffPrices = () => staffPricesStore.use();
 
 /** The business's time zone (where its bookings happen). */
 export const businessTimeZone = () => businessStore.get()?.timezone || DEFAULT_TIME_ZONE;
@@ -314,7 +317,7 @@ async function fetchBookings() {
 export async function loadBookingsData() {
   bookingsLoadStore.set('loading');
   try {
-    const [settings, staff, services, timeOff, bookings] = await Promise.all([
+    const [settings, staff, services, timeOff, bookings, prices] = await Promise.all([
       supabase.from('booking_settings').select('*').maybeSingle<SettingsRow>(),
       supabase.from('booking_staff').select('*').order('sort').order('name'),
       supabase.from('booking_services').select('id, name, description, duration_minutes, price, staff_ids, active, sort').order('sort').order('name'),
@@ -324,6 +327,7 @@ export async function loadBookingsData() {
         .gte('ends_at', new Date(Date.now() - 30 * 86_400_000).toISOString())
         .order('starts_at'),
       fetchBookings(),
+      supabase.from('booking_staff_prices').select('staff_id, service_id, price'),
     ]);
     for (const r of [settings, staff, services, timeOff]) if (r.error) throw r.error;
     bookingSettingsStore.set(settings.data ? settingsFromRow(settings.data) : null);
@@ -331,6 +335,10 @@ export async function loadBookingsData() {
     bookingServicesStore.set(((services.data ?? []) as ServiceRow[]).map(serviceFromRow));
     timeOffStore.set(((timeOff.data ?? []) as TimeOffRow[]).map(timeOffFromRow));
     bookingsStore.set(bookings);
+    // Not there until the staff prices file has been run: everyone pays the usual price.
+    staffPricesStore.set(
+      new Map(((prices.data ?? []) as { staff_id: string; service_id: string; price: number | string }[]).map((r) => [priceKey(r.staff_id, r.service_id), Number(r.price)])),
+    );
     bookingsLoadStore.set('ready');
   } catch (e) {
     console.warn('Could not load bookings:', e instanceof Error ? e.message : e);
@@ -344,6 +352,7 @@ export function clearBookingsData() {
   bookingServicesStore.set([]);
   timeOffStore.set([]);
   bookingsStore.set([]);
+  staffPricesStore.set(new Map());
   bookingsLoadStore.set('idle');
 }
 
@@ -537,6 +546,7 @@ export async function addManualBooking(b: ManualBooking): Promise<string | null>
   if (!id || !service || !settings) return 'Choose a service.';
   if (!b.customerName.trim()) return 'Enter the customer’s name.';
   const endsAt = plusMinutes(b.startsAt, service.durationMinutes);
+  const price = priceFor(service, b.staffId, staffPricesStore.get());
   const { data, error } = await supabase
     .from('bookings')
     .insert({
@@ -546,7 +556,7 @@ export async function addManualBooking(b: ManualBooking): Promise<string | null>
       staff_chosen: true,
       service_name: service.name,
       duration_minutes: service.durationMinutes,
-      price: service.price,
+      price,
       customer_name: b.customerName.trim(),
       customer_phone: b.customerPhone.trim(),
       customer_email: b.customerEmail.trim().toLowerCase(),
@@ -701,5 +711,38 @@ export function reminderText(b: Booking) {
   if (b.reminderStatus === 'sending') return 'Reminder sending…';
   if (b.reminderStatus === 'failed') return `Reminder couldn’t be sent: ${b.reminderReason}`;
   if (b.reminderStatus === 'skipped') return `No reminder: ${b.reminderReason}`;
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Staff prices: a staff member's own price for a service (else the usual price)
+// ---------------------------------------------------------------------------
+
+export const priceKey = (staffId: string, serviceId: string) => `${staffId}:${serviceId}`;
+
+/** What this person charges for the service: their own price, or the service's usual price. */
+export function priceFor(service: Pick<BookingService, 'id' | 'price'>, staffId: string | null, prices: Map<string, number>) {
+  if (!staffId) return service.price;
+  const own = prices.get(priceKey(staffId, service.id));
+  return own === undefined ? service.price : own;
+}
+
+/** Owner: set a staff member's own price for a service, or null to use the usual price. */
+export async function setStaffPrice(staffId: string, serviceId: string, price: number | null): Promise<string | null> {
+  const id = businessId();
+  if (!id) return 'Bookings aren’t set up yet.';
+  const { error } =
+    price === null
+      ? await supabase.from('booking_staff_prices').delete().eq('staff_id', staffId).eq('service_id', serviceId)
+      : await supabase
+          .from('booking_staff_prices')
+          .upsert({ staff_id: staffId, service_id: serviceId, business_id: id, price, updated_at: new Date().toISOString() });
+  if (error) return error.code === '42P01' ? 'Staff prices aren’t set up yet. Run the staff prices database file first.' : friendly(error.message);
+  staffPricesStore.set((map) => {
+    const next = new Map(map);
+    if (price === null) next.delete(priceKey(staffId, serviceId));
+    else next.set(priceKey(staffId, serviceId), price);
+    return next;
+  });
   return null;
 }

@@ -314,6 +314,19 @@
     }
     /** Whether the "Who would you like?" step is skipped (personal link, or only one person). */
     function skipsStaff() { return !!onlyStaff || staffFor(pickedService).length <= 1; }
+    /** What this person charges for the service: their own price, or the usual one. */
+    function priceOf(service, staffId) {
+      var own = staffId && service.staffPrices ? service.staffPrices[staffId] : undefined;
+      return own !== undefined && own !== null ? Number(own) : service.price;
+    }
+    /** "$40", or "$40–$55" when the people who do it charge different prices. */
+    function priceText(service, staffId) {
+      if (staffId) return money(priceOf(service, staffId));
+      var list = staffFor(service).map(function (x) { return priceOf(service, x.id); }).filter(function (v) { return v !== null && v !== undefined; });
+      if (!list.length) return money(service.price);
+      var lo = Math.min.apply(null, list), hi = Math.max.apply(null, list);
+      return lo === hi ? money(lo) : money(lo) + '–' + money(hi);
+    }
     function staffName(id) {
       var s = page.staff.filter(function (x) { return x.id === id; })[0];
       return s ? s.name : '';
@@ -346,7 +359,7 @@
         el('div', { class: 'list' }, page.services.map(function (s) {
           return el('button', { class: 'option', type: 'button', onclick: function () { pickedService = s; chooseStaff(); } }, [
             el('span', {}, [el('strong', { text: s.name }), el('span', { class: 'muted', text: minutes(s.duration) + (s.description ? ' · ' + s.description : '') })]),
-            s.price !== null ? el('span', { class: 'price', text: money(s.price) }) : null,
+            priceText(s, onlyStaff && onlyStaff.id) ? el('span', { class: 'price', text: priceText(s, onlyStaff && onlyStaff.id) }) : null,
           ]);
         })),
         page.cancellationPolicy ? el('p', { class: 'policy', text: page.cancellationPolicy }) : null,
@@ -365,9 +378,13 @@
         el('div', { class: 'list' }, [
           el('button', { class: 'option', type: 'button', onclick: function () { pickedStaff = null; chooseTime(false); } }, [
             el('span', {}, [el('strong', { text: 'Anyone available' }), el('span', { class: 'muted', text: 'The most times to choose from' })]),
+            priceText(pickedService, null) ? el('span', { class: 'price', text: priceText(pickedService, null) }) : null,
           ]),
         ].concat(people.map(function (p) {
-          return el('button', { class: 'option', type: 'button', onclick: function () { pickedStaff = p.id; chooseTime(false); } }, [el('strong', { text: p.name })]);
+          return el('button', { class: 'option', type: 'button', onclick: function () { pickedStaff = p.id; chooseTime(false); } }, [
+            el('strong', { text: p.name }),
+            priceText(pickedService, p.id) ? el('span', { class: 'price', text: priceText(pickedService, p.id) }) : null,
+          ]);
         }))),
       ]);
     }
@@ -378,7 +395,7 @@
         backButton(skippedStaff ? chooseService : chooseStaff),
         progress(3),
         el('h1', { text: 'Choose a time' }),
-        el('p', { class: 'muted', text: pickedService.name + ' · ' + minutes(pickedService.duration) + (pickedStaff ? ' · with ' + staffName(pickedStaff) : '') }),
+        el('p', { class: 'muted', text: pickedService.name + ' · ' + minutes(pickedService.duration) + (pickedStaff ? ' · with ' + staffName(pickedStaff) : '') + (priceText(pickedService, pickedStaff) ? ' · ' + priceText(pickedService, pickedStaff) : '') }),
         zoneNote(),
         box,
       ]);
@@ -410,7 +427,8 @@
           ['With', who],
           ['Date', dateOf(pickedSlot.start, true)],
           ['Time', timeOf(pickedSlot.start) + ' (' + minutes(pickedService.duration) + ')'],
-          ['Price', money(pickedService.price)],
+          // "Anyone available" with different prices: the price of whoever is free shows on the confirmation.
+          ['Price', pickedStaff || priceText(pickedService, null).indexOf('–') < 0 ? priceText(pickedService, pickedStaff) : priceText(pickedService, null) + ' (depends who’s free)'],
         ]),
       ].concat(
         field('name', 'Your name', 'text', { autocomplete: 'name', maxlength: 100, required: true }),

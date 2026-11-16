@@ -12,7 +12,8 @@ import {
   zonedParts,
   zonedToIso,
 } from '@/systems/bookings/data/booking-time';
-import { bookingLink, cleanSlug, currencyCode, formatPrice, staffForService, type BookingStaff } from '@/systems/bookings/data/bookings';
+import { parsePriceText } from '@/systems/bookings/components/owner/staff-prices-card';
+import { bookingLink, cleanSlug, currencyCode, formatPrice, priceFor, priceKey, staffForService, type BookingStaff } from '@/systems/bookings/data/bookings';
 
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
 
@@ -81,5 +82,23 @@ describe('who does a service', () => {
   it('is everyone bookable, or only the chosen staff', () => {
     expect(staffForService({ staffIds: [] } as never, fakeStaff).map((s) => s.id)).toEqual(['a', 'b']);
     expect(staffForService({ staffIds: ['b', 'c'] } as never, fakeStaff).map((s) => s.id)).toEqual(['b']);
+  });
+});
+
+describe('staff prices', () => {
+  const haircut = { id: 'cut', price: 40 };
+  const prices = new Map([[priceKey('alex', 'cut'), 55]]);
+  it('uses the person’s own price, else the usual price', () => {
+    expect(priceFor(haircut, 'alex', prices)).toBe(55);
+    expect(priceFor(haircut, 'sam', prices)).toBe(40);
+    expect(priceFor(haircut, null, prices)).toBe(40);
+    expect(priceFor({ id: 'beard', price: null }, 'alex', prices)).toBeNull();
+  });
+  it('reads prices the owner types', () => {
+    expect(parsePriceText('55')).toBe(55);
+    expect(parsePriceText(' $55.50 ')).toBe(55.5);
+    expect(parsePriceText('')).toBeNull();
+    expect(parsePriceText('fifty')).toBeUndefined();
+    expect(parsePriceText('55.555')).toBeUndefined();
   });
 });

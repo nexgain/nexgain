@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { StaffLinkCard } from '@/systems/bookings/components/owner/booking-link-card';
+import { StaffPricesCard } from '@/systems/bookings/components/owner/staff-prices-card';
 import { SaveNote } from '@/systems/bookings/components/owner/booking-ui';
 import { DateField, FormField, SwitchRow, TextField } from '@/systems/bookings/components/owner/form';
 import { Badge, Button, Card, goBack, OwnerIcons, OwnerScreen, PageHeader } from '@/systems/bookings/components/owner/ui';
@@ -86,6 +87,7 @@ export default function BookingStaffScreen() {
       <PageHeader onBack={() => goBack('/bookings/booking-settings')} title={person.isOwner ? `${person.name} (you)` : person.name} />
       <SaveNote message={message} />
 
+      <StaffPricesCard person={person} />
       <StaffLinkCard person={person} />
 
       <Card title="Booking Page" icon={OwnerIcons.person}>
