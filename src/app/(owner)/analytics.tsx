@@ -5,7 +5,6 @@ import { BarChart, DonutChart, LineChart, SeriesColors } from '@/components/owne
 import { GROUP_COLORS } from '@/components/owner/money-review';
 import {
   Card,
-  EmptyState,
   goBack,
   OwnerIcons,
   OwnerScreen,
@@ -14,7 +13,6 @@ import {
   ResponsiveRow,
   StatCard,
   StatGrid,
-  TabRow,
 } from '@/components/owner/ui';
 import { transactionItems } from '@/data/bank';
 import { useClockSessions } from '@/data/clock-records';
@@ -24,9 +22,6 @@ import { expenseEntries, inRange, revenueEntries, sumEntries, useExpenses } from
 import { useDocs } from '@/data/invoices';
 import { spendingByGroup, useMoneyFeed } from '@/data/money-sorting';
 import { formatMoney, getPayPeriods, labourCost, usePayslipRecords } from '@/data/payroll';
-
-const TABS = ['Overview', 'Labour Costs', 'Finance', 'Productivity', 'Suppliers', 'Custom'] as const;
-type Tab = (typeof TABS)[number];
 
 type Bucket = { label: string; start: Date; end: Date };
 
@@ -59,7 +54,6 @@ export default function AnalyticsScreen() {
   const now = new Date();
   const employees = useEmployees();
   const sessions = useClockSessions();
-  const [tab, setTab] = useState<Tab>('Overview');
   const [range, setRange] = useState<(typeof RANGES)[number]>(RANGES[0]);
 
   const buckets = range.buckets(now);
@@ -99,71 +93,61 @@ export default function AnalyticsScreen() {
         right={<RangeSelect options={RANGES} value={range} onChange={setRange} />}
       />
 
-      <TabRow tabs={TABS} active={tab} onChange={setTab} />
+      <StatGrid columns={4}>
+        <StatCard
+          icon={OwnerIcons.trendingUp}
+          label="Total Revenue"
+          value={money(totalRevenue)}
+          changeLabel="vs previous period"
+        />
+        <StatCard
+          icon={OwnerIcons.card}
+          label="Total Expenses"
+          value={money(totalExpenses)}
+          changeLabel="vs previous period"
+        />
+        <StatCard
+          icon={OwnerIcons.wallet}
+          label="Net Profit"
+          value={money(totalRevenue - totalExpenses)}
+          changeLabel="vs previous period"
+        />
+        <StatCard
+          icon={OwnerIcons.percent}
+          label="Labour Cost %"
+          value={`${labourPercent}%`}
+          changeLabel="vs previous period"
+        />
+      </StatGrid>
 
-      {tab === 'Overview' ? (
-        <>
-          <StatGrid columns={4}>
-            <StatCard
-              icon={OwnerIcons.trendingUp}
-              label="Total Revenue"
-              value={money(totalRevenue)}
-              changeLabel="vs previous period"
-            />
-            <StatCard
-              icon={OwnerIcons.card}
-              label="Total Expenses"
-              value={money(totalExpenses)}
-              changeLabel="vs previous period"
-            />
-            <StatCard
-              icon={OwnerIcons.wallet}
-              label="Net Profit"
-              value={money(totalRevenue - totalExpenses)}
-              changeLabel="vs previous period"
-            />
-            <StatCard
-              icon={OwnerIcons.percent}
-              label="Labour Cost %"
-              value={`${labourPercent}%`}
-              changeLabel="vs previous period"
-            />
-          </StatGrid>
-
-          <ResponsiveRow>
-            <Card title="Revenue vs Expenses" icon={OwnerIcons.chart}>
-              <BarChart
-                categories={buckets.map((b) => b.label)}
-                series={[
-                  { name: 'Revenue', color: SeriesColors[0], values: revenueByBucket },
-                  { name: 'Expenses', color: SeriesColors[1], values: expensesByBucket },
-                ]}
-                formatValue={money}
-              />
-            </Card>
-            <Card title="Labour Costs" icon={OwnerIcons.trendingUp}>
-              <LineChart
-                categories={buckets.map((b) => b.label)}
-                series={[{ name: 'Labour cost', color: SeriesColors[0], values: labourByBucket }]}
-                formatValue={money}
-              />
-            </Card>
-          </ResponsiveRow>
-
-          <ResponsiveRow>
-            <Card title="Top Expense Categories" icon={OwnerIcons.card}>
-              <DonutChart segments={topCategories} formatValue={money} showPercent emptyMessage="No spending yet" />
-            </Card>
-            <Card title="AI Insights" icon={OwnerIcons.sparkles}>
-              <AiInsightsList placement="analytics" empty="No data yet" />
-            </Card>
-          </ResponsiveRow>
-        </>
-      ) : (
-        <Card title={tab}>
-          <EmptyState icon={OwnerIcons.chart} message="No data yet" />
+      <ResponsiveRow>
+        <Card title="Revenue vs Expenses" icon={OwnerIcons.chart}>
+          <BarChart
+            categories={buckets.map((b) => b.label)}
+            series={[
+              { name: 'Revenue', color: SeriesColors[0], values: revenueByBucket },
+              { name: 'Expenses', color: SeriesColors[1], values: expensesByBucket },
+            ]}
+            formatValue={money}
+          />
         </Card>
-      )}
+        <Card title="Labour Costs" icon={OwnerIcons.trendingUp}>
+          <LineChart
+            categories={buckets.map((b) => b.label)}
+            series={[{ name: 'Labour cost', color: SeriesColors[0], values: labourByBucket }]}
+            formatValue={money}
+          />
+        </Card>
+      </ResponsiveRow>
+
+      <ResponsiveRow>
+        <Card title="Top Expense Categories" icon={OwnerIcons.card}>
+          <DonutChart segments={topCategories} formatValue={money} showPercent emptyMessage="No spending yet" />
+        </Card>
+        <Card title="AI Insights" icon={OwnerIcons.sparkles}>
+          <AiInsightsList placement="analytics" empty="No data yet" />
+        </Card>
+      </ResponsiveRow>
     </OwnerScreen>
   );
 }
