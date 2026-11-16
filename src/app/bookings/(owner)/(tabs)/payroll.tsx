@@ -1,0 +1,1066 @@
+import { useRef, useState } from 'react';
+import { router } from 'expo-router';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+
+import { ConfirmDialog } from '@/systems/bookings/components/owner/confirm-dialog';
+import { FormField, TextField } from '@/systems/bookings/components/owner/form';
+import { downloadPayrollReport } from '@/systems/bookings/components/owner/payroll-report-pdf';
+import { SuperCard } from '@/systems/bookings/components/owner/super-card';
+import { Table, type Column } from '@/systems/bookings/components/owner/table';
+import {
+  ActionRow,
+  Badge,
+  Button,
+  Card,
+  Icon,
+  OwnerIcons,
+  OwnerScreen,
+  ownerStyles,
+  PageHeader,
+  IconBadge,
+  RangeSelect,
+  StatCard,
+  StatGrid,
+} from '@/systems/bookings/components/owner/ui';
+import { Colors as C, Spacing } from '@/constants/theme';
+import {
+  overtimeRulesOf,
+  PAY_ITEM_TYPES,
+  superIncludesOf,
+  superRateOf,
+  updateBusiness,
+  useBusiness,
+} from '@/data/business';
+import { useClockSessions } from '@/data/clock-records';
+import { formatShortDate } from '@/data/employee-roster';
+import { employeeFullName, isSalaried, useEmployees } from '@/data/employees';
+import {
+  approvePayments,
+  calculatePayLines,
+  formatMoney,
+  getSchedulePayPeriods,
+  payTotals,
+  usePayslipRecords,
+  usePayStatuses,
+  type PayslipRecord,
+  type Period,
+} from '@/data/payroll';
+import { downloadPaymentFile, markPayRunPaid, todayKey, usePayRuns, type PayRun } from '@/data/pay-runs';
+import {
+  DAY_NAMES,
+  daysText,
+  firstPeriod,
+  frequencyForDates,
+  frequencyLabel,
+  lastApprovedDay,
+  paySchedule,
+  periodDays,
+  scheduleFor,
+  setPaySchedule,
+  spanText,
+  START_DAYS,
+  toKey,
+  type PayFrequencyId,
+  type ScheduleChoice,
+} from '@/data/pay-schedule';
+import { fromDateKey } from '@/data/shifts';
+import { TAX_ESTIMATE_NOTE, taxSetupFor, type TaxSetup } from '@/data/tax';
+import { SUPER_STATUS_LABEL, superFor, useSuperPayments, type SuperStatus } from '@/data/super-payments';
+import { countryName, getPayrollFileFormat, payrollLabel, payrollReference } from '@/lib/payment-files';
+import { businessUsesSuper } from '@/data/super-rules';
+
+
+/** e.g. "12%" */
+const percentText = (rate: number) => `${Math.round(rate * 10000) / 100}%`;
+
+/** The note shown next to tax amounts: estimated from brackets, or the rate the owner entered. */
+function taxNoteFor(setup: TaxSetup, country: string | null | undefined) {
+  if (setup.kind === 'brackets') return `${TAX_ESTIMATE_NOTE} (${setup.rules.label}.) Contractors have no tax taken out.`;
+  if (setup.kind === 'manual') {
+    return `Tax is worked out at the ${percentText(setup.rate)} rate you entered in Payroll Settings, as NexGain doesn't have tax brackets for ${countryName(country)} yet. Contractors have no tax taken out.`;
+  }
+  return `NexGain doesn't have tax brackets for ${countryName(country)} yet. Enter a tax rate in Payroll Settings so payroll can work out tax.`;
+}
+
+function periodSpan(period: Period) {
+  const last = new Date(period.end);
+  last.setDate(last.getDate() - 1);
+  return `${formatShortDate(period.start, false)} – ${formatShortDate(last)}`;
+}
+
+/** e.g. "+12.5%" vs the previous period, or null when there's nothing to compare. */
+function percentChange(current: number, previous: number) {
+  if (previous === 0) return null;
+  const change = ((current - previous) / previous) * 100;
+  return `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`;
+}
+
+export default function PayrollScreen() {
+  const now = new Date();
+  const employees = useEmployees();
+  const sessions = useClockSessions();
+  // Re-worked out when the pay schedule (Payroll Settings) or pay runs change.
+  usePayRuns();
+  const periods = getSchedulePayPeriods(now, 6);
+  const [periodId, setPeriodId] = useState(periods[0].id);
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const approveCardY = useRef(0);
+  const business = useBusiness();
+  // Super only for Australian businesses (see businessUsesSuper): elsewhere payroll is pay and tax only.
+  const usesSuper = businessUsesSuper(business);
+  const taxSetup = taxSetupFor(business);
+  const taxNote = taxNoteFor(taxSetup, business?.country);
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+
+  const periodIndex = Math.max(0, periods.findIndex((p) => p.id === periodId));
+  const period = periods[periodIndex];
+  const statuses = usePayStatuses(period.id);
+  // Approved weeks show exactly what was saved on their payslips.
+  const payslips = usePayslipRecords();
+  const lines = calculatePayLines(employees, sessions, period, statuses, now, payslips);
+  const totals = payTotals(lines);
+
+  const previousPeriod = periods[periodIndex + 1] ?? null;
+  const previousTotals = payTotals(
+    previousPeriod ? calculatePayLines(employees, sessions, previousPeriod, {}, now, payslips) : [],
+  );
+  const lastDay = new Date(period.end.getFullYear(), period.end.getMonth(), period.end.getDate() - 1);
+  const frequency = frequencyForDates(toKey(period.start), toKey(lastDay));
+
+  const [approveBusy, setApproveBusy] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+
+  async function approve() {
+    setApproveBusy(true);
+    setApproveError(null);
+    try {
+      await approvePayments(period, payable.map((l) => l.employee.id), todayKey());
+    } catch (e) {
+      setApproveError(`Couldn’t approve payroll: ${e instanceof Error ? e.message : 'please try again.'}`);
+    } finally {
+      setApproveBusy(false);
+    }
+  }
+
+  async function downloadReport() {
+    setReportBusy(true);
+    setReportError(null);
+    try {
+      await downloadPayrollReport(period, frequency, business, lines);
+    } catch {
+      setReportError('Sorry, the report PDF couldn’t be made. Please try again.');
+    } finally {
+      setReportBusy(false);
+    }
+  }
+
+  // Tax must be known before anyone can be paid (see the tax rate message).
+  const payable = lines.filter((l) => l.gross !== null && l.tax !== null && l.status === 'Pending');
+  // No pay set yet, so they're left out of this pay run: salaried workers need a salary, everyone else a rate.
+  const missingSalary = lines.filter((l) => l.rate === null && isSalaried(l.employee));
+  const missingRate = lines.filter((l) => l.rate === null && !isSalaried(l.employee));
+  const missingBank = lines.filter((l) => !l.employee.bankAccount);
+  // Approved (in a pay run) or already paid.
+  const approvedCount = lines.filter((l) => l.status !== 'Pending').length;
+  const allPaid = lines.length > 0 && approvedCount === lines.length;
+
+  return (
+    <OwnerScreen scrollRef={scrollRef}>
+      <PageHeader
+        title="Payroll"
+        subtitle="Review hours, approve payments and manage your payroll."
+        right={
+          <>
+            <RangeSelect
+              options={periods}
+              value={period}
+              onChange={(p) => setPeriodId(p.id)}
+              detail={periodSpan(period)}
+            />
+            <Button
+              label="Run Payroll"
+              icon={OwnerIcons.play}
+              onPress={() => scrollRef.current?.scrollTo({ y: approveCardY.current, animated: true })}
+            />
+          </>
+        }
+      />
+
+      <StatGrid columns={4}>
+        <StatCard
+          icon={OwnerIcons.money}
+          label="Total Gross Pay"
+          value={formatMoney(totals.gross)}
+          change={percentChange(totals.gross, previousTotals.gross)}
+          changeLabel="vs last period"
+        />
+        <StatCard
+          icon={OwnerIcons.bank}
+          label="Total Tax"
+          value={formatMoney(totals.tax)}
+          change={percentChange(totals.tax, previousTotals.tax)}
+          changeLabel="vs last period"
+        />
+        <StatCard
+          icon={OwnerIcons.wallet}
+          label="Total Net Pay"
+          value={formatMoney(totals.net)}
+          change={percentChange(totals.net, previousTotals.net)}
+          changeLabel="vs last period"
+        />
+        {usesSuper && (
+          <StatCard
+            icon={OwnerIcons.percent}
+            label="Total Super"
+            value={formatMoney(totals.super)}
+            change={percentChange(totals.super, previousTotals.super)}
+            changeLabel="vs last period"
+          />
+        )}
+      </StatGrid>
+
+      {/* Everyone's hours, pay, tax and super for this pay period, on its own screen. */}
+      <Pressable
+        onPress={() => router.push({ pathname: '/bookings/employee-status', params: { period: period.id } })}
+        accessibilityRole="button"
+        accessibilityLabel="View Employee Status. Hours, pay, tax and super by employee"
+        style={({ pressed }) => pressed && styles.pressed}>
+        <Card>
+          <View style={styles.statusLink}>
+            <IconBadge name={OwnerIcons.people} />
+            <View style={styles.flex}>
+              <Text style={styles.statusTitle}>View Employee Status</Text>
+              <Text style={styles.statusSubtitle}>Hours, pay, tax and super by employee</Text>
+            </View>
+            <Icon name={OwnerIcons.chevron} color={C.textSecondary} size={14} />
+          </View>
+        </Card>
+      </Pressable>
+
+      <View
+        onLayout={(e) => {
+          approveCardY.current = e.nativeEvent.layout.y;
+        }}>
+        <Card title="Approve Payroll" icon={OwnerIcons.check}>
+          <Text style={styles.approveSummary}>
+            {lines.length === 0
+              ? 'Nothing to approve yet.'
+              : allPaid
+                ? `All payments for ${period.label.toLowerCase()} have been approved.`
+                : payable.length === 0
+                  ? `${approvedCount} of ${lines.length} payments approved.`
+                  : `${payable.length} of ${lines.length} payments ready · ${formatMoney(
+                      payable.reduce((sum, l) => sum + (l.net ?? 0), 0),
+                    )} net`}
+          </Text>
+
+          {missingSalary.map((l) => (
+            <Warning
+              key={l.employee.id}
+              text={`Set salary for ${employeeFullName(l.employee)}. They're left out of this pay run until it's set.`}
+              onPress={() => router.push({ pathname: '/bookings/employee/[id]', params: { id: l.employee.id } })}
+            />
+          ))}
+          {missingRate.length > 0 && (
+            // Tap to set it: straight to that employee, or to Employee Status when there are several.
+            <Warning
+              text={`${missingRate.length} employee(s) have no pay rate set and can't be paid yet. Tap to set ${missingRate.length === 1 ? 'it' : 'them'}.`}
+              onPress={() =>
+                missingRate.length === 1
+                  ? router.push({ pathname: '/bookings/employee/[id]', params: { id: missingRate[0].employee.id } })
+                  : router.push({ pathname: '/bookings/employee-status', params: { period: period.id } })
+              }
+            />
+          )}
+          {taxSetup.kind === 'missing' && <Warning text={taxNote} />}
+          {missingBank.length > 0 && (
+            <Warning text={`${missingBank.length} employee(s) haven't added bank account details.`} />
+          )}
+
+          <View style={styles.approveButtons}>
+            <Button
+              label={approveBusy ? 'Approving…' : 'Approve All Payments'}
+              icon={OwnerIcons.check}
+              disabled={payable.length === 0 || approveBusy}
+              onPress={approve}
+            />
+            <Button
+              label={reportBusy ? 'Making PDF…' : 'Download Report (PDF)'}
+              icon={OwnerIcons.download}
+              variant="secondary"
+              disabled={lines.length === 0 || reportBusy}
+              onPress={downloadReport}
+            />
+          </View>
+          {(reportBusy || approveBusy) && <ActivityIndicator color={C.accent} />}
+          {reportError && <Warning text={reportError} />}
+          {approveError && <Warning text={approveError} />}
+
+          <Text style={ownerStyles.mutedText}>
+            Approving makes a pay run with its own payroll number. Download its payment file, upload it to
+            your bank, then mark it as paid. NexGain never moves money itself.
+          </Text>
+          {taxSetup.kind !== 'missing' && <Text style={ownerStyles.mutedText}>{taxNote}</Text>}
+        </Card>
+      </View>
+
+      <PayRunsCard />
+
+      {usesSuper && <SuperCard />}
+
+      <PayrollSettingsCard />
+    </OwnerScreen>
+  );
+}
+
+/**
+ * Only when NexGain has no tax brackets for the business's country: the owner
+ * enters a flat tax rate to use instead (so payroll never guesses).
+ */
+function ManualTaxRateField() {
+  const business = useBusiness();
+  const setup = taxSetupFor(business);
+  const saved = business?.manualTaxRate;
+  const [text, setText] = useState<string | null>(null);
+  if (setup.kind === 'brackets') return null;
+
+  const value = text ?? (saved === null || saved === undefined ? '' : String(Math.round(saved * 10000) / 100));
+  const percent = Number(value.trim());
+  const valid = value.trim() !== '' && Number.isFinite(percent) && percent >= 0 && percent <= 60;
+  return (
+    <>
+      <View style={styles.divider} />
+      <FormField
+        label={`Tax rate for ${countryName(business?.country)} (%)`}
+        error={value.trim() && !valid ? 'Enter a percentage between 0 and 60, e.g. 20' : undefined}>
+        <View style={styles.settingRow}>
+          <TextField
+            value={value}
+            onChangeText={(t) => {
+              setText(t);
+              const n = Number(t.trim());
+              if (t.trim() && Number.isFinite(n) && n >= 0 && n <= 60) updateBusiness({ manualTaxRate: n / 100 });
+            }}
+            onBlur={() => setText(null)}
+            keyboardType="decimal-pad"
+            placeholder="e.g. 20"
+            accessibilityLabel="Tax rate percentage"
+            style={styles.settingInput}
+          />
+          <Text style={styles.settingUnit}>% of gross pay</Text>
+        </View>
+      </FormField>
+      <Text style={ownerStyles.mutedText}>
+        NexGain doesn&apos;t have tax brackets for {countryName(business?.country)} yet, so enter the rate to take out of
+        each pay. Check it with your accountant.
+      </Text>
+    </>
+  );
+}
+
+/** A row of options; the selected one is filled in. */
+function Choices<T extends string | number>({
+  options,
+  value,
+  onChange,
+  label,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+  label: string;
+}) {
+  return (
+    <View style={styles.choiceWrap} accessibilityRole="radiogroup" accessibilityLabel={label}>
+      {options.map((o) => {
+        const selected = o.value === value;
+        return (
+          <Pressable
+            key={String(o.value)}
+            onPress={() => onChange(o.value)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected }}
+            style={[styles.choice, styles.choiceTall, selected && styles.choiceSelected]}>
+            <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>{o.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
+ * How often the business pays and which day pay periods start. Only shows the
+ * choices that matter: "which fortnight are we in" only for fortnightly pay
+ * when nothing has been paid yet (otherwise it follows on from the last pay).
+ */
+function PayScheduleSetting() {
+  const business = useBusiness();
+  usePayRuns();
+  const current = paySchedule(business);
+  const [frequency, setFrequency] = useState<PayFrequencyId>(current.frequency);
+  const [startDay, setStartDay] = useState(current.startDay);
+  const [offset, setOffset] = useState<0 | 1>(0);
+  const lastApproved = lastApprovedDay();
+
+  const choice: ScheduleChoice = { frequency, startDay, fortnightOffset: offset };
+  const next = scheduleFor(choice, new Date(), lastApproved);
+  const changed =
+    frequency !== current.frequency ||
+    startDay !== current.startDay ||
+    (frequency === 'fortnightly' && !lastApproved && next.anchor !== current.anchor);
+  const first = firstPeriod(next);
+  const short = DAY_NAMES.map((d) => d.slice(0, 3));
+
+  // Fortnightly, nothing paid yet: which of the two possible fortnights is this one?
+  const thisWeek = scheduleFor({ frequency: 'fortnightly', startDay, fortnightOffset: 0 }, new Date(), null);
+  const lastWeek = scheduleFor({ frequency: 'fortnightly', startDay, fortnightOffset: 1 }, new Date(), null);
+
+  return (
+    <FormField label="How often do you pay?">
+      <Choices
+        label="How often do you pay"
+        options={[
+          { value: 'weekly', label: 'Weekly' },
+          { value: 'fortnightly', label: 'Fortnightly' },
+        ]}
+        value={frequency}
+        onChange={setFrequency}
+      />
+      {/* Asked as the LAST day of the week (e.g. Thursday): the new week starts the next day. */}
+      <Text style={styles.scheduleQuestion}>{frequency === 'weekly' ? 'Pay week ends on' : 'Pay fortnight ends on'}</Text>
+      <Choices
+        label={frequency === 'weekly' ? 'Pay week ends on' : 'Pay fortnight ends on'}
+        options={START_DAYS.map((d) => ({ value: d, label: short[d] }))}
+        value={(startDay + 6) % 7}
+        onChange={(endDay) => setStartDay((endDay + 1) % 7)}
+      />
+      <Text style={ownerStyles.mutedText}>
+        {frequency === 'weekly' ? 'Each pay covers a full week,' : 'Each pay covers two full weeks,'} {daysText(startDay)}. Hours start
+        fresh every {frequency === 'weekly' ? '' : 'second '}{DAY_NAMES[startDay]}.
+      </Text>
+
+      {frequency === 'fortnightly' && !lastApproved && (
+        <>
+          <Text style={styles.scheduleQuestion}>Which fortnight are you in now?</Text>
+          <Choices
+            label="Which fortnight are you in now"
+            options={[
+              { value: 0, label: spanText(firstPeriod(thisWeek)) },
+              { value: 1, label: spanText(firstPeriod(lastWeek)) },
+            ]}
+            value={offset}
+            onChange={(v) => setOffset(v as 0 | 1)}
+          />
+        </>
+      )}
+
+      {changed && (
+        <View style={styles.schedulePreview}>
+          <Text style={styles.schedulePreviewText}>
+            {first.catchUp
+              ? `To line up with your last pay, the first pay is a short one: ${spanText(first)} (${periodDays(first)} day${periodDays(first) === 1 ? '' : 's'}). After that, pay is ${frequencyLabel(frequency).toLowerCase()}, ${daysText(startDay)}.`
+              : `${lastApproved ? 'Your next pay period' : 'This pay period'}: ${spanText(first)}. Then ${frequencyLabel(frequency).toLowerCase()}, ${daysText(startDay)}.`}
+          </Text>
+          <Button label="Save pay schedule" onPress={() => setPaySchedule(choice)} />
+        </View>
+      )}
+    </FormField>
+  );
+}
+
+/** Owner-only payroll settings: when overtime starts. Approved payrolls keep the rule they were paid under. */
+function PayrollSettingsCard() {
+  const business = useBusiness();
+  // Closed to keep the page tidy: just the heading until it's tapped.
+  const [open, setOpen] = useState(false);
+  const saved = overtimeRulesOf(business).dailyAfterHours;
+  const [text, setText] = useState<string | null>(null);
+  const value = text ?? String(saved);
+  const hours = Number(value.trim());
+  const error = !value.trim()
+    ? 'Enter a number of hours, e.g. 8'
+    : !Number.isFinite(hours) || hours < 0.5 || hours > 24
+      ? 'Enter between 0.5 and 24 hours.'
+      : (hours * 2) % 1 !== 0
+        ? 'Use whole or half hours, e.g. 7.5'
+        : null;
+
+  return (
+    <Card>
+      <Pressable
+        onPress={() => setOpen((o) => !o)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel="Payroll Settings"
+        style={({ pressed }) => [styles.dropdownHeader, pressed && styles.pressed]}>
+        <Icon name={{ ios: 'gearshape.fill', android: 'settings', web: 'settings' }} color={C.accent} size={16} />
+        <Text style={styles.dropdownTitle}>Payroll Settings</Text>
+        <View style={open && styles.chevronOpen}>
+          <Icon name={OwnerIcons.chevronDown} color={C.textSecondary} size={14} />
+        </View>
+      </Pressable>
+      {open && (
+        <>
+      <PayScheduleSetting />
+      <View style={styles.divider} />
+      <FormField label="Overtime starts after (hours in a day)" error={error ?? undefined}>
+        <View style={styles.settingRow}>
+          <TextField
+            value={value}
+            onChangeText={(t) => {
+              setText(t);
+              const h = Number(t.trim());
+              if (t.trim() && Number.isFinite(h) && h >= 0.5 && h <= 24 && (h * 2) % 1 === 0) {
+                updateBusiness({ overtimeRules: { ...overtimeRulesOf(business), dailyAfterHours: h } });
+              }
+            }}
+            onBlur={() => setText(null)}
+            keyboardType="decimal-pad"
+            accessibilityLabel="Overtime starts after hours"
+            style={styles.settingInput}
+          />
+          <Text style={styles.settingUnit}>hours</Text>
+        </View>
+      </FormField>
+      <Text style={ownerStyles.mutedText}>
+        Hours worked past this in a single day are paid at the employee&apos;s overtime rate.
+      </Text>
+      <ManualTaxRateField />
+      {businessUsesSuper(business) && (
+        <>
+          <View style={styles.divider} />
+          <FormField label={`Super rate: ${percentText(superRateOf(business))} of qualifying earnings`}>
+            <Text style={ownerStyles.mutedText}>
+              Choose which pay counts towards super (qualifying earnings). Approved pay runs keep what they were worked out on.
+            </Text>
+            {PAY_ITEM_TYPES.map(({ type, label }) => {
+              const includes = superIncludesOf(business);
+              return (
+                <View key={type} style={styles.choiceRow}>
+                  <Text style={styles.choiceLabel}>{label}</Text>
+                  {([true, false] as const).map((v) => {
+                    const selected = includes[type] === v;
+                    return (
+                      <Pressable
+                        key={String(v)}
+                        onPress={() => updateBusiness({ superIncludes: { ...includes, [type]: v } })}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected }}
+                        accessibilityLabel={`${label} includes super: ${v ? 'Yes' : 'No'}`}
+                        style={[styles.choice, selected && styles.choiceSelected]}>
+                        <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>{v ? 'Yes' : 'No'}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              );
+            })}
+          </FormField>
+        </>
+      )}
+      <View style={styles.divider} />
+      <ActionRow
+        icon={OwnerIcons.bank}
+        label={`Payroll bank details · ${countryName(business?.country)}`}
+        onPress={() => router.navigate({ pathname: '/bookings/payroll-bank', params: { from: 'payroll' } })}
+      />
+        </>
+      )}
+    </Card>
+  );
+}
+
+const SHOWN_RUNS = 5;
+
+const SUPER_TONE: Record<SuperStatus, 'warning' | 'info' | 'success'> = {
+  unpaid: 'warning',
+  processing: 'info',
+  paid: 'success',
+};
+
+/**
+ * Pay run history. Each approval is one pay run with a payroll number. For an
+ * approved run: download the bank file, then mark it as paid once it's been
+ * uploaded to the bank.
+ */
+function PayRunsCard() {
+  const runs = usePayRuns();
+  const business = useBusiness();
+  const [showAll, setShowAll] = useState(false);
+  const [pastOpen, setPastOpen] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ runId: string; tone: 'ok' | 'warn'; text: string; names?: string[] } | null>(null);
+  const [confirm, setConfirm] = useState<PayRun | null>(null);
+  const [openRunId, setOpenRunId] = useState<string | null>(null);
+  // Shown when NexGain can make a file here, or once the owner picks their bank (NZ); otherwise a tap explains.
+  const countryFormat = getPayrollFileFormat(business);
+  const offerFile = countryFormat.ok || countryFormat.reason === 'needs-bank';
+  const payslips = usePayslipRecords();
+
+  async function download(run: PayRun) {
+    setBusyId(run.id);
+    setMessage(null);
+    const result = await downloadPaymentFile(run);
+    setBusyId(null);
+    if (result.ok) {
+      setMessage({
+        runId: run.id,
+        tone: 'ok',
+        text: `${result.fileName} is ready. Upload it to your bank's bulk payments page, then come back and press Mark as paid.`,
+      });
+    } else if (result.reason === 'setup') {
+      // Can't make a file without the business's own bank details: go and set them up.
+      router.navigate({ pathname: '/bookings/payroll-bank', params: { from: 'payroll' } });
+    } else if (result.reason === 'unsupported') {
+      setMessage({
+        runId: run.id,
+        tone: 'warn',
+        text: result.message,
+      });
+    } else if (result.reason === 'employees') {
+      setMessage({
+        runId: run.id,
+        tone: 'warn',
+        text: 'The file can’t be made yet. These people need to add or fix their bank details in their NexGain profile:',
+        names: result.problems.map((p) => `${p.name}: ${p.problem}`),
+      });
+    } else {
+      setMessage({ runId: run.id, tone: 'warn', text: result.message });
+    }
+  }
+
+  async function markPaid(run: PayRun) {
+    setConfirm(null);
+    setBusyId(run.id);
+    setMessage(null);
+    try {
+      await markPayRunPaid(run.id);
+      setMessage({ runId: run.id, tone: 'ok', text: `${payrollLabel(run.payrollNumber)} is marked as paid. Your team has been told.` });
+    } catch {
+      setMessage({ runId: run.id, tone: 'warn', text: 'Couldn’t mark it as paid. Check your internet connection and try again.' });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const usesSuper = businessUsesSuper(business);
+  // Up front: pay runs still waiting for their bank file (or, where NexGain can't make one,
+  // still to be marked paid), plus any run with a message showing. The rest are tucked away.
+  const needsAction = (r: PayRun) =>
+    r.status === 'approved' && (offerFile ? !r.fileDownloadedAt : true);
+  const current = runs.filter((r) => needsAction(r) || message?.runId === r.id);
+  const past = runs.filter((r) => !current.includes(r));
+  const shownPast = showAll ? past : past.slice(0, SHOWN_RUNS);
+
+  const renderRun = (run: PayRun, i: number) => (
+      <View key={run.id} style={[styles.run, i > 0 && styles.runDivider]}>
+        <View style={styles.runTop}>
+          <View style={styles.flex}>
+            <Text style={styles.runTitle}>{payrollLabel(run.payrollNumber)}</Text>
+            <Text style={styles.runMeta}>
+              {formatShortDate(fromDateKey(run.periodStart), false)} – {formatShortDate(fromDateKey(run.periodEnd))} ·{' '}
+              {run.employeeCount} {run.employeeCount === 1 ? 'person' : 'people'} · {formatMoney(run.totalNet)} net
+            </Text>
+            <Text style={styles.runMeta}>
+              Wages {formatMoney(runTotals(payslips, run).gross)} · Tax {formatMoney(runTotals(payslips, run).tax)}
+              {usesSuper ? ` · Super ${formatMoney(runTotals(payslips, run).super)}` : ''}
+            </Text>
+            <Text style={styles.runMeta}>
+              {run.status === 'paid' && run.paidAt
+                ? `Paid ${formatShortDate(new Date(run.paidAt))}`
+                : `Pay date ${formatShortDate(fromDateKey(run.payDate))}`}
+              {run.fileDownloadedAt ? ' · File downloaded' : ''}
+            </Text>
+          </View>
+          <Badge label={run.status === 'paid' ? 'Paid' : 'Approved'} tone={run.status === 'paid' ? 'success' : 'info'} />
+        </View>
+
+        <Pressable
+          onPress={() => setOpenRunId(openRunId === run.id ? null : run.id)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: openRunId === run.id }}
+          hitSlop={6}
+          style={styles.breakdownToggle}>
+          <Text style={styles.breakdownToggleText}>
+            {openRunId === run.id ? 'Hide breakdown' : usesSuper ? 'Show wages and super per person' : 'Show wages per person'}
+          </Text>
+          <Icon name={OwnerIcons.chevronDown} color={C.accent} size={12} />
+        </Pressable>
+        {openRunId === run.id && <RunBreakdown run={run} />}
+
+        {run.status === 'approved' && (
+          <View style={styles.approveButtons}>
+            {offerFile && (
+              <Button
+                label={busyId === run.id ? 'Working…' : 'Download payment file'}
+                icon={OwnerIcons.download}
+                disabled={busyId !== null}
+                onPress={() => download(run)}
+              />
+            )}
+            <Button
+              label="Mark as paid"
+              icon={OwnerIcons.check}
+              variant="secondary"
+              disabled={busyId !== null}
+              onPress={() => setConfirm(run)}
+            />
+          </View>
+        )}
+
+        {message?.runId === run.id && (
+          <View style={styles.message}>
+            <Text style={[styles.messageText, message.tone === 'warn' && styles.warningText]}>{message.text}</Text>
+            {message.names?.map((n) => (
+              <Text key={n} style={styles.warningText}>
+                • {n}
+              </Text>
+            ))}
+          </View>
+        )}
+      </View>
+  );
+
+
+  return (
+    <Card title="Pay Runs" icon={OwnerIcons.receipt}>
+      {runs.length === 0 ? (
+        <Text style={ownerStyles.mutedText}>No pay runs yet. Approving payroll makes your first one (Payroll 001).</Text>
+      ) : (
+        <>
+          {current.length === 0 ? (
+            <Text style={ownerStyles.mutedText}>Nothing to do right now. Earlier pay runs are below.</Text>
+          ) : (
+            current.map((run, i) => renderRun(run, i))
+          )}
+          {past.length > 0 && (
+            <Pressable
+              onPress={() => setPastOpen((o) => !o)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: pastOpen }}
+              style={({ pressed }) => [styles.pastToggle, pressed && styles.pressed]}>
+              <Text style={styles.pastToggleText}>
+                {pastOpen ? 'Hide earlier pay runs' : `Earlier pay runs (${past.length})`}
+              </Text>
+              <View style={pastOpen && styles.chevronOpen}>
+                <Icon name={OwnerIcons.chevronDown} color={C.accent} size={12} />
+              </View>
+            </Pressable>
+          )}
+          {pastOpen && shownPast.map((run, i) => renderRun(run, i + 1))}
+        </>
+      )}
+      {pastOpen && past.length > SHOWN_RUNS && (
+        <Button label={showAll ? 'Show fewer' : `See all ${past.length} earlier pay runs`} variant="secondary" onPress={() => setShowAll(!showAll)} />
+      )}
+      {!offerFile && runs.some((r) => r.status === 'approved') && (
+        <Text style={ownerStyles.mutedText}>{countryFormat.ok ? '' : countryFormat.message}</Text>
+      )}
+
+      <ConfirmDialog
+        visible={confirm !== null}
+        destructive={false}
+        message={
+          confirm?.fileDownloadedAt
+            ? `Have you uploaded the ${confirm ? payrollReference(confirm.payrollNumber, true) : ''} file to your bank? Marking it as paid tells each employee they've been paid.`
+            : `You haven't downloaded the payment file for ${confirm ? payrollLabel(confirm.payrollNumber) : ''}. Mark it as paid anyway (for example, if you paid your team another way)? Each employee will be told they've been paid.`
+        }
+        confirmLabel="Yes, mark as paid"
+        onConfirm={() => confirm && markPaid(confirm)}
+        onCancel={() => setConfirm(null)}
+      />
+    </Card>
+  );
+}
+
+/** Wages (gross), tax and super for a pay run, from its payslips. */
+function runTotals(payslips: PayslipRecord[], run: PayRun) {
+  const slips = payslips.filter((p) => p.payRunId === run.id);
+  const sum = (pick: (p: PayslipRecord) => number) => Math.round(slips.reduce((t, p) => t + pick(p), 0) * 100) / 100;
+  return { gross: sum((p) => p.gross), tax: sum((p) => p.tax), net: sum((p) => p.net), super: sum((p) => p.super) };
+}
+
+/** One row per person in a pay run: wages, tax, net, super and whether the super is paid. */
+function RunBreakdown({ run }: { run: PayRun }) {
+  const payslips = usePayslipRecords();
+  const superRecords = useSuperPayments();
+  const employees = useEmployees();
+  const rows = payslips.filter((p) => p.payRunId === run.id);
+  const totals = runTotals(payslips, run);
+  const usesSuper = businessUsesSuper(useBusiness());
+  const columns: Column<PayslipRecord>[] = [
+    {
+      key: 'name',
+      label: 'Name',
+      width: 150,
+      render: (p) => {
+        const e = employees.find((x) => x.id === p.employeeId);
+        return e ? employeeFullName(e) : 'Former employee';
+      },
+    },
+    { key: 'gross', label: 'Wages', width: 100, align: 'right', render: (p) => formatMoney(p.gross) },
+    { key: 'tax', label: 'Tax', width: 90, align: 'right', render: (p) => formatMoney(p.tax) },
+    { key: 'net', label: 'Net Pay', width: 100, align: 'right', render: (p) => formatMoney(p.net) },
+    ...(usesSuper
+      ? [
+          { key: 'super', label: 'Super', width: 90, align: 'right' as const, render: (p: PayslipRecord) => formatMoney(p.super) },
+          {
+            key: 'superStatus',
+            label: 'Super Status',
+            width: 110,
+            render: (p: PayslipRecord) => {
+              const s = superFor(superRecords, p.payRunId, p.employeeId);
+              return s ? <Badge label={SUPER_STATUS_LABEL[s.status]} tone={SUPER_TONE[s.status]} /> : '—';
+            },
+          },
+        ]
+      : []),
+  ];
+  return (
+    <Table
+      columns={columns}
+      rows={rows}
+      rowKey={(p) => p.id}
+      emptyMessage="No payslips in this pay run."
+      footer={{
+        name: 'Total',
+        gross: formatMoney(totals.gross),
+        tax: formatMoney(totals.tax),
+        net: formatMoney(totals.net),
+        ...(usesSuper ? { super: formatMoney(totals.super) } : {}),
+      }}
+    />
+  );
+}
+
+function Warning({ text, onPress }: { text: string; onPress?: () => void }) {
+  const body = (
+    <>
+      <Icon name={OwnerIcons.info} color={C.warning} size={14} />
+      <Text style={styles.warningText}>{text}</Text>
+      {onPress && <Icon name={OwnerIcons.chevron} color={C.warning} size={12} />}
+    </>
+  );
+  return onPress ? (
+    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => [styles.warning, pressed && styles.pressed]}>
+      {body}
+    </Pressable>
+  ) : (
+    <View style={styles.warning}>{body}</View>
+  );
+}
+
+const styles = StyleSheet.create({
+  statusLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three - 4,
+  },
+  statusTitle: {
+    color: C.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  statusSubtitle: {
+    color: C.textSecondary,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  tabContent: {
+    gap: Spacing.three - 4,
+  },
+  summary: {
+    paddingHorizontal: Spacing.one,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+    paddingVertical: Spacing.three - 4,
+  },
+  summaryDivider: {
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+  },
+  summaryLabel: {
+    flex: 1,
+    color: C.textSecondary,
+    fontSize: 14,
+  },
+  summaryValue: {
+    color: C.text,
+    fontSize: 14,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  approveSummary: {
+    color: C.text,
+    fontSize: 15,
+  },
+  approveButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.three - 4,
+  },
+  warning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  warningText: {
+    flex: 1,
+    color: C.warning,
+    fontSize: 13,
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  settingInput: {
+    width: 96,
+  },
+  flex: {
+    flex: 1,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: C.border,
+  },
+  run: {
+    gap: Spacing.two,
+    paddingVertical: Spacing.two,
+  },
+  runDivider: {
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+  },
+  runTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.two,
+  },
+  runTitle: {
+    color: C.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  runMeta: {
+    color: C.textSecondary,
+    fontSize: 13,
+    marginTop: 2,
+  },
+  message: {
+    gap: 4,
+  },
+  messageText: {
+    color: C.success,
+    fontSize: 13,
+  },
+  dropdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    minHeight: 32,
+  },
+  dropdownTitle: {
+    flex: 1,
+    color: C.text,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  chevronOpen: {
+    transform: [{ rotate: '180deg' }],
+  },
+  pastToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+    minHeight: 44,
+    paddingTop: Spacing.two,
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+  },
+  pastToggleText: {
+    color: C.accent,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  breakdownToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: Spacing.one,
+  },
+  breakdownToggleText: {
+    color: C.accent,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  choiceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: Spacing.one,
+  },
+  choiceWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  choiceTall: {
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  scheduleQuestion: {
+    color: C.text,
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: Spacing.two,
+  },
+  schedulePreview: {
+    gap: Spacing.two,
+    marginTop: Spacing.two,
+    padding: Spacing.three - 4,
+    borderRadius: 12,
+    backgroundColor: C.accentSoft,
+  },
+  schedulePreviewText: {
+    color: C.text,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  choiceLabel: {
+    flex: 1,
+    color: C.text,
+    fontSize: 14,
+  },
+  choice: {
+    paddingVertical: Spacing.one + 2,
+    paddingHorizontal: Spacing.three - 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  choiceSelected: {
+    backgroundColor: C.accent,
+    borderColor: C.accent,
+  },
+  choiceText: {
+    color: C.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  choiceTextSelected: {
+    color: C.onAccent,
+  },
+  settingUnit: {
+    color: C.textSecondary,
+    fontSize: 15,
+  },
+});

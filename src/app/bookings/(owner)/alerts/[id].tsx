@@ -1,0 +1,89 @@
+import { useCallback, useEffect } from 'react';
+import { router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
+import { BackHandler } from 'react-native';
+
+import { NotificationDetail, OWNER_PALETTE, type DetailAction } from '@/components/notifications/notification-views';
+import { ScreenHeader } from '@/systems/bookings/components/owner/invoices-ui';
+import { Card, EmptyState, OwnerIcons, OwnerScreen } from '@/systems/bookings/components/owner/ui';
+import { markRead, typeInfo, useNotifications } from '@/data/notifications';
+
+// Actions that already have a screen to go to; the rest are shown as coming soon.
+const ACTION_ROUTES: Record<string, Href> = {
+  'View full job details': '/bookings/roster',
+  'Open roster': '/bookings/roster',
+  'Open AI Assistant': '/bookings/ai-assistant',
+  'Open GST': '/bookings/gst',
+  'View invoice': '/bookings/invoices' as Href,
+  'Create quote': { pathname: '/bookings/invoices/new', params: { kind: 'quote' } },
+};
+
+export default function OwnerNotificationDetail() {
+  // from=dashboard: opened straight from the Dashboard, so back returns there.
+  const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
+  const goBackFromHere = () => (from === 'dashboard' ? router.navigate('/bookings/dashboard') : router.back());
+  const n = useNotifications().find((x) => x.id === id && x.audience === 'owner');
+
+  useEffect(() => {
+    if (id) markRead(id);
+  }, [id]);
+
+  // Android's back button does the same as the back arrow.
+  useFocusEffect(
+    useCallback(() => {
+      if (from !== 'dashboard') return;
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        router.navigate('/bookings/dashboard');
+        return true;
+      });
+      return () => sub.remove();
+    }, [from]),
+  );
+
+  if (!n) {
+    return (
+      <OwnerScreen>
+        <ScreenHeader title="Notification" onBack={goBackFromHere} />
+        <Card>
+          <EmptyState icon={OwnerIcons.bell} message="This notification is no longer available." />
+        </Card>
+      </OwnerScreen>
+    );
+  }
+
+  // The roster opens on the job's day, with a back arrow to return here.
+  const openRoster = () =>
+    router.navigate({ pathname: '/bookings/roster', params: { from: 'notification', date: n.relatedShift?.date ?? '' } });
+
+  // Contractor invoices open the invoice the notification is about.
+  const openInvoice = n.relatedId
+    ? () => router.navigate({ pathname: '/bookings/team-invoice/[id]', params: { id: n.relatedId! } })
+    : undefined;
+
+  const actions: DetailAction[] = typeInfo(n).actions.map((label) => ({
+    label,
+    onPress:
+      label === 'Review contractor invoice'
+        ? openInvoice
+        : label === 'View transaction' && n.relatedId
+          ? () => router.navigate({ pathname: '/bookings/transaction/[id]', params: { id: n.relatedId! } })
+        : label === 'View quote' && n.relatedDocId
+          ? () => router.navigate({ pathname: '/bookings/invoices/[id]', params: { id: n.relatedDocId! } })
+          : ACTION_ROUTES[label] === '/bookings/roster'
+            ? openRoster
+            : ACTION_ROUTES[label]
+              ? () => router.navigate(ACTION_ROUTES[label])
+              : undefined,
+  }));
+
+  return (
+    <OwnerScreen>
+      <ScreenHeader title="Notification" onBack={goBackFromHere} />
+      <NotificationDetail
+        n={n}
+        palette={OWNER_PALETTE}
+        actions={actions}
+        onOpenRelated={n.relatedShift ? openRoster : undefined}
+      />
+    </OwnerScreen>
+  );
+}
