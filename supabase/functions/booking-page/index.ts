@@ -263,6 +263,25 @@ async function settleCancellation(db: Db, view: View, fee: number) {
   if (paymentStatus || feeStatus) await record(db, row.id, paymentStatus, null, feeStatus);
 }
 
+// ---------- Staff photos ----------
+
+type PageStaff = { id: string; name: string; photoPath?: string | null; photo?: string | null };
+
+/**
+ * Staff photos are private; the booking page gets a link to each bookable
+ * person's photo that works for an hour. Nothing else about staff is shared.
+ */
+async function withPhotos(db: Db, page: { staff?: PageStaff[] }) {
+  const staff = page.staff ?? [];
+  const paths = staff.map((x) => x.photoPath).filter((x): x is string => !!x);
+  let links: Record<string, string> = {};
+  if (paths.length) {
+    const { data } = await db.storage.from('employee-documents').createSignedUrls(paths, 3600);
+    links = Object.fromEntries((data ?? []).filter((d) => d.signedUrl && d.path).map((d) => [d.path as string, d.signedUrl as string]));
+  }
+  return { ...page, staff: staff.map(({ photoPath, ...rest }) => ({ ...rest, photo: photoPath ? (links[photoPath] ?? null) : null })) };
+}
+
 // ---------- Requests ----------
 
 async function rpc(db: Db, name: string, args: Record<string, unknown>) {
@@ -301,7 +320,7 @@ Deno.serve(async (req) => {
         });
       }
       const page = await rpc(db, 'booking_page', { p_slug: slug });
-      return page ? reply(200, page) : reply(404, { error: 'not_found', message: MESSAGES.not_found });
+      return page ? reply(200, await withPhotos(db, page)) : reply(404, { error: 'not_found', message: MESSAGES.not_found });
     }
 
     if (req.method !== 'POST') return reply(405, { error: 'method', message: 'Method not allowed.' });

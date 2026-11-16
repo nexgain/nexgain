@@ -120,6 +120,10 @@
     .channel { background: #fff; border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 4px; font-size: 15px; min-height: 44px; }
     .channel.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); }
     .pay-box { border: 1.5px dashed var(--line); border-radius: 12px; padding: 12px 14px; margin-top: 12px; font-size: 14px; color: var(--muted); }
+    .who { display: flex; align-items: center; gap: 12px; }
+    .avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none; display: inline-flex; align-items: center; justify-content: center;
+      background: var(--brand-soft); color: var(--brand); font-weight: 700; font-size: 16px; }
+    .group-name { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 18px 0 0; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -140,7 +144,7 @@
     var params = new URLSearchParams(location.search);
     var slug = (params.get('b') || '').trim().toLowerCase();
     var token = (params.get('m') || '').trim();
-    // A staff member's personal link (&s=): that person is already picked.
+    // An older personal link (&s=): that person is picked to start with.
     var staffParam = (params.get('s') || '').trim().toLowerCase();
 
     // ---------- Small helpers (text is always set with textContent, never as HTML) ----------
@@ -314,28 +318,36 @@
     var page = null;
     var pickedService = null;
     var pickedStaff = null; // null = anyone available
-    var onlyStaff = null; // from a personal link: the only person shown
     var pickedSlot = null;
     // confirmBy: how they want their confirmation: 'email', 'sms' (text) or 'both'.
     var details = { name: '', phone: '', email: '', notes: '', confirmBy: 'email' };
 
+    /** The bookable people who do this service. */
     function staffFor(service) {
-      return page.staff.filter(function (s) { return !service.staffIds.length || service.staffIds.indexOf(s.id) >= 0; });
+      return page.staff.filter(function (x) { return (service.staffIds || []).indexOf(x.id) >= 0; });
     }
-    /** Whether the "Who would you like?" step is skipped (personal link, or only one person). */
-    function skipsStaff() { return !!onlyStaff || staffFor(pickedService).length <= 1; }
+    /** Everyone who can be booked for at least one service. */
+    function bookableStaff() {
+      return page.staff.filter(function (x) { return page.services.some(function (sv) { return (sv.staffIds || []).indexOf(x.id) >= 0; }); });
+    }
+    /** The services the picked person does (or anybody does, for "Anyone available"). */
+    function servicesFor(staffId) {
+      return page.services.filter(function (sv) { return staffId ? (sv.staffIds || []).indexOf(staffId) >= 0 : (sv.staffIds || []).length > 0; });
+    }
+    /** Whether the "Who would you like?" step was skipped (only one person can be booked). */
+    function skipsStaff() { return bookableStaff().length <= 1; }
     /** What this person charges for the service: their own price, or the usual one. */
     function priceOf(service, staffId) {
       var own = staffId && service.staffPrices ? service.staffPrices[staffId] : undefined;
       return own !== undefined && own !== null ? Number(own) : service.price;
     }
-    /** "$40", or "$40–$55" when the people who do it charge different prices. */
+    /** "$50" for one person; for "Anyone available", "$50" or "from $50" (the lowest price). */
     function priceText(service, staffId) {
       if (staffId) return money(priceOf(service, staffId));
       var list = staffFor(service).map(function (x) { return priceOf(service, x.id); }).filter(function (v) { return v !== null && v !== undefined; });
       if (!list.length) return money(service.price);
       var lo = Math.min.apply(null, list), hi = Math.max.apply(null, list);
-      return lo === hi ? money(lo) : money(lo) + '–' + money(hi);
+      return lo === hi ? money(lo) : 'from ' + money(lo);
     }
     /** The deposit for a price (same rules as the server): none, fixed (never more than the price) or a percentage. */
     function depositFor(price) {
@@ -384,61 +396,76 @@
         page = data;
         header(data.business);
         if (!data.accepting) { failed(data.business.name + ' isn’t taking online bookings right now.'); return; }
-        if (!data.services.length || !data.staff.length) { failed('There’s nothing to book online yet.'); return; }
-        onlyStaff = data.staff.filter(function (x) { return x.id === staffParam; })[0] || null;
-        if (onlyStaff) {
-          // Only the services they do.
-          page.services = page.services.filter(function (sv) { return !sv.staffIds.length || sv.staffIds.indexOf(onlyStaff.id) >= 0; });
-          document.title = 'Book with ' + onlyStaff.name + ' · ' + data.business.name;
-          var sub = document.querySelector('#biz .muted');
-          if (sub) sub.textContent = 'Book with ' + onlyStaff.name;
-          if (!page.services.length) { failed(onlyStaff.name + ' doesn’t have any services to book online yet.'); return; }
-        }
-        chooseService();
+        var people = bookableStaff();
+        if (!data.services.length || !people.length) { failed('There’s nothing to book online yet.'); return; }
+        // Old personal links (&s=) still work: that person is picked to start with.
+        var linked = people.filter(function (x) { return x.id === staffParam; })[0];
+        if (linked || people.length === 1) { pickedStaff = (linked || people[0]).id; chooseService(); return; }
+        chooseStaff();
       }).catch(function (e) { failed(e.code === 'not_found' ? 'This booking page could not be found. Please check the link.' : e.message); });
     }
 
-    function chooseService() {
+    /** A round photo, or their first initial. */
+    function avatar(person) {
+      if (person && person.photo && /^https:\/\//.test(person.photo)) return el('img', { class: 'avatar', src: person.photo, alt: '' });
+      return el('span', { class: 'avatar', 'aria-hidden': 'true', text: person ? (person.name || '?').trim().charAt(0).toUpperCase() : '★' });
+    }
+
+    function chooseStaff() {
+      var people = bookableStaff();
       show([
         progress(1),
-        el('h1', { text: 'Choose a service' }),
-        el('div', { class: 'list' }, page.services.map(function (s) {
-          return el('button', { class: 'option', type: 'button', onclick: function () { pickedService = s; chooseStaff(); } }, [
-            el('span', {}, [el('strong', { text: s.name }), el('span', { class: 'muted', text: minutes(s.duration) + (s.description ? ' · ' + s.description : '') })]),
-            priceText(s, onlyStaff && onlyStaff.id) ? el('span', { class: 'price', text: priceText(s, onlyStaff && onlyStaff.id) }) : null,
+        el('h1', { text: 'Who would you like?' }),
+        el('div', { class: 'list' }, [
+          el('button', { class: 'option', type: 'button', onclick: function () { pickedStaff = null; chooseService(); } }, [
+            el('span', { class: 'who' }, [avatar(null), el('span', {}, [el('strong', { text: 'Anyone available' }), el('span', { class: 'muted', text: 'The most times to choose from' })])]),
+          ]),
+        ].concat(people.map(function (person) {
+          return el('button', { class: 'option', type: 'button', onclick: function () { pickedStaff = person.id; chooseService(); } }, [
+            el('span', { class: 'who' }, [avatar(person), el('strong', { text: person.name })]),
           ]);
-        })),
-        page.cancellationPolicy ? el('p', { class: 'policy', text: page.cancellationPolicy }) : null,
+        }))),
         contact(),
       ]);
     }
 
-    function chooseStaff() {
-      if (onlyStaff) { pickedStaff = onlyStaff.id; chooseTime(true); return; }
-      var people = staffFor(pickedService);
-      if (people.length <= 1) { pickedStaff = people.length ? people[0].id : null; chooseTime(true); return; }
+    function chooseService() {
+      var list = servicesFor(pickedStaff);
+      // Grouped by category, in the business's order.
+      var groups = [];
+      list.forEach(function (sv) {
+        var name = sv.category || 'Services';
+        var g = groups.filter(function (x) { return x.name === name; })[0];
+        if (!g) groups.push(g = { name: name, items: [] });
+        g.items.push(sv);
+      });
       show([
-        backButton(chooseService),
+        skipsStaff() ? null : backButton(chooseStaff),
         progress(2),
-        el('h1', { text: 'Who would you like?' }),
-        el('div', { class: 'list' }, [
-          el('button', { class: 'option', type: 'button', onclick: function () { pickedStaff = null; chooseTime(false); } }, [
-            el('span', {}, [el('strong', { text: 'Anyone available' }), el('span', { class: 'muted', text: 'The most times to choose from' })]),
-            priceText(pickedService, null) ? el('span', { class: 'price', text: priceText(pickedService, null) }) : null,
-          ]),
-        ].concat(people.map(function (p) {
-          return el('button', { class: 'option', type: 'button', onclick: function () { pickedStaff = p.id; chooseTime(false); } }, [
-            el('strong', { text: p.name }),
-            priceText(pickedService, p.id) ? el('span', { class: 'price', text: priceText(pickedService, p.id) }) : null,
-          ]);
-        }))),
-      ]);
+        el('h1', { text: 'Choose a service' }),
+        pickedStaff ? el('p', { class: 'muted', text: 'With ' + staffName(pickedStaff) }) : el('p', { class: 'muted', text: 'With anyone available' }),
+      ].concat(groups.map(function (g) {
+        return el('div', { class: 'group' }, [
+          groups.length > 1 ? el('h2', { class: 'group-name', text: g.name }) : null,
+          el('div', { class: 'list' }, g.items.map(function (sv) {
+            var price = priceText(sv, pickedStaff);
+            return el('button', { class: 'option', type: 'button', onclick: function () { pickedService = sv; chooseTime(); } }, [
+              el('span', {}, [el('strong', { text: sv.name }), el('span', { class: 'muted', text: minutes(sv.duration) + (sv.description ? ' · ' + sv.description : '') })]),
+              price ? el('span', { class: 'price', text: price }) : null,
+            ]);
+          })),
+        ]);
+      }), [
+        list.length ? null : el('p', { class: 'muted', text: 'Nothing to book with ' + staffName(pickedStaff) + ' online right now.' }),
+        page.cancellationPolicy ? el('p', { class: 'policy', text: page.cancellationPolicy }) : null,
+        contact(),
+      ]));
     }
 
-    function chooseTime(skippedStaff) {
+    function chooseTime() {
       var box = el('div');
       show([
-        backButton(skippedStaff ? chooseService : chooseStaff),
+        backButton(chooseService),
         progress(3),
         el('h1', { text: 'Choose a time' }),
         el('p', { class: 'muted', text: pickedService.name + ' · ' + minutes(pickedService.duration) + (pickedStaff ? ' · with ' + staffName(pickedStaff) : '') + (priceText(pickedService, pickedStaff) ? ' · ' + priceText(pickedService, pickedStaff) : '') }),
@@ -477,7 +504,7 @@
           ['Date', dateOf(pickedSlot.start, true)],
           ['Time', timeOf(pickedSlot.start) + ' (' + minutes(pickedService.duration) + ')'],
           // "Anyone available" with different prices: the price of whoever is free shows on the confirmation.
-          ['Price', pickedStaff || priceText(pickedService, null).indexOf('–') < 0 ? priceText(pickedService, pickedStaff) : priceText(pickedService, null) + ' (depends who’s free)'],
+          ['Price', pickedStaff || priceText(pickedService, null).indexOf('from') < 0 ? priceText(pickedService, pickedStaff) : priceText(pickedService, null) + ' (depends who’s free)'],
         ]),
       ].concat(
         field('name', 'Your name', 'text', { autocomplete: 'name', maxlength: 100, required: true }),
@@ -498,7 +525,7 @@
           button,
         ]
       ));
-      show([backButton(function () { chooseTime(skipsStaff()); }), progress(4), el('h1', { text: 'Your details' }), form]);
+      show([backButton(function () { chooseTime(); }), progress(4), el('h1', { text: 'Your details' }), form]);
     }
 
     function confirmBooking(button) {
@@ -521,7 +548,7 @@
         })
         .then(function (r) { done(r.booking, r, 'booked'); })
         .catch(function (e) {
-          if (e.code === 'taken') { chooseTime(skipsStaff()); setTimeout(function () { alertBox(e.message); }, 0); }
+          if (e.code === 'taken') { chooseTime(); setTimeout(function () { alertBox(e.message); }, 0); }
           else enterDetails(e.message);
         });
     }
