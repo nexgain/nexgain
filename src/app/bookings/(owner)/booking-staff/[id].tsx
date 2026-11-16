@@ -1,16 +1,16 @@
 import { useState } from 'react';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { StaffLinkCard } from '@/systems/bookings/components/owner/booking-link-card';
-import { SaveNote, WeekHours } from '@/systems/bookings/components/owner/booking-ui';
+import { SaveNote } from '@/systems/bookings/components/owner/booking-ui';
 import { DateField, FormField, SwitchRow, TextField } from '@/systems/bookings/components/owner/form';
 import { Badge, Button, Card, goBack, OwnerIcons, OwnerScreen, PageHeader } from '@/systems/bookings/components/owner/ui';
 import { Colors as C, Spacing } from '@/constants/theme';
-import { addDays, format12h, formatDayKey, LONG_DAYS, todayIn, zonedParts, zonedToIso } from '@/systems/bookings/data/booking-time';
+import { useShifts } from '@/data/shifts';
+import { addDays, format12h, formatDayKey, todayIn, zonedParts, zonedToIso } from '@/systems/bookings/data/booking-time';
 import {
   addTimeOff,
-  answerHoursRequest,
   removeTimeOff,
   setTimeOffStatus,
   updateStaff,
@@ -18,7 +18,6 @@ import {
   useBookingStaff,
   useBusinessTimeZone,
   useTimeOff,
-  type StaffDay,
 } from '@/systems/bookings/data/bookings';
 
 type Message = { tone: 'ok' | 'error'; text: string } | null;
@@ -38,6 +37,7 @@ export default function BookingStaffScreen() {
   const timeZone = useBusinessTimeZone();
   const timeOff = useTimeOff().filter((t) => t.staffId === id && t.status !== 'declined' && t.endsAt > new Date().toISOString());
   const [name, setName] = useState<string | null>(null);
+  const shifts = useShifts();
   const [message, setMessage] = useState<Message>(null);
   const [offFrom, setOffFrom] = useState<string | null>(null);
   const [offTo, setOffTo] = useState<string | null>(null);
@@ -56,8 +56,10 @@ export default function BookingStaffScreen() {
 
   const report = (error: string | null, ok: string) => setMessage(error ? { tone: 'error', text: error } : { tone: 'ok', text: ok });
   const today = todayIn(timeZone);
-  // Their own week, starting from the opening hours.
-  const ownHours: StaffDay[] = person.hours ?? settings.openingHours.map((d) => ({ working: d.open, start: d.start, end: d.end }));
+  // Their shifts in the next 2 weeks (the roster decides when they can be booked).
+  const upcoming = shifts
+    .filter((sh) => person.employeeId && sh.employeeIds.includes(person.employeeId) && sh.date >= today && sh.date <= addDays(today, 13))
+    .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
 
   async function saveName() {
     const clean = (name ?? '').trim();
@@ -105,53 +107,27 @@ export default function BookingStaffScreen() {
         />
       </Card>
 
-      <Card title="Working Hours" icon={OwnerIcons.clock}>
-        {person.hoursRequestedAt && (
-          <View style={styles.request}>
-            <Text style={styles.requestTitle}>{person.name} asked for new hours</Text>
-            <Text style={styles.muted}>
-              {person.requestedHours
-                ? person.requestedHours
-                    .map((d, i) => `${LONG_DAYS[i].slice(0, 3)}  ${d.working ? `${format12h(d.start)} – ${format12h(d.end)}` : 'Not working'}`)
-                    .join('\n')
-                : 'The same hours as your opening hours.'}
-            </Text>
-            <View style={styles.row}>
-              <View style={styles.flex}>
-                <Button
-                  label="Decline"
-                  variant="secondary"
-                  onPress={async () => report(await answerHoursRequest(person.id, false), 'Declined. They’ve been told.')}
-                  fill
-                />
-              </View>
-              <View style={styles.flex}>
-                <Button
-                  label="Approve"
-                  onPress={async () => report(await answerHoursRequest(person.id, true), 'Approved. Customers can book them in their new hours.')}
-                  fill
-                />
-              </View>
-            </View>
-          </View>
-        )}
-        <SwitchRow
-          label="Same as opening hours"
-          hint={person.hours ? 'Off: they have their own hours below.' : 'Customers can book them any time you’re open.'}
-          value={!person.hours}
-          onChange={async (same) => report(await updateStaff(person.id, { hours: same ? null : ownHours }), 'Hours saved.')}
-        />
-        {person.hours && (
+      <Card title="When They Can Be Booked" icon={OwnerIcons.clock}>
+        {person.isOwner ? (
+          <Text style={styles.muted}>
+            You can be booked any time you’re open (Opening Hours in Bookings Settings). Turn off “Can be booked online” above, or add days off below, for
+            times you’re away.
+          </Text>
+        ) : (
           <>
-            <Text style={styles.muted}>They can only be booked when they’re working and you’re open.</Text>
-            <WeekHours
-              days={person.hours.map((d) => ({ on: d.working, start: d.start, end: d.end }))}
-              onLabel="Working"
-              offLabel="Not working"
-              onChange={async (days) =>
-                report(await updateStaff(person.id, { hours: days.map((d) => ({ working: d.on, start: d.start, end: d.end })) }), 'Hours saved.')
-              }
-            />
+            <Text style={styles.muted}>
+              Only when they’re rostered on. Add or change their shifts in the Roster and customers can book them in those hours straight away.
+            </Text>
+            {upcoming.length === 0 ? (
+              <Text style={styles.warning}>Not rostered in the next 2 weeks, so customers can’t book them.</Text>
+            ) : (
+              upcoming.map((sh) => (
+                <Text key={sh.id} style={styles.shift}>
+                  {formatDayKey(sh.date)}  {format12h(sh.start)} – {format12h(sh.end)}
+                </Text>
+              ))
+            )}
+            <Button label="Open Roster" variant="secondary" icon={OwnerIcons.calendar} onPress={() => router.navigate('/bookings/roster')} />
           </>
         )}
       </Card>
@@ -220,6 +196,6 @@ const styles = StyleSheet.create({
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.border },
   approve: { color: C.success, fontSize: 15, fontWeight: '600' },
   remove: { color: C.danger, fontSize: 15, fontWeight: '600' },
-  request: { gap: Spacing.two, padding: Spacing.three, borderRadius: 12, backgroundColor: C.warningSoft },
-  requestTitle: { color: C.warning, fontSize: 15, fontWeight: '700' },
+  warning: { color: C.warning, fontSize: 14, fontWeight: '600' },
+  shift: { color: C.text, fontSize: 15, fontVariant: ['tabular-nums'] },
 });

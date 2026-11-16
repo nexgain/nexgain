@@ -72,3 +72,40 @@ export function timeOffSpans(timeOff: TimeOff[], staffId: string, dateKey: strin
   }
   return out;
 }
+
+/**
+ * When an employee is rostered on a day (minutes since midnight), the same way
+ * the database decides they can be booked: today's shifts (one past midnight
+ * runs to the end of the day), plus the rest of last night's shift.
+ */
+export function rosteredSpans(
+  shifts: { date: string; start: string; end: string; employeeIds: string[] }[],
+  employeeId: string | null,
+  dateKey: string,
+): Span[] {
+  if (!employeeId) return [];
+  const valid = /^\d{1,2}:\d{2}$/;
+  const out: Span[] = [];
+  const yesterday = addDays(dateKey, -1);
+  for (const s of shifts) {
+    if (!s.employeeIds.includes(employeeId) || !valid.test(s.start) || !valid.test(s.end)) continue;
+    const start = minutesOf(s.start);
+    const end = minutesOf(s.end);
+    if (s.date === dateKey) out.push({ start, end: end > start ? end : 24 * 60 });
+    else if (s.date === yesterday && end <= start && end > 0) out.push({ start: 0, end });
+  }
+  return out.sort((a, b) => a.start - b.start);
+}
+
+/** The parts of a window not covered by any of the spans (e.g. when someone isn't rostered). */
+export function gapsIn(window: Span, spans: Span[]): Span[] {
+  const gaps: Span[] = [];
+  let at = window.start;
+  for (const s of [...spans].sort((a, b) => a.start - b.start)) {
+    if (s.start > at) gaps.push({ start: at, end: Math.min(s.start, window.end) });
+    at = Math.max(at, s.end);
+    if (at >= window.end) break;
+  }
+  if (at < window.end) gaps.push({ start: at, end: window.end });
+  return gaps.filter((g) => g.end > g.start);
+}

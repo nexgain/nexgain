@@ -686,37 +686,6 @@ export async function withdrawTimeOff(timeOffId: string): Promise<string | null>
   return null;
 }
 
-/** Staff: ask for new weekly hours (null = the opening hours), or withdraw the request. */
-export async function requestHours(staffId: string, hours: StaffDay[] | null, withdraw = false): Promise<string | null> {
-  const { error } = await supabase.rpc('booking_request_hours', { p_hours: hours, p_withdraw: withdraw });
-  if (error) return rpcError(error.message);
-  bookingStaffStore.set((list) =>
-    list.map((s) =>
-      s.id === staffId
-        ? { ...s, requestedHours: withdraw ? null : hours, hoursRequestedAt: withdraw ? null : new Date().toISOString() }
-        : s,
-    ),
-  );
-  return null;
-}
-
-/** Owner: answer a request for new hours. Approving changes when customers can book them. */
-export async function answerHoursRequest(staffId: string, approve: boolean): Promise<string | null> {
-  const person = bookingStaffStore.get().find((s) => s.id === staffId);
-  if (!person?.hoursRequestedAt) return 'There’s no request to answer.';
-  const changes = approve
-    ? { hours: person.requestedHours, requested_hours: null, hours_requested_at: null }
-    : { requested_hours: null, hours_requested_at: null };
-  const { error } = await supabase.from('booking_staff').update(changes).eq('id', staffId);
-  if (error) return friendly(error.message);
-  bookingStaffStore.set((list) =>
-    list.map((s) =>
-      s.id === staffId ? { ...s, hours: approve ? person.requestedHours : s.hours, requestedHours: null, hoursRequestedAt: null } : s,
-    ),
-  );
-  return null;
-}
-
 // ---------------------------------------------------------------------------
 // Appointment reminders (sent by the booking-reminders Edge Function)
 // ---------------------------------------------------------------------------

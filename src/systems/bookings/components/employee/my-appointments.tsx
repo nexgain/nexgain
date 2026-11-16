@@ -106,7 +106,7 @@ export function MyAppointments() {
 
       <Pressable onPress={() => router.push('/bookings/booking-hours')} accessibilityRole="link" style={styles.hoursLink} hitSlop={6}>
         <Icon name={Icons.chevron} color={C.primary} size={12} />
-        <Text style={styles.link}>My booking hours & days off</Text>
+        <Text style={styles.link}>My days off</Text>
       </Pressable>
     </View>
   );

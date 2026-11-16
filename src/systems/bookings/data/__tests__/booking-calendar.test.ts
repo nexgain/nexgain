@@ -2,7 +2,7 @@
 // off. FAKE bookings only.
 import { describe, expect, it, jest } from '@jest/globals';
 
-import { blockPosition, bookingSpan, dayWindow, timeAtY, timeOffSpans, weekDays } from '@/systems/bookings/data/booking-calendar';
+import { blockPosition, bookingSpan, dayWindow, gapsIn, rosteredSpans, timeAtY, timeOffSpans, weekDays } from '@/systems/bookings/data/booking-calendar';
 import type { TimeOff } from '@/systems/bookings/data/bookings';
 
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
@@ -48,5 +48,30 @@ describe('the bookings calendar', () => {
     ]);
     expect(timeOffSpans(off, 'b', '2026-11-19', TZ)).toEqual([{ start: 720, end: 840 }]);
     expect(timeOffSpans(off, 'a', '2026-11-20', TZ)).toEqual([]);
+  });
+});
+
+describe('the roster in the calendar', () => {
+  const shifts = [
+    { date: '2026-11-16', start: '10:00', end: '14:00', employeeIds: ['alex'] },
+    { date: '2026-11-16', start: '20:00', end: '02:00', employeeIds: ['sam'] },
+    { date: '2026-11-17', start: '09:00', end: '11:00', employeeIds: ['alex', 'sam'] },
+  ];
+  it('finds when each person is rostered, including night shifts', () => {
+    expect(rosteredSpans(shifts, 'alex', '2026-11-16')).toEqual([{ start: 600, end: 840 }]);
+    expect(rosteredSpans(shifts, 'sam', '2026-11-16')).toEqual([{ start: 1200, end: 1440 }]);
+    expect(rosteredSpans(shifts, 'sam', '2026-11-17')).toEqual([
+      { start: 0, end: 120 },
+      { start: 540, end: 660 },
+    ]);
+    expect(rosteredSpans(shifts, null, '2026-11-16')).toEqual([]);
+  });
+  it('greys out the time they are not rostered', () => {
+    expect(gapsIn({ start: 540, end: 1020 }, [{ start: 600, end: 840 }])).toEqual([
+      { start: 540, end: 600 },
+      { start: 840, end: 1020 },
+    ]);
+    expect(gapsIn({ start: 540, end: 1020 }, [])).toEqual([{ start: 540, end: 1020 }]);
+    expect(gapsIn({ start: 540, end: 1020 }, [{ start: 500, end: 1100 }])).toEqual([]);
   });
 });

@@ -29,8 +29,8 @@ export const ACCOUNT_SECTIONS: AccountSection[] = [
   },
   {
     id: 'booking-hours',
-    title: 'My Booking Hours & Days Off',
-    subtitle: 'When customers can book you, and asking for time off',
+    title: 'My Days Off',
+    subtitle: 'Your rostered times for bookings, and asking for time off',
     icon: { ios: 'calendar', android: 'calendar_month', web: 'calendar_month' },
     href: '/bookings/booking-hours',
   },

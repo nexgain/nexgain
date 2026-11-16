@@ -89,7 +89,7 @@ export const EMPLOYEE_TYPES = {
   booking_new: { category: 'Roster', icon: ICONS.calendar, tone: 'green', actions: ['Open Schedule'] },
   booking_changed: { category: 'Roster', icon: ICONS.calendar, tone: 'blue', actions: ['Open Schedule'] },
   booking_cancelled: { category: 'Roster', icon: ICONS.calendar, tone: 'red', actions: ['Open Schedule'] },
-  booking_request_answer: { category: 'Roster', icon: ICONS.clock, tone: 'blue', actions: ['Open My Booking Hours'] },
+  booking_request_answer: { category: 'Roster', icon: ICONS.clock, tone: 'blue', actions: ['Open My Days Off'] },
 } satisfies Record<string, TypeInfo>;
 
 export type OwnerNotificationType = keyof typeof OWNER_TYPES;

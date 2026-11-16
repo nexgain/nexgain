@@ -2,24 +2,15 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, EmployeeScreen, employeeStyles } from '@/systems/bookings/components/employee/ui';
-import { SaveNote, WeekHours } from '@/systems/bookings/components/owner/booking-ui';
-import { DateField, FormField, SwitchRow, TextField } from '@/systems/bookings/components/owner/form';
+import { SaveNote } from '@/systems/bookings/components/owner/booking-ui';
+import { DateField, FormField, TextField } from '@/systems/bookings/components/owner/form';
 import { Button } from '@/systems/bookings/components/owner/ui';
 import { EmployeeColors as C } from '@/constants/employee-theme';
 import { Spacing } from '@/constants/theme';
 import { useCurrentEmployee } from '@/data/current-employee';
-import { addDays, format12h, formatDayKey, LONG_DAYS, todayIn, zonedParts, zonedToIso } from '@/systems/bookings/data/booking-time';
-import {
-  myStaff,
-  requestHours,
-  requestTimeOff,
-  useBookingSettings,
-  useBookingStaff,
-  useBusinessTimeZone,
-  useTimeOff,
-  withdrawTimeOff,
-  type StaffDay,
-} from '@/systems/bookings/data/bookings';
+import { useShifts } from '@/data/shifts';
+import { addDays, format12h, formatDayKey, todayIn, zonedParts, zonedToIso } from '@/systems/bookings/data/booking-time';
+import { myStaff, requestTimeOff, useBookingStaff, useBusinessTimeZone, useTimeOff, withdrawTimeOff } from '@/systems/bookings/data/bookings';
 
 type Message = { tone: 'ok' | 'error'; text: string } | null;
 
@@ -29,27 +20,22 @@ const toDate = (key: string) => {
 };
 const toKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-/** "Mon 9:00 am – 5:00 pm" lines for a week of hours. */
-function weekSummary(days: { on: boolean; start: string; end: string }[]) {
-  return days.map((d, i) => `${LONG_DAYS[i].slice(0, 3)}  ${d.on ? `${format12h(d.start)} – ${format12h(d.end)}` : 'Not working'}`);
-}
-
-// More > My Booking Hours & Days Off (NexGain Bookings staff): when customers
-// can book them, and asking for new hours or time off. The owner approves
-// before anything changes for customers.
-export default function BookingHoursScreen() {
-  const me = myStaff(useBookingStaff(), useCurrentEmployee()?.id);
-  const settings = useBookingSettings();
+// More > My Days Off (NexGain Bookings staff): customers can book them when
+// they're rostered on; here they see their next shifts and ask for days off
+// (the owner approves before customers stop seeing those times).
+export default function MyDaysOffScreen() {
+  const employee = useCurrentEmployee();
+  const me = myStaff(useBookingStaff(), employee?.id);
   const timeZone = useBusinessTimeZone();
+  const shifts = useShifts();
   const timeOff = useTimeOff().filter((t) => t.staffId === me?.id && t.status !== 'declined' && t.endsAt > new Date().toISOString());
-  const [editing, setEditing] = useState<StaffDay[] | null | undefined>(undefined); // undefined = not editing
   const [message, setMessage] = useState<Message>(null);
   const [busy, setBusy] = useState(false);
   const [offFrom, setOffFrom] = useState<string | null>(null);
   const [offTo, setOffTo] = useState<string | null>(null);
   const [offNote, setOffNote] = useState('');
 
-  if (!me || !settings) {
+  if (!me || !employee) {
     return (
       <EmployeeScreen>
         <Card style={styles.card}>
@@ -59,18 +45,11 @@ export default function BookingHoursScreen() {
     );
   }
 
-  const opening = settings.openingHours.map((d) => ({ on: d.open, start: d.start, end: d.end }));
-  const current = me.hours ? me.hours.map((d) => ({ on: d.working, start: d.start, end: d.end })) : opening;
   const today = todayIn(timeZone);
+  const upcoming = shifts
+    .filter((sh) => sh.employeeIds.includes(employee.id) && sh.date >= today && sh.date <= addDays(today, 13))
+    .sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
   const report = (error: string | null, ok: string) => setMessage(error ? { tone: 'error', text: error } : { tone: 'ok', text: ok });
-
-  async function sendHours() {
-    setBusy(true);
-    const error = await requestHours(me!.id, editing ?? null);
-    setBusy(false);
-    report(error, 'Sent to your manager. Your hours change once they approve.');
-    if (!error) setEditing(undefined);
-  }
 
   async function askTimeOff() {
     const from = offFrom ?? today;
@@ -93,58 +72,22 @@ export default function BookingHoursScreen() {
 
       <Text style={employeeStyles.sectionLabel}>When customers can book you</Text>
       <Card style={styles.card}>
-        <Text style={styles.muted}>{me.hours ? 'Your own hours:' : 'Your hours are the business’s opening hours:'}</Text>
-        {weekSummary(current).map((line) => (
-          <Text key={line} style={styles.line}>
-            {line}
-          </Text>
-        ))}
-        {me.hoursRequestedAt && (
-          <View style={styles.pending}>
-            <Text style={styles.pendingTitle}>Waiting for your manager</Text>
-            <Text style={styles.muted}>
-              You asked for {me.requestedHours ? 'new hours' : 'the opening hours'}
-              {me.requestedHours ? `:\n${weekSummary(me.requestedHours.map((d) => ({ on: d.working, start: d.start, end: d.end }))).join('\n')}` : '.'}
-            </Text>
-            <Pressable
-              onPress={async () => report(await requestHours(me.id, null, true), 'Request withdrawn.')}
-              accessibilityRole="button"
-              hitSlop={6}>
-              <Text style={styles.withdraw}>Withdraw request</Text>
-            </Pressable>
-          </View>
-        )}
-        {editing === undefined ? (
-          <Button label="Ask for different hours" variant="secondary" onPress={() => setEditing(me.hours ?? null)} />
+        <Text style={styles.muted}>When you’re rostered on. Your next 2 weeks:</Text>
+        {upcoming.length === 0 ? (
+          <Text style={styles.warning}>You’re not rostered in the next 2 weeks, so customers can’t book you yet.</Text>
         ) : (
-          <View style={styles.editor}>
-            <SwitchRow
-              label="Same as opening hours"
-              value={editing === null}
-              onChange={(same) => setEditing(same ? null : opening.map((d) => ({ working: d.on, start: d.start, end: d.end })))}
-            />
-            {editing && (
-              <WeekHours
-                days={editing.map((d) => ({ on: d.working, start: d.start, end: d.end }))}
-                onLabel="Working"
-                offLabel="Not working"
-                onChange={(days) => setEditing(days.map((d) => ({ working: d.on, start: d.start, end: d.end })))}
-              />
-            )}
-            <View style={styles.row}>
-              <View style={styles.flex}>
-                <Button label="Cancel" variant="secondary" onPress={() => setEditing(undefined)} fill />
-              </View>
-              <View style={styles.flex}>
-                <Button label="Send to manager" onPress={sendHours} disabled={busy} fill />
-              </View>
-            </View>
-          </View>
+          upcoming.map((sh) => (
+            <Text key={sh.id} style={styles.line}>
+              {formatDayKey(sh.date)}  {format12h(sh.start)} – {format12h(sh.end)}
+            </Text>
+          ))
         )}
+        {!me.active && <Text style={styles.warning}>Your manager has turned off online bookings for you.</Text>}
       </Card>
 
       <Text style={employeeStyles.sectionLabel}>Days off</Text>
       <Card style={styles.card}>
+        <Text style={styles.muted}>Can’t work a rostered day? Ask for it off. Once your manager approves, customers can’t book you then.</Text>
         {timeOff.length === 0 && <Text style={styles.muted}>No days off coming up.</Text>}
         {timeOff.map((t, i) => {
           const from = zonedParts(t.startsAt, timeZone).date;
@@ -189,13 +132,11 @@ export default function BookingHoursScreen() {
 const styles = StyleSheet.create({
   card: { padding: Spacing.three, gap: Spacing.two },
   muted: { color: C.textSecondary, fontSize: 14, lineHeight: 20 },
+  warning: { color: C.warning, fontSize: 14, lineHeight: 20, fontWeight: '600' },
   line: { color: C.text, fontSize: 15, lineHeight: 22, fontVariant: ['tabular-nums'] },
   title: { color: C.text, fontSize: 15, fontWeight: '600' },
-  pending: { gap: Spacing.one, padding: Spacing.three, borderRadius: 12, backgroundColor: C.warningSoft, marginTop: Spacing.two },
-  pendingTitle: { color: C.warning, fontSize: 15, fontWeight: '700' },
-  withdraw: { color: C.danger, fontSize: 15, fontWeight: '600', marginTop: Spacing.one },
-  editor: { gap: Spacing.two, marginTop: Spacing.two },
-  row: { flexDirection: 'row', gap: Spacing.two, marginTop: Spacing.two },
+  withdraw: { color: C.danger, fontSize: 15, fontWeight: '600' },
+  row: { flexDirection: 'row', gap: Spacing.two },
   flex: { flex: 1 },
   off: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingVertical: Spacing.two },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.border },

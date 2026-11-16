@@ -205,7 +205,7 @@ export default function BookingSettingsScreen() {
       </Card>
 
       <Card title="Opening Hours" icon={OwnerIcons.clock}>
-        <Text style={styles.muted}>Customers can only book inside these hours ({timeZoneLabel(timeZone)} time).</Text>
+        <Text style={styles.muted}>When you (the owner) can be booked, in {timeZoneLabel(timeZone)} time. Staff can be booked when they’re rostered on.</Text>
         <WeekHours
           days={settings.openingHours.map((d) => ({ on: d.open, start: d.start, end: d.end }))}
           onLabel="Open"
@@ -215,12 +215,12 @@ export default function BookingSettingsScreen() {
       </Card>
 
       <Card title="Staff" icon={OwnerIcons.people}>
-        <Text style={styles.muted}>Who customers can book, their own hours and days off.</Text>
+        <Text style={styles.muted}>Who customers can book and their days off. Staff can be booked when they’re rostered on (Roster).</Text>
         {staff.map((s, i) => (
           <ListRow
             key={s.id}
             title={s.isOwner ? `${s.name} (you)` : s.name}
-            subtitle={!s.active ? 'Can’t be booked' : s.hours ? 'Own working hours' : 'Works your opening hours'}
+            subtitle={!s.active ? 'Can’t be booked' : s.isOwner ? 'Bookable in your opening hours' : 'Bookable when rostered'}
             muted={!s.active}
             showDivider={i > 0}
             onPress={() => router.push({ pathname: '/bookings/booking-staff/[id]', params: { id: s.id } })}

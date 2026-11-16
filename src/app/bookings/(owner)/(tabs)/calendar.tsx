@@ -5,11 +5,14 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Segmented } from '@/systems/bookings/components/owner/invoices-ui';
 import { Button, Card, EmptyState, Icon, OwnerIcons, OwnerScreen, PageHeader } from '@/systems/bookings/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
+import { useShifts, type RosterShift } from '@/data/shifts';
 import {
   blockPosition,
   bookingSpan,
   dayWindow,
+  gapsIn,
   HOUR_HEIGHT,
+  rosteredSpans,
   timeAtY,
   timeOffSpans,
   weekDays,
@@ -71,6 +74,7 @@ export default function BookingsCalendarScreen() {
   const load = useBookingsLoad();
   const staff = useBookingStaff();
   const timeOff = useTimeOff();
+  const shifts = useShifts();
 
   // Active staff, plus anyone (e.g. who has since left) with a booking showing.
   const shown = staff.filter((s) => s.active || bookings.some((b) => b.staffId === s.id && b.status !== 'cancelled'));
@@ -139,6 +143,7 @@ export default function BookingsCalendarScreen() {
           bookings={bookings}
           openingDay={settings?.openingHours[weekdayOf(day)]}
           timeOff={timeOff}
+          shifts={shifts}
         />
       ) : (
         <WeekList days={weekDays(day)} today={today} timeZone={timeZone} bookings={bookings.filter((b) => !only || b.staffId === only)} staff={staff} />
@@ -155,6 +160,7 @@ function DayGrid({
   bookings,
   openingDay,
   timeOff,
+  shifts,
 }: {
   day: string;
   today: string;
@@ -163,9 +169,15 @@ function DayGrid({
   bookings: Booking[];
   openingDay: { open: boolean; start: string; end: string } | undefined;
   timeOff: ReturnType<typeof useTimeOff>;
+  shifts: RosterShift[];
 }) {
   const onDay = bookingsOnDay(bookings, day, timeZone).filter((b) => columns.some((c) => c.id === b.staffId));
-  const window = dayWindow(openingDay, onDay.map((b) => bookingSpan(b, timeZone)));
+  // Staff can only be booked when rostered (the owner: opening hours). null = the owner.
+  const rosterOf = (s: BookingStaff) => (s.isOwner ? null : rosteredSpans(shifts, s.employeeId, day));
+  const window = dayWindow(openingDay, [
+    ...onDay.map((b) => bookingSpan(b, timeZone)),
+    ...columns.flatMap((c) => rosterOf(c) ?? []),
+  ]);
   const hours = Array.from({ length: (window.end - window.start) / 60 }, (_, i) => window.start + i * 60);
   const height = ((window.end - window.start) / 60) * HOUR_HEIGHT;
   const now = zonedParts(new Date(), timeZone);
@@ -183,7 +195,9 @@ function DayGrid({
                 <Text style={styles.columnName} numberOfLines={1}>
                   {s.name}
                 </Text>
-                <Text style={styles.muted}>{onDay.filter((b) => b.staffId === s.id).length} booked</Text>
+                <Text style={styles.muted}>
+                  {rosterOf(s)?.length === 0 ? 'Not rostered' : `${onDay.filter((b) => b.staffId === s.id).length} booked`}
+                </Text>
               </View>
             ))}
           </View>
@@ -206,6 +220,9 @@ function DayGrid({
                 />
                 {hours.map((h, i) => (
                   <View key={h} style={[styles.hourLine, { top: i * HOUR_HEIGHT }]} pointerEvents="none" />
+                ))}
+                {(rosterOf(s) ? gapsIn(window, rosterOf(s)!) : []).map((span, i) => (
+                  <View key={`gap-${i}`} style={[styles.notRostered, blockPosition(span, window)]} pointerEvents="none" />
                 ))}
                 {timeOffSpans(timeOff, s.id, day, timeZone).map((span, i) => {
                   const pos = blockPosition(span, window);
@@ -248,7 +265,7 @@ function DayGrid({
           </View>
         </View>
       </ScrollView>
-      <Text style={styles.muted}>Tap an empty spot to add a booking there. Grey = time off.</Text>
+      <Text style={styles.muted}>Tap an empty spot to add a booking there. Grey = not rostered on, or time off. Customers can only book staff when they’re rostered.</Text>
     </Card>
   );
 }
@@ -346,6 +363,7 @@ const styles = StyleSheet.create({
   column: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: C.border },
   hourLine: { position: 'absolute', left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: C.border },
   timeOff: { position: 'absolute', left: 0, right: 0, backgroundColor: C.neutralSoft, opacity: 0.9 },
+  notRostered: { position: 'absolute', left: 0, right: 0, backgroundColor: C.neutralSoft, opacity: 0.6 },
   block: {
     position: 'absolute',
     left: 3,
