@@ -40,6 +40,10 @@ function fake(local: string, over: Partial<Booking> = {}): Booking {
     reminderStatus: null,
     reminderReason: '',
     reminderSentAt: null,
+    depositAmount: 0,
+    paymentStatus: 'none',
+    cancellationFee: 0,
+    feeStatus: 'none',
     ...over,
   };
 }

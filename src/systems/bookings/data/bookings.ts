@@ -34,6 +34,14 @@ export type BookingSettings = {
   reminderHours: number;
   /** Automatic reminder emails to customers (see 20261120000000_booking_reminders.sql). */
   remindersEnabled: boolean;
+  /** Deposit when booking (see 20261123000000_booking_payments.sql): none, a fixed amount or a % of the price. */
+  depositType: 'none' | 'fixed' | 'percent' | 'full';
+  depositValue: number;
+  /** Fee for cancelling late: on/off, fixed or %, and how many hours before counts as late. */
+  cancellationFeeEnabled: boolean;
+  cancellationFeeType: 'fixed' | 'percent';
+  cancellationFeeValue: number;
+  cancellationFeeHours: number;
 };
 
 export type BookingStaff = {
@@ -98,6 +106,12 @@ export type Booking = {
   reminderStatus: 'sending' | 'sent' | 'failed' | 'skipped' | null;
   reminderReason: string;
   reminderSentAt: string | null;
+  /** The deposit and where it's up to (none, pending, paid, refunded, failed). */
+  depositAmount: number;
+  paymentStatus: 'none' | 'pending' | 'paid' | 'refunded' | 'failed';
+  /** A late-cancellation fee, and whether it was collected. */
+  cancellationFee: number;
+  feeStatus: 'none' | 'pending' | 'charged' | 'failed' | 'waived';
 };
 
 export const DEFAULT_OPENING_HOURS: OpeningDay[] = [
@@ -149,6 +163,12 @@ type SettingsRow = {
   cancellation_policy: string;
   reminder_hours: number;
   reminders_enabled?: boolean;
+  deposit_type?: BookingSettings['depositType'];
+  deposit_value?: number | string;
+  cancellation_fee_enabled?: boolean;
+  cancellation_fee_type?: BookingSettings['cancellationFeeType'];
+  cancellation_fee_value?: number | string;
+  cancellation_fee_hours?: number;
 };
 type StaffRow = {
   id: string;
@@ -197,6 +217,10 @@ type BookingRow = {
   reminder_status?: Booking['reminderStatus'];
   reminder_reason?: string;
   reminder_sent_at?: string | null;
+  deposit_amount?: number | string;
+  payment_status?: Booking['paymentStatus'];
+  cancellation_fee?: number | string;
+  fee_status?: Booking['feeStatus'];
 };
 
 const validDays = <T,>(v: unknown): v is T[] => Array.isArray(v) && v.length === 7;
@@ -219,6 +243,12 @@ export const settingsFromRow = (r: SettingsRow): BookingSettings => ({
   cancellationPolicy: r.cancellation_policy ?? '',
   reminderHours: r.reminder_hours,
   remindersEnabled: r.reminders_enabled ?? true,
+  depositType: r.deposit_type ?? 'none',
+  depositValue: Number(r.deposit_value ?? 0),
+  cancellationFeeEnabled: r.cancellation_fee_enabled ?? false,
+  cancellationFeeType: r.cancellation_fee_type ?? 'fixed',
+  cancellationFeeValue: Number(r.cancellation_fee_value ?? 0),
+  cancellationFeeHours: r.cancellation_fee_hours ?? 24,
 });
 
 const staffFromRow = (r: StaffRow): BookingStaff => ({
@@ -275,17 +305,21 @@ export const bookingFromRow = (r: BookingRow): Booking => ({
   reminderStatus: r.reminder_status ?? null,
   reminderReason: r.reminder_reason ?? '',
   reminderSentAt: r.reminder_sent_at ?? null,
+  depositAmount: Number(r.deposit_amount ?? 0),
+  paymentStatus: r.payment_status ?? 'none',
+  cancellationFee: Number(r.cancellation_fee ?? 0),
+  feeStatus: r.fee_status ?? 'none',
 });
 
 const BOOKING_COLUMNS =
-  'id, service_id, staff_id, staff_chosen, service_name, duration_minutes, price, customer_name, customer_phone, customer_email, notes, starts_at, ends_at, blocked_until, status, source, cancelled_by, created_at';
+  'id, service_id, staff_id, staff_chosen, service_name, duration_minutes, price, customer_name, customer_phone, customer_email, notes, starts_at, ends_at, blocked_until, status, source, cancelled_by, created_at, deposit_amount, payment_status';
 
 // ---------------------------------------------------------------------------
 // Loading (and live updates)
 // ---------------------------------------------------------------------------
 
-/** Added by 20261120000000_booking_reminders.sql (left out until that has been run). */
-const REMINDER_COLUMNS = 'reminder_status, reminder_reason, reminder_sent_at';
+/** Added by later database files (reminders, cancellation fees): left out until those have been run. */
+const REMINDER_COLUMNS = 'reminder_status, reminder_reason, reminder_sent_at, cancellation_fee, fee_status';
 
 /** Bookings from about 13 months ago onwards (enough for a year of analytics). */
 async function fetchBookings() {
@@ -411,6 +445,12 @@ function settingsColumns(p: Partial<BookingSettings>) {
   if (p.cancellationPolicy !== undefined) c.cancellation_policy = p.cancellationPolicy;
   if (p.reminderHours !== undefined) c.reminder_hours = p.reminderHours;
   if (p.remindersEnabled !== undefined) c.reminders_enabled = p.remindersEnabled;
+  if (p.depositType !== undefined) c.deposit_type = p.depositType;
+  if (p.depositValue !== undefined) c.deposit_value = p.depositValue;
+  if (p.cancellationFeeEnabled !== undefined) c.cancellation_fee_enabled = p.cancellationFeeEnabled;
+  if (p.cancellationFeeType !== undefined) c.cancellation_fee_type = p.cancellationFeeType;
+  if (p.cancellationFeeValue !== undefined) c.cancellation_fee_value = p.cancellationFeeValue;
+  if (p.cancellationFeeHours !== undefined) c.cancellation_fee_hours = p.cancellationFeeHours;
   return c;
 }
 
@@ -745,4 +785,43 @@ export async function setStaffPrice(staffId: string, serviceId: string, price: n
     return next;
   });
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Deposits and cancellation fees (same rules as the database)
+// ---------------------------------------------------------------------------
+
+/** The deposit for a price: none, a fixed amount (never more than the price) or a percentage. */
+export function depositFor(price: number | null, settings: Pick<BookingSettings, 'depositType' | 'depositValue'>) {
+  const v = settings.depositValue;
+  if (settings.depositType === 'fixed') return Math.round((price === null ? v : Math.min(v, price)) * 100) / 100;
+  if (settings.depositType === 'percent') return Math.round((price ?? 0) * v) / 100;
+  if (settings.depositType === 'full') return price ?? 0;
+  return 0;
+}
+
+/** The cancellation fee for a price, if cancelled inside the window. */
+export function cancellationFeeFor(price: number | null, settings: Pick<BookingSettings, 'cancellationFeeEnabled' | 'cancellationFeeType' | 'cancellationFeeValue'>) {
+  if (!settings.cancellationFeeEnabled) return 0;
+  const v = settings.cancellationFeeValue;
+  if (settings.cancellationFeeType === 'percent') return Math.round((price ?? 0) * v) / 100;
+  return Math.round((price === null ? v : Math.min(v, price)) * 100) / 100;
+}
+
+/** e.g. "$15 deposit paid", "$15 deposit refunded", or null with no deposit. */
+export function depositText(b: Pick<Booking, 'depositAmount' | 'paymentStatus' | 'cancellationFee' | 'feeStatus'>) {
+  if (!b.depositAmount) return null;
+  const amount = formatPrice(b.depositAmount);
+  switch (b.paymentStatus) {
+    case 'paid':
+      return `${amount} deposit paid`;
+    case 'refunded':
+      return b.cancellationFee > 0 ? `${amount} deposit paid; ${formatPrice(b.depositAmount - Math.min(b.cancellationFee, b.depositAmount))} refunded` : `${amount} deposit refunded`;
+    case 'failed':
+      return `${amount} deposit didn’t go through`;
+    case 'pending':
+      return `${amount} deposit waiting for payment`;
+    default:
+      return null;
+  }
 }

@@ -73,6 +73,12 @@ export function OwnerDesktopShell({ children }: { children: ReactNode }) {
           match: ['/bookings/services', '/bookings/booking-service/'],
         },
         {
+          label: 'Deposits & Fees',
+          icon: { ios: 'banknote.fill', android: 'account_balance_wallet', web: 'account_balance_wallet' },
+          href: '/bookings/deposits',
+          match: ['/bookings/deposits'],
+        },
+        {
           label: 'Bookings Settings',
           icon: { ios: 'calendar.badge.clock', android: 'edit_calendar', web: 'edit_calendar' },
           href: '/bookings/booking-settings',

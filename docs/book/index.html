@@ -113,6 +113,10 @@
     .plain { background: #f3f4f6; color: var(--text); }
     .solid-danger { background: var(--red); color: #fff; }
     .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 20px; }
+    .terms { background: var(--amber-soft); color: #78350f; border-radius: 12px; padding: 12px 14px; margin-top: 14px; font-size: 14px; }
+    .terms strong { display: block; margin-bottom: 4px; }
+    .terms p { margin: 4px 0 0; }
+    .pay-box { border: 1.5px dashed var(--line); border-radius: 12px; padding: 12px 14px; margin-top: 12px; font-size: 14px; color: var(--muted); }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -125,6 +129,8 @@
     <div class="footer">Online bookings by NexGain</div>
   </main>
 
+  <!-- All payment code on this page: payment.js (server side: supabase/functions/_shared/paymentService.ts). -->
+  <script src="payment.js"></script>
   <script>
     'use strict';
     var API = 'https://pwxvaygxpxoaemjpricy.supabase.co/functions/v1/booking-page';
@@ -165,7 +171,7 @@
     }
     function handle(res) {
       return res.json().catch(function () { return {}; }).then(function (data) {
-        if (!res.ok) { var e = new Error(data.message || 'Something went wrong. Please try again.'); e.code = data.error; throw e; }
+        if (!res.ok) { var e = new Error(data.message || 'Something went wrong. Please try again.'); e.code = data.error; e.data = data; throw e; }
         return data;
       });
     }
@@ -327,6 +333,42 @@
       var lo = Math.min.apply(null, list), hi = Math.max.apply(null, list);
       return lo === hi ? money(lo) : money(lo) + '–' + money(hi);
     }
+    /** The deposit for a price (same rules as the server): none, fixed (never more than the price) or a percentage. */
+    function depositFor(price) {
+      var d = page && page.deposit;
+      if (!d || d.type === 'none' || !Number(d.value)) return 0;
+      if (d.type === 'fixed') return price === null || price === undefined ? Number(d.value) : Math.min(Number(d.value), Number(price));
+      if (d.type === 'percent') return Math.round(Number(price || 0) * Number(d.value)) / 100;
+      if (d.type === 'full') return Number(price || 0);
+      return 0;
+    }
+    /** "$10", or "$10–$13.75" for "Anyone available" with different prices. */
+    function depositText(service, staffId) {
+      if (staffId) return depositFor(priceOf(service, staffId)) ? money(depositFor(priceOf(service, staffId))) : '';
+      var list = staffFor(service).map(function (x) { return depositFor(priceOf(service, x.id)); });
+      var lo = Math.min.apply(null, list), hi = Math.max.apply(null, list);
+      if (!hi) return '';
+      return lo === hi ? money(lo) : money(lo) + '–' + money(hi);
+    }
+    /** "a $20 cancellation fee" / "a cancellation fee of 50% of the price". */
+    function feeText(f) {
+      return f.type === 'percent' ? 'a cancellation fee of ' + Number(f.value) + '% of the price' : 'a ' + money(Number(f.value)) + ' cancellation fee';
+    }
+    /** The deposit and cancellation terms, shown before the customer confirms. */
+    function termsBox(service, staffId, cancelNoticeHours, policyText, fee) {
+      var lines = [];
+      var dep = service ? depositText(service, staffId) : '';
+      if (dep) lines.push('A deposit of ' + dep + ' is paid now to secure your booking. It comes off the price on the day.');
+      if (fee && fee.enabled && Number(fee.value) > 0) {
+        lines.push('Cancelling less than ' + fee.hours + ' hours before your appointment: ' + feeText(fee) + (dep ? ', taken from your deposit. Cancel earlier and your deposit is refunded in full.' : '.'));
+        lines.push('You can cancel online up to the start of your appointment.');
+      } else if (cancelNoticeHours) {
+        lines.push('You can change or cancel online up to ' + cancelNoticeHours + ' hours before' + (dep ? ', and your deposit is refunded.' : '.'));
+      }
+      if (policyText) lines.push(policyText);
+      if (!lines.length) return null;
+      return el('div', { class: 'terms' }, [el('strong', { text: dep ? 'Deposit & cancellation policy' : 'Cancellation policy' })].concat(lines.map(function (l) { return el('p', { text: l }); })));
+    }
     function staffName(id) {
       var s = page.staff.filter(function (x) { return x.id === id; })[0];
       return s ? s.name : '';
@@ -420,7 +462,10 @@
       }
       var notes = field('notes', 'Anything we should know? (optional)', 'textarea', { maxlength: 1000 });
       notes[1].value = details.notes;
-      var button = el('button', { class: 'primary', type: 'submit', text: 'Confirm booking' });
+      var deposit = depositText(pickedService, pickedStaff);
+      var payArea = el('div');
+      if (deposit) window.NexGainPayment.renderCardForm(payArea, deposit);
+      var button = el('button', { class: 'primary', type: 'submit', text: deposit ? 'Pay ' + deposit + ' deposit & book' : 'Confirm booking' });
       var form = el('form', { novalidate: true, onsubmit: function (e) { e.preventDefault(); confirmBooking(button); } }, [
         summary([
           ['Service', pickedService.name],
@@ -437,8 +482,8 @@
         notes,
         [
           errorText ? el('div', { class: 'error', role: 'alert', text: errorText }) : null,
-          page.cancellationPolicy ? el('p', { class: 'policy', text: 'Cancellation policy: ' + page.cancellationPolicy }) : null,
-          page.cancelNoticeHours ? el('p', { class: 'policy', text: 'You can change or cancel online up to ' + page.cancelNoticeHours + ' hours before.' }) : null,
+          termsBox(pickedService, pickedStaff, page.cancelNoticeHours, page.cancellationPolicy, page.cancellationFee),
+          deposit ? payArea : null,
           button,
         ]
       ));
@@ -453,9 +498,14 @@
       if (details.phone.replace(/[^0-9]/g, '').length < 6) return enterDetails('Please enter your mobile number.');
       if (!/^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]+$/.test(details.email)) return enterDetails('Please enter a valid email address.');
       button.disabled = true;
-      button.textContent = 'Booking…';
-      post({ action: 'book', b: slug, service: pickedService.id, staff: pickedStaff || '', start: pickedSlot.start,
-        name: details.name, phone: details.phone, email: details.email, notes: details.notes })
+      var hasDeposit = !!depositText(pickedService, pickedStaff);
+      button.textContent = hasDeposit ? 'Paying…' : 'Booking…';
+      (hasDeposit ? window.NexGainPayment.confirm() : Promise.resolve({ ok: true, token: null }))
+        .then(function (paid) {
+          if (!paid.ok) { var e = new Error(paid.message || 'The payment didn’t go through.'); e.code = 'payment'; throw e; }
+          return post({ action: 'book', b: slug, service: pickedService.id, staff: pickedStaff || '', start: pickedSlot.start,
+            name: details.name, phone: details.phone, email: details.email, notes: details.notes, paymentToken: paid.token });
+        })
         .then(function (r) { done(r.booking, r.emailed, 'booked'); })
         .catch(function (e) {
           if (e.code === 'taken') { chooseTime(skipsStaff()); setTimeout(function () { alertBox(e.message); }, 0); }
@@ -476,6 +526,8 @@
         ['Date', dateOf(b.start, true)],
         ['Time', timeOf(b.start) + ' (' + minutes(b.duration) + ')'],
         ['Price', b.status === 'cancelled' ? '' : money(b.price)],
+        ['Deposit', Number(b.depositAmount) > 0 ? money(b.depositAmount) + (b.paymentStatus === 'paid' ? ' paid' : b.paymentStatus === 'refunded' ? (Number(b.cancellationFee) > 0 ? ' paid (rest refunded)' : ' refunded') : '') : ''],
+        ['Cancellation fee', Number(b.cancellationFee) > 0 ? money(b.cancellationFee) : ''],
         ['Name', b.customerName],
       ]);
     }
@@ -509,12 +561,14 @@
       else if (b.status !== 'confirmed') nodes.push(el('div', { class: 'result note' }, [el('span', { class: 'icon', text: 'i' }), el('span', { text: 'This appointment has already happened.' })]));
       nodes.push(bookingSummary(b));
       if (errorText) nodes.push(el('div', { class: 'error', role: 'alert', text: errorText }));
-      if (b.status === 'confirmed' && b.canChange) {
-        nodes.push(
-          el('button', { class: 'primary', type: 'button', text: 'Change time', onclick: function () { reschedule(b); } }),
-          el('button', { class: 'danger', type: 'button', text: 'Cancel booking', onclick: function () { askCancel(b); } }),
-        );
-        if (b.cancelNoticeHours) nodes.push(el('p', { class: 'policy', text: 'You can change or cancel online up to ' + b.cancelNoticeHours + ' hours before your appointment.' }));
+      var canCancel = b.canCancel === undefined ? b.canChange : b.canCancel;
+      if (b.status === 'confirmed' && (b.canChange || canCancel)) {
+        if (b.canChange) nodes.push(el('button', { class: 'primary', type: 'button', text: 'Change time', onclick: function () { reschedule(b); } }));
+        if (canCancel) nodes.push(el('button', { class: 'danger', type: 'button', text: 'Cancel booking', onclick: function () { askCancel(b); } }));
+        if (b.canChange && b.cancelNoticeHours) nodes.push(el('p', { class: 'policy', text: 'You can change the time online up to ' + b.cancelNoticeHours + ' hours before your appointment.' }));
+        if (b.feePolicy && b.feePolicy.enabled && Number(b.feePolicy.value) > 0) {
+          nodes.push(el('p', { class: 'policy', text: 'Cancelling less than ' + b.feePolicy.hours + ' hours before has ' + feeText(b.feePolicy) + (Number(b.depositAmount) > 0 ? ', taken from your deposit.' : '.') }));
+        }
       } else if (b.status === 'confirmed') {
         nodes.push(el('div', { class: 'result note', style: 'margin-top:14px' }, [el('span', { class: 'icon', text: 'i' }),
           el('span', { text: 'It’s too late to change or cancel online (' + b.cancelNoticeHours + ' hours’ notice is needed). Please contact the business.' })]));
@@ -534,6 +588,32 @@
       yes.addEventListener('click', function () {
         yes.disabled = true;
         post({ action: 'cancel', m: b.token })
+          .then(function (r) { backdrop.remove(); done(r.booking, r.emailed, 'cancelled'); })
+          .catch(function (e) {
+            backdrop.remove();
+            if (e.code === 'fee') askCancelWithFee(b, Number(e.data.fee));
+            else manage(b, e.message);
+          });
+      });
+      document.body.appendChild(backdrop);
+    }
+
+    /** Inside the fee window: show the fee (and what's refunded) before cancelling. */
+    function askCancelWithFee(b, fee) {
+      var deposit = b.paymentStatus === 'paid' ? Number(b.depositAmount) : 0;
+      var refund = Math.max(deposit - fee, 0);
+      var backdrop = el('div', { class: 'backdrop', role: 'dialog', 'aria-modal': 'true' });
+      var yes = el('button', { class: 'solid-danger', type: 'button', text: 'Cancel and pay ' + money(fee) });
+      backdrop.appendChild(el('div', { class: 'dialog' }, [
+        el('p', { text: 'Cancelling now has a ' + money(fee) + ' cancellation fee.' }),
+        el('div', { class: 'muted', style: 'margin:-8px 0 18px', text: deposit
+          ? (refund > 0 ? 'It comes out of your ' + money(deposit) + ' deposit, and ' + money(refund) + ' is refunded.' : 'It comes out of your ' + money(deposit) + ' deposit.' + (fee > deposit ? ' The other ' + money(fee - deposit) + ' is charged to your card.' : ''))
+          : 'It’s charged to your card.' }),
+        el('div', { class: 'row' }, [el('button', { class: 'plain', type: 'button', text: 'Keep it', onclick: function () { backdrop.remove(); } }), yes]),
+      ]));
+      yes.addEventListener('click', function () {
+        yes.disabled = true;
+        post({ action: 'cancel', m: b.token, acceptFee: true })
           .then(function (r) { backdrop.remove(); done(r.booking, r.emailed, 'cancelled'); })
           .catch(function (e) { backdrop.remove(); manage(b, e.message); });
       });

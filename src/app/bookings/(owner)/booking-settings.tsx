@@ -244,6 +244,18 @@ export default function BookingSettingsScreen() {
         <Button label="Add closed days" variant="secondary" icon={OwnerIcons.plus} onPress={addClosure} />
       </Card>
 
+      <Card title="Deposits & Cancellation Fees" icon={OwnerIcons.wallet}>
+        <ListRow
+          title={
+            settings.depositType === 'none' && !settings.cancellationFeeEnabled
+              ? 'No deposit or cancellation fee'
+              : [settings.depositType === 'none' ? null : 'Deposit on', settings.cancellationFeeEnabled ? 'Cancellation fee on' : null].filter(Boolean).join(' · ')
+          }
+          subtitle="Take a deposit when customers book, and charge a fee for late cancellations"
+          onPress={() => router.navigate('/bookings/deposits')}
+        />
+      </Card>
+
       <Card title="Reminders" icon={OwnerIcons.bell}>
         <ListRow
           title={settings.remindersEnabled ? 'Reminder emails are on' : 'Reminder emails are off'}

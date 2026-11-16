@@ -13,7 +13,18 @@ import {
   zonedToIso,
 } from '@/systems/bookings/data/booking-time';
 import { parsePriceText } from '@/systems/bookings/components/owner/staff-prices-card';
-import { bookingLink, cleanSlug, currencyCode, formatPrice, priceFor, priceKey, staffForService, type BookingStaff } from '@/systems/bookings/data/bookings';
+import {
+  bookingLink,
+  cancellationFeeFor,
+  cleanSlug,
+  currencyCode,
+  depositFor,
+  formatPrice,
+  priceFor,
+  priceKey,
+  staffForService,
+  type BookingStaff,
+} from '@/systems/bookings/data/bookings';
 
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
 
@@ -100,5 +111,22 @@ describe('staff prices', () => {
     expect(parsePriceText('')).toBeNull();
     expect(parsePriceText('fifty')).toBeUndefined();
     expect(parsePriceText('55.555')).toBeUndefined();
+  });
+});
+
+describe('deposits and cancellation fees', () => {
+  const off = { depositType: 'none' as const, depositValue: 0 };
+  it('works out the deposit like the database does', () => {
+    expect(depositFor(40, off)).toBe(0);
+    expect(depositFor(40, { depositType: 'fixed', depositValue: 15 })).toBe(15);
+    expect(depositFor(10, { depositType: 'fixed', depositValue: 15 })).toBe(10); // never more than the price
+    expect(depositFor(60, { depositType: 'percent', depositValue: 25 })).toBe(15);
+    expect(depositFor(45, { depositType: 'percent', depositValue: 12.5 })).toBe(5.63);
+  });
+  it('works out the cancellation fee', () => {
+    const fee = { cancellationFeeEnabled: true, cancellationFeeType: 'fixed' as const, cancellationFeeValue: 20 };
+    expect(cancellationFeeFor(60, fee)).toBe(20);
+    expect(cancellationFeeFor(60, { ...fee, cancellationFeeType: 'percent', cancellationFeeValue: 50 })).toBe(30);
+    expect(cancellationFeeFor(60, { ...fee, cancellationFeeEnabled: false })).toBe(0);
   });
 });

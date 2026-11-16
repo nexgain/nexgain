@@ -50,6 +50,12 @@ export default function OwnerMoreScreen() {
             showDivider
           />
           <ActionRow
+            icon={OwnerIcons.wallet}
+            label="Deposits & Cancellation Fees"
+            onPress={() => router.navigate('/bookings/deposits')}
+            showDivider
+          />
+          <ActionRow
             icon={{ ios: 'briefcase.fill', android: 'work', web: 'work' }}
             label="Appointments"
             onPress={() => router.navigate('/bookings/calendar')}

@@ -25,6 +25,7 @@
 // links in emails (default: the GitHub Pages address).
 import { bookingPageUrl, EMAIL, money, ownerMailAccount, sendBookingEmail, whenText } from '../_shared/booking-mail.ts';
 import { adminDb } from '../_shared/connections.ts';
+import { chargeCancellationFee, refundDeposit, takeDeposit } from '../_shared/paymentService.ts';
 
 type Db = ReturnType<typeof adminDb>;
 
@@ -60,6 +61,8 @@ const MESSAGES: Record<string, string> = {
   too_many: 'You already have several upcoming bookings here. Please contact the business to book more.',
   taken: 'Sorry, someone just booked that time. Please choose another time.',
   too_late: 'It’s too late to change this booking online. Please contact the business.',
+  fee: 'Cancelling now has a cancellation fee. Please confirm to cancel.',
+  payment: 'Sorry, the deposit payment didn’t go through, so the booking wasn’t made. Please try again.',
 };
 
 type View = {
@@ -73,6 +76,9 @@ type View = {
   customerName: string;
   customerEmail: string;
   cancellationPolicy: string;
+  depositAmount?: number | string;
+  paymentStatus?: string;
+  cancellationFee?: number | string;
   business: { name: string; timezone: string; phone: string; email: string; currency: string };
 };
 
@@ -127,6 +133,64 @@ async function emailCustomer(db: Db, token: string, kind: 'booked' | 'moved' | '
   }
 }
 
+// ---------- Payments (all through _shared/paymentService.ts) ----------
+
+async function bookingRow(db: Db, token: string) {
+  const { data } = await db.from('bookings').select('id, payment_ref, payment_status, deposit_amount').eq('manage_token', token).maybeSingle();
+  return data as { id: string; payment_ref: string | null; payment_status: string; deposit_amount: number | string } | null;
+}
+
+async function record(db: Db, bookingId: string, paymentStatus: string | null, reference: string | null, feeStatus: string | null) {
+  await rpc(db, 'booking_record_payment', { p_booking: bookingId, p_payment_status: paymentStatus, p_payment_ref: reference ?? '', p_fee_status: feeStatus });
+}
+
+/** Takes the deposit just after booking. A failed payment cancels the booking (frees the time). */
+async function settleDeposit(db: Db, view: View, pageToken: string | null) {
+  const row = await bookingRow(db, view.token);
+  if (!row) return false;
+  const result = await takeDeposit({
+    amount: Number(row.deposit_amount),
+    currency: view.business.currency,
+    description: `Deposit: ${view.service} with ${view.staff}, ${view.business.name}`,
+    customerEmail: view.customerEmail,
+    bookingId: row.id,
+    pagePaymentToken: pageToken,
+  });
+  if (!result.ok) console.error('booking-page deposit:', result.reason);
+  await record(db, row.id, result.ok ? 'paid' : 'failed', result.ok ? result.reference : null, null);
+  return result.ok;
+}
+
+/** After a customer cancels: the fee comes out of the deposit, the rest is refunded. */
+async function settleCancellation(db: Db, view: View, fee: number) {
+  const row = await bookingRow(db, view.token);
+  if (!row) return;
+  const deposit = row.payment_status === 'paid' ? Number(row.deposit_amount) : 0;
+  const refund = Math.round(Math.max(deposit - fee, 0) * 100) / 100;
+  const stillOwed = Math.round(Math.max(fee - deposit, 0) * 100) / 100;
+  let paymentStatus: string | null = null;
+  let feeStatus: string | null = fee > 0 ? 'charged' : null;
+  if (refund > 0 && row.payment_ref) {
+    const r = await refundDeposit({ reference: row.payment_ref, amount: refund, currency: view.business.currency, bookingId: row.id });
+    if (r.ok) paymentStatus = 'refunded';
+    else console.error('booking-page refund:', r.reason);
+  }
+  if (stillOwed > 0) {
+    const c = await chargeCancellationFee({
+      amount: stillOwed,
+      currency: view.business.currency,
+      customerEmail: view.customerEmail,
+      bookingId: row.id,
+      depositReference: row.payment_ref,
+    });
+    if (!c.ok) {
+      console.error('booking-page fee:', c.reason);
+      feeStatus = 'failed';
+    }
+  }
+  if (paymentStatus || feeStatus) await record(db, row.id, paymentStatus, null, feeStatus);
+}
+
 // ---------- Requests ----------
 
 async function rpc(db: Db, name: string, args: Record<string, unknown>) {
@@ -172,7 +236,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const action = typeof body.action === 'string' ? body.action : '';
 
-    let result: { booking?: View; error?: string };
+    let result: { booking?: View; error?: string; fee?: number | string };
     let kind: 'booked' | 'moved' | 'cancelled';
     if (action === 'book') {
       const slug = slugOf(body.b);
@@ -194,7 +258,7 @@ Deno.serve(async (req) => {
       const token = tokenOf(body.m);
       if (!token) return reply(404, { error: 'not_found', message: MESSAGES.not_found });
       if (action === 'cancel') {
-        result = await rpc(db, 'booking_cancel', { p_token: token });
+        result = await rpc(db, 'booking_cancel', { p_token: token, p_accept_fee: body.acceptFee === true });
         kind = 'cancelled';
       } else {
         const start = startOf(body.start);
@@ -208,10 +272,25 @@ Deno.serve(async (req) => {
 
     if (!result?.booking) {
       const error = result?.error ?? 'not_found';
-      return reply(error === 'not_found' ? 404 : 409, { error, message: MESSAGES[error] ?? MESSAGES.not_found });
+      return reply(error === 'not_found' ? 404 : 409, {
+        error,
+        message: MESSAGES[error] ?? MESSAGES.not_found,
+        ...(error === 'fee' ? { fee: Number(result?.fee ?? 0) } : {}),
+      });
     }
-    const emailed = await emailCustomer(db, result.booking.token, kind, result.booking);
-    return reply(200, { booking: result.booking, emailed });
+    let booking = result.booking;
+    // Money: take the deposit after booking; refund it / charge the fee after cancelling.
+    if (kind === 'booked' && Number(booking.depositAmount ?? 0) > 0) {
+      const paid = await settleDeposit(db, booking, typeof body.paymentToken === 'string' ? body.paymentToken : null);
+      if (!paid) return reply(402, { error: 'payment', message: MESSAGES.payment });
+      booking = (await rpc(db, 'booking_by_token', { p_token: booking.token })) ?? booking;
+    }
+    if (kind === 'cancelled') {
+      await settleCancellation(db, booking, Number(result.fee ?? 0));
+      booking = (await rpc(db, 'booking_by_token', { p_token: booking.token })) ?? booking;
+    }
+    const emailed = await emailCustomer(db, booking.token, kind, booking);
+    return reply(200, { booking, emailed });
   } catch {
     return reply(500, { error: 'server', message: 'Something went wrong. Please try again.' });
   }

@@ -20,6 +20,7 @@ import {
 import {
   addManualBooking,
   formatPrice,
+  depositText,
   moveBooking,
   reminderText,
   setBookingStatus,
@@ -244,6 +245,13 @@ function BookingDetails({ id }: { id: string }) {
           <Detail label="Cancelled by" value={booking.cancelledBy === 'customer' ? 'The customer (online)' : 'You'} />
         )}
         {booking.notes ? <Detail label="Notes" value={booking.notes} /> : null}
+        {depositText(booking) ? <Detail label="Deposit" value={depositText(booking)!} /> : null}
+        {booking.cancellationFee > 0 ? (
+          <Detail
+            label="Cancellation fee"
+            value={`${formatPrice(booking.cancellationFee)} ${booking.feeStatus === 'charged' ? 'charged' : booking.feeStatus === 'failed' ? 'couldn’t be charged' : 'to collect'}`}
+          />
+        ) : null}
         {reminderText(booking) ? <Detail label="Reminder" value={reminderText(booking)!} /> : null}
       </Card>
 
@@ -318,7 +326,7 @@ function BookingDetails({ id }: { id: string }) {
 
       <ConfirmDialog
         visible={confirmCancel}
-        message={`Cancel ${booking.customerName}’s booking? The time becomes free for others. The customer isn’t told automatically, so let them know.`}
+        message={`Cancel ${booking.customerName}’s booking? The time becomes free for others. The customer isn’t told automatically, so let them know.${booking.paymentStatus === 'paid' ? ` Refund their ${formatPrice(booking.depositAmount)} deposit from your payment account (test mode: nothing to refund).` : ''}`}
         confirmLabel="Cancel booking"
         onConfirm={() => {
           setConfirmCancel(false);
