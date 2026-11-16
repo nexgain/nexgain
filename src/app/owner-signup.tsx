@@ -229,7 +229,7 @@ export default function OwnerSignupScreen() {
       {step === 3 && <StepServices {...stepProps} />}
       {step === 4 && <StepSubscription {...stepProps} />}
       {step === 5 && <StepFinancial {...stepProps} />}
-      {step === 6 && <StepConnect {...stepProps} ensureAccount={async () => accountCreated || createAccount()} />}
+      {step === 6 && <StepConnect {...stepProps} accountCreated={accountCreated} ensureAccount={async () => accountCreated || createAccount()} />}
       {step === 6 && busy && (
         <View style={styles.busy}>
           <ActivityIndicator color={C.primary} />

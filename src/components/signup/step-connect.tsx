@@ -14,9 +14,12 @@ export function StepConnect({
   update,
   onNext,
   ensureAccount,
+  accountCreated,
 }: StepProps & {
   /** Creates the account and business (if not done yet) so an email account can be connected to it. */
   ensureAccount: () => Promise<boolean>;
+  /** The new business exists (until then nothing shows as connected: it starts empty). */
+  accountCreated: boolean;
 }) {
   const [tried, setTried] = useState(false);
   const bsbDigits = data.bankBsb.replace(/\D/g, '');
@@ -61,6 +64,7 @@ export function StepConnect({
         optionalNote="Connecting your bank is optional. You can do it later in More › Integrations."
         apps={data.apps}
         onToggleApp={(app) => update({ apps: toggleChosen(data.apps, app, (a) => a) })}
+        hideExisting={!accountCreated}
       />
 
       <Text style={styles.sectionTitle}>

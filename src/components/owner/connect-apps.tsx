@@ -132,6 +132,7 @@ export function ConnectApps({
   optionalNote,
   apps,
   onToggleApp,
+  hideExisting = false,
 }: {
   theme: ConnectTheme;
   emailApp: EmailApp;
@@ -145,11 +146,17 @@ export function ConnectApps({
   apps: ChosenApp[];
   /** Adds the app if it isn't in `apps`, otherwise removes it. */
   onToggleApp: (app: ChosenApp) => void;
+  /**
+   * Sign-up, before the new business exists: anything connected on this device
+   * (email or bank) belongs to whoever logged in before, so show nothing connected.
+   */
+  hideExisting?: boolean;
 }) {
   const p = PALETTES[theme];
   const [search, setSearch] = useState<{ category: AppCategory | null } | null>(null);
   const selectedEmail = shownEmailApp(emailApp);
-  const accounts = useConnectedAccounts();
+  const connectedAccounts = useConnectedAccounts();
+  const accounts = hideExisting ? [] : connectedAccounts;
   const [busyProvider, setBusyProvider] = useState<Provider | null>(null);
   const [message, setMessage] = useState<{ tone: 'ok' | 'error' | 'info'; text: string } | null>(null);
   // Business apps (Square...): their own message, and the open options sheet.
@@ -398,7 +405,7 @@ export function ConnectApps({
 
       {optionalNote && <Text style={[styles.note, { color: p.sub }]}>{optionalNote}</Text>}
 
-      <BankSection p={p} beforeConnect={beforeConnect} />
+      <BankSection p={p} beforeConnect={beforeConnect} hideExisting={hideExisting} />
 
       {Features.showExtraIntegrations && (
         <View style={styles.section}>
@@ -476,9 +483,12 @@ const CHEVRON_ICON = { ios: 'chevron.right', android: 'chevron_right', web: 'che
 type Message = { tone: 'ok' | 'error' | 'info'; text: string };
 
 /** Bank account: connect the business bank (view only) so its transactions come into NexGain. */
-function BankSection({ p, beforeConnect }: { p: Palette; beforeConnect?: () => Promise<boolean> }) {
-  const connection = useBankConnection();
-  const accounts = useBankAccounts();
+function BankSection({ p, beforeConnect, hideExisting = false }: { p: Palette; beforeConnect?: () => Promise<boolean>; hideExisting?: boolean }) {
+  const savedConnection = useBankConnection();
+  const savedAccounts = useBankAccounts();
+  // Sign-up: a bank from the previous login on this device isn't theirs.
+  const connection = hideExisting ? null : savedConnection;
+  const accounts = hideExisting ? [] : savedAccounts;
   const syncing = useBankSyncing();
   const [busy, setBusy] = useState<'connect' | 'disconnect' | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
