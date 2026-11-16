@@ -1,0 +1,533 @@
+<!doctype html>
+<!--
+  NexGain Bookings: a business's public booking page. Hosted free on GitHub Pages
+  (this repo's docs/ folder), so customers book in any browser without the app:
+    Book:              https://nexgain.github.io/nexgain/book/?b=<business link name>
+    Change or cancel:  https://nexgain.github.io/nexgain/book/?m=<secret code from the email>
+
+  This page holds no business data and no keys. It asks the Supabase Edge
+  Function "booking-page" for the business's services, staff and free times,
+  and sends the booking to it. Every check (is the time still free, can it
+  still be cancelled) happens on the server and in the database.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light">
+  <title>Book an appointment</title>
+  <style>
+    :root {
+      --page: #f3f4f6;
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --brand: #2563eb;
+      --brand-soft: #eff6ff;
+      --green: #16a34a;
+      --green-soft: #ecfdf3;
+      --red: #dc2626;
+      --red-soft: #fef2f2;
+      --amber: #b45309;
+      --amber-soft: #fffbeb;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--text);
+      font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    main { max-width: 640px; margin: 0 auto; padding: 16px 16px calc(32px + env(safe-area-inset-bottom)); }
+    .card { background: var(--card); border-radius: 16px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .card + .card { margin-top: 12px; }
+    .biz { display: flex; align-items: center; gap: 14px; }
+    .biz img { width: 56px; height: 56px; object-fit: contain; border-radius: 10px; flex: none; background: #fff; }
+    .biz-name { font-size: 19px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+    .muted { color: var(--muted); font-size: 14px; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    h2 { font-size: 15px; margin: 0 0 8px; }
+    .steps { display: flex; gap: 6px; margin-bottom: 14px; }
+    .steps span { flex: 1; height: 4px; border-radius: 4px; background: var(--line); }
+    .steps span.on { background: var(--brand); }
+    .back { background: none; border: 0; color: var(--brand); font-weight: 600; font-size: 15px; padding: 6px 0; min-height: 0; margin-bottom: 8px; }
+    .list { display: grid; gap: 10px; margin-top: 12px; }
+    .option {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; text-align: left;
+      background: #fff; border: 1.5px solid var(--line); border-radius: 12px; padding: 14px 16px; font-size: 16px; font-weight: 400;
+      min-height: 56px;
+    }
+    .option:hover { border-color: var(--brand); }
+    .option strong { display: block; font-size: 16px; overflow-wrap: anywhere; }
+    .option .price { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .days { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 10px; margin: 12px -2px 0; scroll-snap-type: x proximity; }
+    .day {
+      flex: none; width: 64px; padding: 10px 4px; border-radius: 12px; border: 1.5px solid var(--line); background: #fff;
+      text-align: center; font-size: 13px; font-weight: 600; min-height: 0; scroll-snap-align: start;
+    }
+    .day b { display: block; font-size: 20px; }
+    .day.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); }
+    .day:disabled { opacity: .35; }
+    .times { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; margin-top: 12px; }
+    .time { background: #fff; border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 4px; font-size: 15px; min-height: 44px; }
+    .time:hover { border-color: var(--brand); color: var(--brand); }
+    label { display: block; font-weight: 600; font-size: 14px; margin: 14px 0 6px; }
+    input, textarea {
+      width: 100%; font: inherit; font-size: 16px; padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; color: var(--text);
+    }
+    input:focus, textarea:focus { outline: none; border-color: var(--brand); }
+    textarea { min-height: 80px; resize: vertical; }
+    .summary { background: var(--page); border-radius: 12px; padding: 14px 16px; margin-top: 14px; }
+    .summary div { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+    .summary div span:first-child { color: var(--muted); }
+    .summary div span:last-child { font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+    .policy { font-size: 14px; color: var(--muted); margin-top: 12px; white-space: pre-line; }
+    button {
+      font: inherit; font-weight: 700; font-size: 17px; border-radius: 12px; padding: 15px 16px;
+      min-height: 52px; cursor: pointer; border: 2px solid transparent;
+    }
+    button:disabled { opacity: .6; cursor: default; }
+    .primary { background: var(--brand); color: #fff; width: 100%; margin-top: 18px; }
+    .secondary { background: #fff; color: var(--brand); border-color: var(--brand); width: 100%; margin-top: 10px; }
+    .danger { background: #fff; color: var(--red); border-color: var(--red); width: 100%; margin-top: 10px; }
+    .result { display: flex; gap: 12px; align-items: flex-start; border-radius: 12px; padding: 16px; font-weight: 600; }
+    .result.good { background: var(--green-soft); color: #14532d; }
+    .result.bad { background: var(--red-soft); color: #7f1d1d; }
+    .result.note { background: var(--amber-soft); color: #78350f; }
+    .result .icon { font-size: 20px; line-height: 1.2; }
+    .error { background: var(--red-soft); color: #7f1d1d; border-radius: 12px; padding: 12px 14px; margin-top: 14px; font-size: 15px; }
+    .contact { text-align: center; margin-top: 16px; font-size: 14px; }
+    .contact a { color: var(--brand); }
+    .center { text-align: center; padding: 48px 20px; }
+    .spinner { width: 32px; height: 32px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--brand); margin: 0 auto 12px; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .backdrop { position: fixed; inset: 0; background: rgba(17,24,39,.5); display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .dialog { background: #fff; border-radius: 16px; padding: 22px; width: 100%; max-width: 380px; }
+    .dialog p { margin: 0 0 18px; font-size: 18px; font-weight: 700; }
+    .dialog .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .dialog button { width: 100%; margin: 0; }
+    .plain { background: #f3f4f6; color: var(--text); }
+    .solid-danger { background: var(--red); color: #fff; }
+    .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 20px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main>
+    <div id="biz" class="card" hidden></div>
+    <div id="app" class="card">
+      <div class="center"><div class="spinner" aria-hidden="true"></div><div class="muted">Loading…</div></div>
+    </div>
+    <div class="footer">Online bookings by NexGain</div>
+  </main>
+
+  <script>
+    'use strict';
+    var API = 'https://pwxvaygxpxoaemjpricy.supabase.co/functions/v1/booking-page';
+    var params = new URLSearchParams(location.search);
+    var slug = (params.get('b') || '').trim().toLowerCase();
+    var token = (params.get('m') || '').trim();
+
+    // ---------- Small helpers (text is always set with textContent, never as HTML) ----------
+    function el(tag, attrs, children) {
+      var node = document.createElement(tag);
+      for (var k in attrs || {}) {
+        if (k === 'text') node.textContent = attrs[k];
+        else if (k === 'class') node.className = attrs[k];
+        else if (k.slice(0, 2) === 'on') node.addEventListener(k.slice(2), attrs[k]);
+        else if (attrs[k] !== false && attrs[k] != null) node.setAttribute(k, attrs[k] === true ? '' : attrs[k]);
+      }
+      (children || []).forEach(function (c) { if (c) node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+      return node;
+    }
+    function show(nodes) {
+      var app = document.getElementById('app');
+      app.replaceChildren.apply(app, nodes.filter(Boolean));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    function loading(text) {
+      show([el('div', { class: 'center' }, [el('div', { class: 'spinner', 'aria-hidden': 'true' }), el('div', { class: 'muted', text: text || 'Loading…' })])]);
+    }
+    function failed(message) {
+      show([el('div', { class: 'result bad', role: 'alert' }, [el('span', { class: 'icon', text: '!' }), el('span', { text: message })]), contact()]);
+    }
+    function get(query) {
+      return fetch(API + '?' + new URLSearchParams(query).toString(), { cache: 'no-store' }).then(handle);
+    }
+    function post(body) {
+      return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(handle);
+    }
+    function handle(res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok) { var e = new Error(data.message || 'Something went wrong. Please try again.'); e.code = data.error; throw e; }
+        return data;
+      });
+    }
+
+    // ---------- Times: always shown in the business's time zone ----------
+    var TZ = 'UTC';
+    var CURRENCY = 'AUD';
+    function timeOf(iso) {
+      return new Date(iso).toLocaleTimeString([], { timeZone: TZ, hour: 'numeric', minute: '2-digit' });
+    }
+    function dayLabel(key, long) {
+      var p = key.split('-').map(Number);
+      return new Date(Date.UTC(p[0], p[1] - 1, p[2])).toLocaleDateString([], long
+        ? { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }
+        : { timeZone: 'UTC', weekday: 'short' });
+    }
+    function dateOf(iso, long) {
+      return new Date(iso).toLocaleDateString([], long
+        ? { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }
+        : { timeZone: TZ, day: 'numeric', month: 'short' });
+    }
+    function addDays(key, n) {
+      var p = key.split('-').map(Number);
+      return new Date(Date.UTC(p[0], p[1] - 1, p[2] + n)).toISOString().slice(0, 10);
+    }
+    function money(n) {
+      if (n === null || n === undefined) return '';
+      try { return new Intl.NumberFormat([], { style: 'currency', currency: CURRENCY }).format(Number(n)); }
+      catch (e) { return Number(n).toFixed(2); }
+    }
+    function minutes(n) {
+      return n < 60 ? n + ' min' : Math.floor(n / 60) + ' hr' + (n % 60 ? ' ' + (n % 60) + ' min' : '');
+    }
+    function zoneNote() {
+      var mine = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (mine === TZ) return null;
+      var city = TZ.split('/').pop().replace(/_/g, ' ');
+      return el('p', { class: 'muted', text: 'Times are shown in ' + city + ' time, where the business is.' });
+    }
+
+    // ---------- The business header and contact line ----------
+    var business = null;
+    function header(b) {
+      business = b;
+      TZ = b.timezone || 'UTC';
+      CURRENCY = b.currency || 'AUD';
+      document.title = 'Book with ' + b.name;
+      var box = document.getElementById('biz');
+      var logo = typeof b.logo === 'string' && /^data:image\/(png|jpe?g);base64,/.test(b.logo) ? el('img', { src: b.logo, alt: '' }) : null;
+      box.replaceChildren(el('div', { class: 'biz' }, [logo, el('div', {}, [el('div', { class: 'biz-name', text: b.name }), el('div', { class: 'muted', text: 'Book an appointment' })])]));
+      box.hidden = false;
+    }
+    function contact() {
+      if (!business) return null;
+      var bits = [];
+      if (business.phone) bits.push(el('a', { href: 'tel:' + business.phone.replace(/[^0-9+]/g, ''), text: business.phone }));
+      if (business.email) bits.push(el('a', { href: 'mailto:' + business.email, text: business.email }));
+      if (!bits.length) return null;
+      var out = [document.createTextNode('Questions? Contact ' + business.name + ': ')];
+      bits.forEach(function (b, i) { if (i) out.push(document.createTextNode(' · ')); out.push(b); });
+      return el('p', { class: 'contact' }, out);
+    }
+    function progress(step) {
+      return el('div', { class: 'steps', 'aria-hidden': 'true' }, [1, 2, 3, 4].map(function (n) { return el('span', { class: n <= step ? 'on' : '' }); }));
+    }
+    function backButton(onclick) { return el('button', { class: 'back', type: 'button', onclick: onclick, text: '‹ Back' }); }
+    function summary(rows) {
+      return el('div', { class: 'summary' }, rows.filter(function (r) { return r && r[1]; }).map(function (r) {
+        return el('div', {}, [el('span', { text: r[0] }), el('span', { text: r[1] })]);
+      }));
+    }
+
+    // ---------- A date strip and the free times on the chosen day ----------
+    // load(from, days) -> list of "YYYY-MM-DD" with free times; slotsFor(day) -> [{ start, staff }].
+    function datePicker(container, opts) {
+      var today = opts.today;
+      var last = addDays(today, opts.maxDaysAhead);
+      var from = today;
+      var open = {};
+      var chosen = null;
+      var strip = el('div', { class: 'days', role: 'listbox', 'aria-label': 'Choose a day' });
+      var times = el('div');
+      var more = el('button', { class: 'secondary', type: 'button', text: 'Later dates', onclick: function () { loadWeeks(); } });
+      container.append(strip, more, times);
+
+      function loadWeeks() {
+        if (from > last) return;
+        more.disabled = true;
+        var count = 14;
+        var start = from;
+        opts.load(start, count).then(function (days) {
+          (days || []).forEach(function (d) { open[d] = true; });
+          for (var i = 0; i < count; i++) {
+            var key = addDays(start, i);
+            if (key > last) break;
+            strip.appendChild(dayButton(key));
+          }
+          from = addDays(start, count);
+          more.hidden = from > last;
+          more.disabled = false;
+          if (!chosen) {
+            var first = Object.keys(open).sort()[0];
+            if (first) pick(first);
+            else if (from <= last) loadWeeks();
+            else times.replaceChildren(el('p', { class: 'muted', text: 'Sorry, there are no free times online right now.' }));
+          }
+        }).catch(function (e) { more.disabled = false; times.replaceChildren(el('div', { class: 'error', text: e.message })); });
+      }
+      function dayButton(key) {
+        var p = key.split('-').map(Number);
+        return el('button', {
+          class: 'day', type: 'button', 'data-day': key, disabled: !open[key], role: 'option',
+          'aria-label': dayLabel(key, true) + (open[key] ? '' : ', no free times'),
+          onclick: function () { pick(key); },
+        }, [dayLabel(key, false), el('b', { text: String(p[2]) }), new Date(Date.UTC(p[0], p[1] - 1, p[2])).toLocaleDateString([], { timeZone: 'UTC', month: 'short' })]);
+      }
+      function pick(key) {
+        chosen = key;
+        strip.querySelectorAll('.day').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-day') === key); b.setAttribute('aria-selected', b.getAttribute('data-day') === key); });
+        times.replaceChildren(el('div', { class: 'center' }, [el('div', { class: 'spinner', 'aria-hidden': 'true' })]));
+        opts.slotsFor(key).then(function (slots) {
+          if (chosen !== key) return;
+          if (!slots.length) { times.replaceChildren(el('p', { class: 'muted', text: 'No free times left on this day. Please choose another.' })); return; }
+          times.replaceChildren(
+            el('h2', { text: dayLabel(key, true), style: 'margin-top:12px' }),
+            el('div', { class: 'times' }, slots.map(function (s) {
+              return el('button', { class: 'time', type: 'button', text: timeOf(s.start), onclick: function () { opts.onPick(s); } });
+            })),
+          );
+        }).catch(function (e) { times.replaceChildren(el('div', { class: 'error', text: e.message })); });
+      }
+      loadWeeks();
+      return { refresh: function () { if (chosen) pick(chosen); } };
+    }
+
+    // ---------- Booking: service -> staff -> time -> details -> done ----------
+    var page = null;
+    var pickedService = null;
+    var pickedStaff = null; // null = anyone available
+    var pickedSlot = null;
+    var details = { name: '', phone: '', email: '', notes: '' };
+
+    function staffFor(service) {
+      return page.staff.filter(function (s) { return !service.staffIds.length || service.staffIds.indexOf(s.id) >= 0; });
+    }
+    function staffName(id) {
+      var s = page.staff.filter(function (x) { return x.id === id; })[0];
+      return s ? s.name : '';
+    }
+
+    function startBooking() {
+      loading();
+      get({ b: slug }).then(function (data) {
+        page = data;
+        header(data.business);
+        if (!data.accepting) { failed(data.business.name + ' isn’t taking online bookings right now.'); return; }
+        if (!data.services.length || !data.staff.length) { failed('There’s nothing to book online yet.'); return; }
+        chooseService();
+      }).catch(function (e) { failed(e.code === 'not_found' ? 'This booking page could not be found. Please check the link.' : e.message); });
+    }
+
+    function chooseService() {
+      show([
+        progress(1),
+        el('h1', { text: 'Choose a service' }),
+        el('div', { class: 'list' }, page.services.map(function (s) {
+          return el('button', { class: 'option', type: 'button', onclick: function () { pickedService = s; chooseStaff(); } }, [
+            el('span', {}, [el('strong', { text: s.name }), el('span', { class: 'muted', text: minutes(s.duration) + (s.description ? ' · ' + s.description : '') })]),
+            s.price !== null ? el('span', { class: 'price', text: money(s.price) }) : null,
+          ]);
+        })),
+        page.cancellationPolicy ? el('p', { class: 'policy', text: page.cancellationPolicy }) : null,
+        contact(),
+      ]);
+    }
+
+    function chooseStaff() {
+      var people = staffFor(pickedService);
+      if (people.length <= 1) { pickedStaff = people.length ? people[0].id : null; chooseTime(true); return; }
+      show([
+        backButton(chooseService),
+        progress(2),
+        el('h1', { text: 'Who would you like?' }),
+        el('div', { class: 'list' }, [
+          el('button', { class: 'option', type: 'button', onclick: function () { pickedStaff = null; chooseTime(false); } }, [
+            el('span', {}, [el('strong', { text: 'Anyone available' }), el('span', { class: 'muted', text: 'The most times to choose from' })]),
+          ]),
+        ].concat(people.map(function (p) {
+          return el('button', { class: 'option', type: 'button', onclick: function () { pickedStaff = p.id; chooseTime(false); } }, [el('strong', { text: p.name })]);
+        }))),
+      ]);
+    }
+
+    function chooseTime(skippedStaff) {
+      var box = el('div');
+      show([
+        backButton(skippedStaff ? chooseService : chooseStaff),
+        progress(3),
+        el('h1', { text: 'Choose a time' }),
+        el('p', { class: 'muted', text: pickedService.name + ' · ' + minutes(pickedService.duration) + (pickedStaff ? ' · with ' + staffName(pickedStaff) : '') }),
+        zoneNote(),
+        box,
+      ]);
+      var q = { b: slug, service: pickedService.id, staff: pickedStaff || '' };
+      datePicker(box, {
+        today: page.today,
+        maxDaysAhead: page.maxDaysAhead,
+        load: function (from, days) { return get(Object.assign({ from: from, days: days }, q)).then(function (r) { return r.days; }); },
+        slotsFor: function (day) { return get(Object.assign({ day: day }, q)).then(function (r) { return r.slots; }); },
+        onPick: function (slot) { pickedSlot = slot; enterDetails(); },
+      });
+    }
+
+    function enterDetails(errorText) {
+      var who = pickedStaff ? staffName(pickedStaff) : 'Anyone available';
+      function field(id, label, type, extra) {
+        return [
+          el('label', { for: id, text: label }),
+          el(type === 'textarea' ? 'textarea' : 'input', Object.assign({ id: id, type: type === 'textarea' ? null : type, value: details[id] || null,
+            oninput: function (e) { details[id] = e.target.value; } }, extra)),
+        ];
+      }
+      var notes = field('notes', 'Anything we should know? (optional)', 'textarea', { maxlength: 1000 });
+      notes[1].value = details.notes;
+      var button = el('button', { class: 'primary', type: 'submit', text: 'Confirm booking' });
+      var form = el('form', { novalidate: true, onsubmit: function (e) { e.preventDefault(); confirmBooking(button); } }, [
+        summary([
+          ['Service', pickedService.name],
+          ['With', who],
+          ['Date', dateOf(pickedSlot.start, true)],
+          ['Time', timeOf(pickedSlot.start) + ' (' + minutes(pickedService.duration) + ')'],
+          ['Price', money(pickedService.price)],
+        ]),
+      ].concat(
+        field('name', 'Your name', 'text', { autocomplete: 'name', maxlength: 100, required: true }),
+        field('phone', 'Mobile number', 'tel', { autocomplete: 'tel', maxlength: 30, required: true }),
+        field('email', 'Email', 'email', { autocomplete: 'email', maxlength: 200, required: true }),
+        notes,
+        [
+          errorText ? el('div', { class: 'error', role: 'alert', text: errorText }) : null,
+          page.cancellationPolicy ? el('p', { class: 'policy', text: 'Cancellation policy: ' + page.cancellationPolicy }) : null,
+          page.cancelNoticeHours ? el('p', { class: 'policy', text: 'You can change or cancel online up to ' + page.cancelNoticeHours + ' hours before.' }) : null,
+          button,
+        ]
+      ));
+      show([backButton(function () { chooseTime(staffFor(pickedService).length <= 1); }), progress(4), el('h1', { text: 'Your details' }), form]);
+    }
+
+    function confirmBooking(button) {
+      details.name = details.name.trim();
+      details.phone = details.phone.trim();
+      details.email = details.email.trim();
+      if (!details.name) return enterDetails('Please enter your name.');
+      if (details.phone.replace(/[^0-9]/g, '').length < 6) return enterDetails('Please enter your mobile number.');
+      if (!/^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]+$/.test(details.email)) return enterDetails('Please enter a valid email address.');
+      button.disabled = true;
+      button.textContent = 'Booking…';
+      post({ action: 'book', b: slug, service: pickedService.id, staff: pickedStaff || '', start: pickedSlot.start,
+        name: details.name, phone: details.phone, email: details.email, notes: details.notes })
+        .then(function (r) { done(r.booking, r.emailed, 'booked'); })
+        .catch(function (e) {
+          if (e.code === 'taken') { chooseTime(staffFor(pickedService).length <= 1); setTimeout(function () { alertBox(e.message); }, 0); }
+          else enterDetails(e.message);
+        });
+    }
+
+    function alertBox(text) {
+      var app = document.getElementById('app');
+      app.insertBefore(el('div', { class: 'error', role: 'alert', text: text }), app.children[2] || null);
+    }
+
+    // ---------- Confirmation, and the change / cancel page ----------
+    function bookingSummary(b) {
+      return summary([
+        ['Service', b.service],
+        ['With', b.staff],
+        ['Date', dateOf(b.start, true)],
+        ['Time', timeOf(b.start) + ' (' + minutes(b.duration) + ')'],
+        ['Price', b.status === 'cancelled' ? '' : money(b.price)],
+        ['Name', b.customerName],
+      ]);
+    }
+    function manageLink(b) { return location.origin + location.pathname + '?m=' + encodeURIComponent(b.token); }
+
+    function done(b, emailed, kind) {
+      var title = kind === 'cancelled' ? 'Booking cancelled' : kind === 'moved' ? 'Booking changed' : 'You’re booked in!';
+      show([
+        el('div', { class: 'result ' + (kind === 'cancelled' ? 'bad' : 'good'), role: 'status' }, [el('span', { class: 'icon', text: kind === 'cancelled' ? '✕' : '✓' }), el('span', { text: title })]),
+        bookingSummary(b),
+        kind === 'cancelled' ? null : el('p', { class: 'muted', text: emailed
+          ? 'We’ve emailed the details to ' + b.customerEmail + '.'
+          : 'Please take a screenshot of this page or save the link below; a confirmation email couldn’t be sent.' }),
+        kind === 'cancelled' ? el('button', { class: 'primary', type: 'button', text: 'Make a new booking', onclick: function () { location.href = location.pathname + '?b=' + encodeURIComponent(b.business.slug); } })
+          : el('a', { class: 'secondary', href: manageLink(b), style: 'display:block;text-align:center;text-decoration:none;padding:13px 16px;border-radius:12px;border:2px solid var(--brand);font-weight:700;margin-top:14px', text: 'Change or cancel this booking' }),
+        contact(),
+      ]);
+    }
+
+    function startManage() {
+      loading('Loading your booking…');
+      get({ m: token }).then(function (r) {
+        header(r.booking.business);
+        manage(r.booking);
+      }).catch(function (e) { failed(e.code === 'not_found' ? 'This booking could not be found. Please check the link in your email.' : e.message); });
+    }
+
+    function manage(b, errorText) {
+      var nodes = [el('h1', { text: 'Your booking' })];
+      if (b.status === 'cancelled') nodes.push(el('div', { class: 'result bad' }, [el('span', { class: 'icon', text: '✕' }), el('span', { text: 'This booking has been cancelled.' })]));
+      else if (b.status !== 'confirmed') nodes.push(el('div', { class: 'result note' }, [el('span', { class: 'icon', text: 'i' }), el('span', { text: 'This appointment has already happened.' })]));
+      nodes.push(bookingSummary(b));
+      if (errorText) nodes.push(el('div', { class: 'error', role: 'alert', text: errorText }));
+      if (b.status === 'confirmed' && b.canChange) {
+        nodes.push(
+          el('button', { class: 'primary', type: 'button', text: 'Change time', onclick: function () { reschedule(b); } }),
+          el('button', { class: 'danger', type: 'button', text: 'Cancel booking', onclick: function () { askCancel(b); } }),
+        );
+        if (b.cancelNoticeHours) nodes.push(el('p', { class: 'policy', text: 'You can change or cancel online up to ' + b.cancelNoticeHours + ' hours before your appointment.' }));
+      } else if (b.status === 'confirmed') {
+        nodes.push(el('div', { class: 'result note', style: 'margin-top:14px' }, [el('span', { class: 'icon', text: 'i' }),
+          el('span', { text: 'It’s too late to change or cancel online (' + b.cancelNoticeHours + ' hours’ notice is needed). Please contact the business.' })]));
+      }
+      if (b.cancellationPolicy && b.status === 'confirmed') nodes.push(el('p', { class: 'policy', text: 'Cancellation policy: ' + b.cancellationPolicy }));
+      nodes.push(contact());
+      show(nodes);
+    }
+
+    function askCancel(b) {
+      var backdrop = el('div', { class: 'backdrop', role: 'dialog', 'aria-modal': 'true' });
+      var yes = el('button', { class: 'solid-danger', type: 'button', text: 'Yes, cancel' });
+      backdrop.appendChild(el('div', { class: 'dialog' }, [
+        el('p', { text: 'Cancel your ' + b.service + ' on ' + dateOf(b.start, false) + ' at ' + timeOf(b.start) + '?' }),
+        el('div', { class: 'row' }, [el('button', { class: 'plain', type: 'button', text: 'Keep it', onclick: function () { backdrop.remove(); } }), yes]),
+      ]));
+      yes.addEventListener('click', function () {
+        yes.disabled = true;
+        post({ action: 'cancel', m: b.token })
+          .then(function (r) { backdrop.remove(); done(r.booking, r.emailed, 'cancelled'); })
+          .catch(function (e) { backdrop.remove(); manage(b, e.message); });
+      });
+      document.body.appendChild(backdrop);
+    }
+
+    function reschedule(b) {
+      var box = el('div');
+      show([backButton(function () { manage(b); }), el('h1', { text: 'Choose a new time' }),
+        el('p', { class: 'muted', text: b.service + ' · ' + minutes(b.duration) + ' · now ' + dateOf(b.start, false) + ' at ' + timeOf(b.start) }), zoneNote(), box]);
+      var today = new Date().toLocaleDateString('en-CA', { timeZone: TZ });
+      datePicker(box, {
+        today: today,
+        maxDaysAhead: 62,
+        load: function (from, days) { return get({ m: b.token, from: from, days: days }).then(function (r) { return r.days; }); },
+        slotsFor: function (day) { return get({ m: b.token, day: day }).then(function (r) { return r.slots; }); },
+        onPick: function (slot) {
+          loading('Changing your booking…');
+          post({ action: 'reschedule', m: b.token, start: slot.start })
+            .then(function (r) { done(r.booking, r.emailed, 'moved'); })
+            .catch(function (e) { manage(b, e.message); });
+        },
+      });
+    }
+
+    if (token) startManage();
+    else if (/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) startBooking();
+    else failed('This booking link isn’t complete. Please check it, or ask the business for their booking link.');
+  </script>
+</body>
+</html>
