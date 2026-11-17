@@ -219,6 +219,35 @@
       return el('p', { class: 'muted', text: 'Times are shown in ' + city + ' time, where the business is.' });
     }
 
+    // ---------- Wording for the business type ----------
+    // What each booking business type calls its people and its bookings, so a
+    // barber's page says "Choose your barber" and a tattoo studio's "Book a session".
+    // Keep the same as src/systems/bookings/constants/booking-business-types.ts.
+    var WORDS = {
+      hair: { staff: 'stylist', booking: 'appointment', types: { barber: ['barber'], braiding: ['braider'] } },
+      nails: { staff: 'nail tech', booking: 'appointment', types: {} },
+      beauty: { staff: 'beauty therapist', booking: 'appointment', types: { 'lash-studio': ['lash artist'], 'brow-studio': ['brow artist'], 'lash-and-brow-bar': ['lash & brow artist'], 'makeup-artist': ['makeup artist'], waxing: ['waxing therapist'] } },
+      skin: { staff: 'skin therapist', booking: 'appointment', types: { 'cosmetic-injectables': ['injector'], 'laser-hair-removal': ['laser technician'] } },
+      'body-art': { staff: 'artist', booking: 'session', types: { 'piercing-studio': ['piercer', 'appointment'] } },
+      wellness: { staff: 'therapist', booking: 'appointment', types: { 'sauna-float-recovery': [null, 'session'] } },
+      health: { staff: 'practitioner', booking: 'appointment', types: { physiotherapy: ['physio'], chiropractor: ['chiropractor'], osteopathy: ['osteopath'] } },
+      fitness: { staff: 'trainer', booking: 'session', types: { 'yoga-studio': ['instructor', 'class'], 'pilates-studio': ['instructor', 'class'] } },
+      pets: { staff: 'groomer', booking: 'appointment', types: {} },
+      lessons: { staff: 'tutor', booking: 'lesson', types: { tutoring: [null, 'session'], 'music-lessons': ['teacher'], 'driving-instructor': ['instructor'] } },
+      creative: { staff: 'photographer', booking: 'session', types: { 'recording-studio': ['engineer'] } },
+      experiences: { staff: null, booking: 'booking', types: {} },
+      coaching: { staff: 'coach', booking: 'session', types: {} }
+    };
+    /** { staff: 'barber' or null (= "Who would you like?"), booking: 'appointment' }. */
+    function words() {
+      var parts = String((business && business.type) || '').split('/');
+      var c = WORDS[parts[0]];
+      if (!c) return { staff: null, booking: 'appointment' };
+      var own = c.types[parts[1]] || [];
+      return { staff: own[0] || c.staff, booking: own[1] || c.booking };
+    }
+    function withArticle(word) { return (/^[aeiou]/i.test(word) ? 'an ' : 'a ') + word; }
+
     // ---------- The business header and contact line ----------
     var business = null;
     function header(b) {
@@ -228,7 +257,8 @@
       document.title = 'Book with ' + b.name;
       var box = document.getElementById('biz');
       var logo = typeof b.logo === 'string' && /^data:image\/(png|jpe?g);base64,/.test(b.logo) ? el('img', { src: b.logo, alt: '' }) : null;
-      box.replaceChildren(el('div', { class: 'biz' }, [logo, el('div', {}, [el('div', { class: 'biz-name', text: b.name }), el('div', { class: 'muted', text: 'Book an appointment' })])]));
+      var bookText = 'Book ' + withArticle(words().booking);
+      box.replaceChildren(el('div', { class: 'biz' }, [logo, el('div', {}, [el('div', { class: 'biz-name', text: b.name }), el('div', { class: 'muted', text: bookText.charAt(0).toUpperCase() + bookText.slice(1) })])]));
       box.hidden = false;
     }
     function contact() {
@@ -376,8 +406,8 @@
       var dep = service ? depositText(service, staffId) : '';
       if (dep) lines.push('A deposit of ' + dep + ' is paid now to secure your booking. It comes off the price on the day.');
       if (fee && fee.enabled && Number(fee.value) > 0) {
-        lines.push('Cancelling less than ' + fee.hours + ' hours before your appointment: ' + feeText(fee) + (dep ? ', taken from your deposit. Cancel earlier and your deposit is refunded in full.' : '.'));
-        lines.push('You can cancel online up to the start of your appointment.');
+        lines.push('Cancelling less than ' + fee.hours + ' hours before your ' + words().booking + ': ' + feeText(fee) + (dep ? ', taken from your deposit. Cancel earlier and your deposit is refunded in full.' : '.'));
+        lines.push('You can cancel online up to the start of your ' + words().booking + '.');
       } else if (cancelNoticeHours) {
         lines.push('You can change or cancel online up to ' + cancelNoticeHours + ' hours before' + (dep ? ', and your deposit is refunded.' : '.'));
       }
@@ -415,7 +445,7 @@
       var people = bookableStaff();
       show([
         progress(1),
-        el('h1', { text: 'Who would you like?' }),
+        el('h1', { text: words().staff ? 'Choose your ' + words().staff : 'Who would you like?' }),
         el('div', { class: 'list' }, [
           el('button', { class: 'option', type: 'button', onclick: function () { pickedStaff = null; chooseService(); } }, [
             el('span', { class: 'who' }, [avatar(null), el('span', {}, [el('strong', { text: 'Anyone available' }), el('span', { class: 'muted', text: 'The most times to choose from' })])]),

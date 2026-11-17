@@ -5,13 +5,17 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ListRow, SaveNote } from '@/systems/bookings/components/owner/booking-ui';
 import { Button, Card, EmptyState, goBack, Icon, OwnerIcons, OwnerScreen, PageHeader } from '@/systems/bookings/components/owner/ui';
 import { Colors as C, Spacing } from '@/constants/theme';
+import { useBusiness } from '@/data/business';
+import { businessTypeOf } from '@/systems/bookings/constants/booking-business-types';
 import { formatDuration } from '@/systems/bookings/data/booking-time';
 import {
   formatPrice,
   moveService,
+  saveService,
   sortedServices,
   staffForService,
   useBookingServices,
+  useBookingSettings,
   useBookingsLoad,
   useBookingStaff,
   useStaffPrices,
@@ -43,6 +47,31 @@ export default function ServicesScreen() {
   const [message, setMessage] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const shown = services.filter((s) => s.active);
   const hidden = services.filter((s) => !s.active);
+  // Preset services for the business type picked at sign-up (that type only) that aren't added yet.
+  const type = businessTypeOf(useBookingSettings()?.businessTypes);
+  const australian = useBusiness()?.country === 'AU';
+  const have = new Set(services.map((s) => s.name.trim().toLowerCase()));
+  const suggestions = (type?.services ?? []).filter((p) => !have.has(p.name.toLowerCase()));
+  const [adding, setAdding] = useState<string | null>(null);
+
+  async function addSuggestion(p: { name: string; minutes: number; audPrice: number }) {
+    setAdding(p.name);
+    const error = await saveService({
+      id: null,
+      name: p.name,
+      description: '',
+      durationMinutes: p.minutes,
+      price: australian ? p.audPrice : null,
+      category: type!.name,
+      active: true,
+    });
+    setAdding(null);
+    setMessage(
+      error
+        ? { tone: 'error', text: error }
+        : { tone: 'ok', text: australian ? `${p.name} added. Tap it to change the price.` : `${p.name} added. Tap it to set your price.` },
+    );
+  }
 
   const whoDoes = (s: BookingService) => {
     const who = staffForService(s, staff, prices);
@@ -104,6 +133,32 @@ export default function ServicesScreen() {
         <Button label="Add a service" variant="secondary" icon={OwnerIcons.plus} onPress={() => openService('new')} />
       </Card>
 
+      {type && suggestions.length > 0 && (
+        <Card title={`More ${type.name} Services (${suggestions.length})`} icon={OwnerIcons.sparkles}>
+          <Text style={styles.muted}>Common {type.name.toLowerCase()} services you haven’t added. Tap Add to put one on your booking page.</Text>
+          <View>
+            {suggestions.map((p, i) => (
+              <View key={p.name} style={[styles.line, styles.suggestion, i > 0 && styles.divider]}>
+                <View style={styles.flex}>
+                  <Text style={styles.suggestionName}>{p.name}</Text>
+                  <Text style={styles.muted}>
+                    {formatDuration(p.minutes)}
+                    {australian ? ` · ${formatPrice(p.audPrice)}` : ''}
+                  </Text>
+                </View>
+                <Button
+                  label={adding === p.name ? 'Adding…' : 'Add'}
+                  variant="secondary"
+                  icon={OwnerIcons.plus}
+                  disabled={adding !== null}
+                  onPress={() => addSuggestion(p)}
+                />
+              </View>
+            ))}
+          </View>
+        </Card>
+      )}
+
       {hidden.length > 0 && (
         <Card title={`Hidden (${hidden.length})`} icon={OwnerIcons.info}>
           <Text style={styles.muted}>Customers can’t book these. Open one and turn on “Show on my booking page” to bring it back.</Text>
@@ -137,6 +192,8 @@ const styles = StyleSheet.create({
   line: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.border },
   flex: { flex: 1 },
+  suggestion: { paddingVertical: Spacing.two },
+  suggestionName: { color: C.text, fontSize: 15, fontWeight: '600', paddingHorizontal: Spacing.one },
   arrows: { gap: 2 },
   arrow: { width: 36, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: C.surfaceRaised },
   pressed: { opacity: 0.6 },

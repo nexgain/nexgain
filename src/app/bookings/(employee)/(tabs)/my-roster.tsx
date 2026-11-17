@@ -161,9 +161,7 @@ function RosterRow({
         {shift ? (
           <>
             <Text style={styles.shiftTime}>{formatShiftTime(shift)}</Text>
-            <Text style={styles.shiftMeta}>
-              {shift.role} · {shift.location}
-            </Text>
+            <Text style={styles.shiftMeta}>Customers can book you then</Text>
           </>
         ) : (
           <Text style={styles.off}>Day off</Text>

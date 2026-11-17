@@ -1,223 +1,127 @@
-import { useState } from 'react';
-import { router, useLocalSearchParams } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+// NexGain Bookings: a staff member's shift for one day. Booking businesses have
+// no jobs, addresses, tasks or job reports: it's the time they're rostered on
+// (when customers can book them), the owner's notes, and their bookings that day.
+import { useLocalSearchParams } from 'expo-router';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Card, employeeStyles, Icon, IconBadge, Icons, ListRow } from '@/systems/bookings/components/employee/ui';
+import { Card, employeeStyles, IconBadge, Icons } from '@/systems/bookings/components/employee/ui';
 import { EmployeeColors as C } from '@/constants/employee-theme';
 import { Spacing } from '@/constants/theme';
-import {
-  dateKey,
-  formatShiftTime,
-  getShiftForDate,
-  shiftDurationMs,
-} from '@/data/employee-roster';
+import { dateKey, formatShiftTime, getShiftForDate, shiftDurationMs } from '@/data/employee-roster';
 import { useCurrentEmployee } from '@/data/current-employee';
-import { useJobs } from '@/data/jobs';
 import { useShifts } from '@/data/shifts';
 import { useDesktopPageStyle } from '@/hooks/use-desktop';
+import { bookingWords, plural, titleCase } from '@/systems/bookings/constants/booking-business-types';
+import { formatDuration, formatTimeIn } from '@/systems/bookings/data/booking-time';
+import {
+  bookingsOnDay,
+  myStaff,
+  useBookings,
+  useBookingSettings,
+  useBookingStaff,
+  useBusinessTimeZone,
+} from '@/systems/bookings/data/bookings';
 
-export default function JobDetailsScreen() {
+export default function ShiftDetailsScreen() {
   const desktopPage = useDesktopPageStyle('form');
   const currentEmployee = useCurrentEmployee();
   const { date } = useLocalSearchParams<{ date?: string }>();
-  const shiftSource = { shifts: useShifts(), employeeId: currentEmployee?.id ?? null };
-  const shiftDate = date ?? dateKey(new Date());
-  const day = getShiftForDate(shiftDate, new Date(), shiftSource);
+  const shifts = useShifts();
+  const shiftDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : dateKey(new Date());
+  const day = getShiftForDate(shiftDate, new Date(), { shifts, employeeId: currentEmployee?.id ?? null });
   const shift = day?.shift ?? null;
-  // Work description of the linked job (only jobs assigned to this employee are ever loaded).
-  const job = useJobs().find((j) => j.id === shift?.jobId) ?? null;
-  // Task progress lives in memory and isn't sent anywhere yet.
-  const [done, setDone] = useState<Set<number>>(new Set());
+  // The owner's notes for this roster entry.
+  const notes =
+    shifts
+      .filter((s) => s.date === shiftDate && currentEmployee && s.employeeIds.includes(currentEmployee.id))
+      .map((s) => s.notes.trim())
+      .filter(Boolean)
+      .join('\n') || null;
 
-  // Shifts and tasks will come from the Owner's Roster once a database is connected.
-  const tasks = shift?.tasks ?? [];
-
-  function toggleTask(index: number) {
-    setDone((prev) => {
-      const next = new Set(prev);
-      if (next.has(index)) {
-        next.delete(index);
-      } else {
-        next.add(index);
-      }
-      return next;
-    });
-  }
+  const timeZone = useBusinessTimeZone();
+  const words = bookingWords(useBookingSettings()?.businessTypes);
+  const me = myStaff(useBookingStaff(), currentEmployee?.id);
+  const myBookings = bookingsOnDay(
+    useBookings().filter((b) => b.staffId === me?.id),
+    shiftDate,
+    timeZone,
+  );
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={[styles.content, desktopPage]}>
       <Card style={styles.infoCard}>
         <Text style={styles.date}>
-          {(day?.date ?? new Date()).toLocaleDateString([], {
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long',
-          })}
+          {(day?.date ?? new Date()).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })}
         </Text>
-        <Text style={styles.role}>{shift?.role ?? 'No job assigned yet'}</Text>
+        <Text style={styles.title}>{shift ? 'Rostered on' : 'Not rostered on'}</Text>
 
         <View style={styles.detailRow}>
           <IconBadge name={Icons.clock} />
-          <View>
+          <View style={styles.flex}>
             <Text style={styles.detailLabel}>Time</Text>
             <Text style={styles.detailValue}>
               {shift ? `${formatShiftTime(shift)} · ${shiftDurationMs(shift) / 3_600_000}h` : '—'}
             </Text>
           </View>
         </View>
-        <View style={styles.detailRow}>
-          <IconBadge name={Icons.location} />
-          <View>
-            <Text style={styles.detailLabel}>Location</Text>
-            <Text style={styles.detailValue}>{shift?.location ?? '—'}</Text>
-          </View>
-        </View>
+        <Text style={styles.muted}>
+          {shift
+            ? `Customers can book you between these times. A ${words.booking} can’t run past the end time.`
+            : 'Customers can’t book you this day.'}
+        </Text>
       </Card>
 
-      {job && (
+      {notes && (
         <>
-          <Text style={[employeeStyles.sectionLabel, styles.sectionGap]}>Job</Text>
+          <Text style={[employeeStyles.sectionLabel, styles.sectionGap]}>Notes</Text>
           <Card style={styles.infoCard}>
-            <Text style={styles.jobTitle}>{job.title}</Text>
-            {job.description ? <Text style={styles.jobDescription}>{job.description}</Text> : null}
+            <Text style={styles.notes}>{notes}</Text>
           </Card>
         </>
       )}
 
-      <View style={styles.tasksHeader}>
-        <Text style={employeeStyles.sectionLabel}>Tasks</Text>
-        <Text style={styles.progress}>
-          {done.size} of {tasks.length} done
-        </Text>
-      </View>
-
-      <Card>
-        {tasks.length === 0 && <Text style={styles.emptyTasks}>No tasks yet</Text>}
-        {tasks.map((task, i) => {
-          const isDone = done.has(i);
-          return (
-            <Pressable
-              key={task}
-              onPress={() => toggleTask(i)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: isDone }}
-              style={({ pressed }) => [
-                styles.taskRow,
-                i > 0 && styles.taskDivider,
-                pressed && styles.pressed,
-              ]}>
-              <Icon
-                name={isDone ? Icons.checked : Icons.unchecked}
-                color={isDone ? C.success : C.textMuted}
-                size={22}
-              />
-              <Text style={[styles.taskText, isDone && styles.taskTextDone]}>{task}</Text>
-            </Pressable>
-          );
-        })}
+      <Text style={[employeeStyles.sectionLabel, styles.sectionGap]}>
+        Your {plural(words.booking)} ({myBookings.length})
+      </Text>
+      <Card style={styles.infoCard}>
+        {myBookings.length === 0 ? (
+          <Text style={styles.muted}>No {plural(words.booking)} booked yet.</Text>
+        ) : (
+          myBookings.map((b, i) => (
+            <View key={b.id} style={[styles.bookingRow, i > 0 && styles.divider]}>
+              <Text style={styles.bookingTime}>
+                {formatTimeIn(b.startsAt, timeZone)} – {formatTimeIn(b.endsAt, timeZone)}
+              </Text>
+              <View style={styles.flex}>
+                <Text style={styles.detailValue}>{b.customerName}</Text>
+                <Text style={styles.muted}>
+                  {b.serviceName} · {formatDuration(b.durationMinutes)}
+                </Text>
+              </View>
+            </View>
+          ))
+        )}
       </Card>
-
-      <Card>
-        <ListRow
-          icon={<IconBadge name={{ ios: 'checklist', android: 'task_alt', web: 'task_alt' }} />}
-          title="Job Report Form"
-          subtitle="Complete after the job is finished"
-          onPress={() => router.push({ pathname: '/bookings/job-report', params: { date: shiftDate } })}
-        />
-      </Card>
+      <Text style={styles.footnote}>{titleCase(words.customer)}s book you on your business’s booking link.</Text>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: C.background,
-  },
-  content: {
-    padding: Spacing.four - 4,
-    gap: Spacing.three,
-  },
-  emptyTasks: {
-    color: C.textSecondary,
-    fontSize: 15,
-    textAlign: 'center',
-    paddingVertical: Spacing.four,
-  },
-  infoCard: {
-    padding: Spacing.three,
-    gap: Spacing.three - 4,
-  },
-  date: {
-    color: C.textSecondary,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  role: {
-    color: C.text,
-    fontSize: 24,
-    fontWeight: '700',
-    marginTop: -Spacing.two,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three - 4,
-  },
-  detailLabel: {
-    color: C.textSecondary,
-    fontSize: 12,
-  },
-  detailValue: {
-    color: C.text,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  sectionGap: {
-    marginTop: Spacing.two,
-  },
-  jobTitle: {
-    color: C.text,
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  jobDescription: {
-    color: C.text,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  tasksHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: Spacing.two,
-  },
-  progress: {
-    color: C.primary,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  taskRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three - 4,
-    paddingVertical: Spacing.three - 2,
-    paddingHorizontal: Spacing.three,
-  },
-  taskDivider: {
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-  },
-  pressed: {
-    opacity: 0.6,
-  },
-  taskText: {
-    flex: 1,
-    color: C.text,
-    fontSize: 15,
-  },
-  taskTextDone: {
-    color: C.textMuted,
-    textDecorationLine: 'line-through',
-  },
+  screen: { flex: 1, backgroundColor: C.background },
+  content: { padding: Spacing.four - 4, gap: Spacing.three },
+  flex: { flex: 1 },
+  infoCard: { padding: Spacing.three, gap: Spacing.three - 4 },
+  date: { color: C.textSecondary, fontSize: 14, fontWeight: '600' },
+  title: { color: C.text, fontSize: 24, fontWeight: '700', marginTop: -Spacing.two },
+  detailRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three - 4 },
+  detailLabel: { color: C.textSecondary, fontSize: 12 },
+  detailValue: { color: C.text, fontSize: 15, fontWeight: '600' },
+  muted: { color: C.textSecondary, fontSize: 14, lineHeight: 20 },
+  notes: { color: C.text, fontSize: 15, lineHeight: 22 },
+  sectionGap: { marginTop: Spacing.two },
+  bookingRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three - 4, paddingVertical: Spacing.two },
+  bookingTime: { color: C.text, fontSize: 14, fontWeight: '700', width: 132, fontVariant: ['tabular-nums'] },
+  divider: { borderTopWidth: 1, borderTopColor: C.border },
+  footnote: { color: C.textMuted, fontSize: 13, textAlign: 'center' },
 });

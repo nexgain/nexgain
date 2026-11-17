@@ -2,14 +2,14 @@ import { useState } from 'react';
 import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { suggestRoles } from '@/components/employee-signup/roles';
 import { ConfirmDialog } from '@/systems/bookings/components/owner/confirm-dialog';
 import { EmploymentFields, parsePayRate, sendInvite, type EmploymentDraft } from '@/systems/bookings/components/owner/employee-ui';
 import { FormField, TextField } from '@/systems/bookings/components/owner/form';
 import { ScreenHeader } from '@/systems/bookings/components/owner/invoices-ui';
 import { Button, Card, OwnerIcons, OwnerScreen } from '@/systems/bookings/components/owner/ui';
 import { Colors as C, Spacing } from '@/constants/theme';
-import { useBusiness } from '@/data/business';
+import { roleSuggestions } from '@/systems/bookings/constants/booking-business-types';
+import { useBookingSettings } from '@/systems/bookings/data/bookings';
 import { createInvite, deleteInvite, updateInvite, useInvites } from '@/data/employee-invites';
 import { toDateKey } from '@/data/shifts';
 
@@ -21,7 +21,10 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export default function AddEmployeeScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const existing = useInvites().find((i) => i.id === id) ?? null;
-  const business = useBusiness();
+
+  // Job titles for this business type (e.g. Barber, Senior Barber).
+
+  const bookingRoles = roleSuggestions(useBookingSettings()?.businessTypes);
 
   const [fullName, setFullName] = useState(existing?.fullName ?? '');
   const [email, setEmail] = useState(existing?.email ?? '');
@@ -138,7 +141,7 @@ export default function AddEmployeeScreen() {
         <EmploymentFields
           draft={draft}
           onChange={(changes) => setDraft((d) => ({ ...d, ...changes }))}
-          roleSuggestions={suggestRoles(business?.industry ?? null, business?.industryCategory ?? null)}
+          roleSuggestions={bookingRoles}
         />
       </Card>
 

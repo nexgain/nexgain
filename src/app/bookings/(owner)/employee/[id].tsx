@@ -5,7 +5,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, type Href } from 'expo-router';
 import { ActivityIndicator, Alert, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { suggestRoles } from '@/components/employee-signup/roles';
 import { ConfirmDialog } from '@/systems/bookings/components/owner/confirm-dialog';
 import {
   Avatar,
@@ -22,7 +21,7 @@ import { ScreenHeader } from '@/systems/bookings/components/owner/invoices-ui';
 import { Badge, Button, Card, goBack, Icon, OwnerIcons, OwnerScreen, TabRow, type IconName } from '@/systems/bookings/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { availabilityFor, useAvailability, WEEKDAY_NAMES } from '@/data/availability';
-import { useBusiness } from '@/data/business';
+import { roleSuggestions } from '@/systems/bookings/constants/booking-business-types';
 import { format12h, formatShortDate } from '@/data/employee-roster';
 import {
   documentLink,
@@ -60,7 +59,7 @@ import { TAX_ESTIMATE_NOTE } from '@/data/tax';
 import { supabase } from '@/lib/supabase';
 import { EmployeeSuperCard } from '@/systems/bookings/components/owner/employee-super-card';
 import { StaffPricesCard } from '@/systems/bookings/components/owner/staff-prices-card';
-import { myStaff, useBookingStaff } from '@/systems/bookings/data/bookings';
+import { myStaff, useBookingSettings, useBookingStaff } from '@/systems/bookings/data/bookings';
 
 // NexGain Bookings adds "Bookings": the services they do and their own prices.
 const TABS = ['Details', 'Bookings', 'Pay & Payroll', 'Qualifications', 'Documents', 'Availability', 'Job Notes'] as const;
@@ -221,7 +220,10 @@ function toDraft(e: Employee): EmploymentDraft & { status: EmployeeStatus } {
 
 /** Role, pay, employment type, start date and status. Payroll uses these straight away. */
 function EmploymentCard({ employee }: { employee: Employee }) {
-  const business = useBusiness();
+
+  // Job titles for this business type (e.g. Barber, Senior Barber).
+
+  const bookingRoles = roleSuggestions(useBookingSettings()?.businessTypes);
   const [draft, setDraft] = useState(() => toDraft(employee));
   const [message, setMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -260,7 +262,7 @@ function EmploymentCard({ employee }: { employee: Employee }) {
           setDraft((d) => ({ ...d, ...changes }));
           setMessage(null);
         }}
-        roleSuggestions={suggestRoles(business?.industry ?? null, business?.industryCategory ?? null)}
+        roleSuggestions={bookingRoles}
       />
       <FormField label="Status">
         <SelectBox

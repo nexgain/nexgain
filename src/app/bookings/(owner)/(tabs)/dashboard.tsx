@@ -33,7 +33,8 @@ import {
 import { useDocs } from '@/data/invoices';
 import { usePayslipRecords } from '@/data/payroll';
 import { bookingRevenueEntries } from '@/systems/bookings/data/booking-stats';
-import { formatPrice, useBookings, useBookingStaff } from '@/systems/bookings/data/bookings';
+import { titleCase, withArticle } from '@/systems/bookings/constants/booking-business-types';
+import { formatPrice, useBookings, useBookingStaff, useBookingWords } from '@/systems/bookings/data/bookings';
 import { indexReceipts, receiptStatus, useReceipts } from '@/data/receipts';
 import { GstTile } from '@/systems/bookings/components/owner/gst-tile';
 import { BookingLinkCard } from '@/systems/bookings/components/owner/booking-link-card';
@@ -51,6 +52,7 @@ export default function OwnerDashboardScreen() {
   const now = new Date();
   // Filled in by owner sign-up; before that the greeting stays as it was.
   const business = useBusiness();
+  const words = useBookingWords();
   const firstName = ownerFirstName(business);
 
   // This month's money in and out, compared with last month.
@@ -159,7 +161,7 @@ export default function OwnerDashboardScreen() {
           <View>
             <ActionRow
               icon={OwnerIcons.plus}
-              label="Add a Booking"
+              label={`Add ${withArticle(titleCase(words.booking))}`}
               onPress={() => router.push({ pathname: '/bookings/booking/[id]', params: { id: 'new' } })}
             />
             <ActionRow

@@ -1,11 +1,12 @@
 // Owner sign-up, NexGain Bookings only: what kind of booking business this is.
-// Category cards -> a searchable list of types -> "Do you also offer...".
-// "Other – enter my own" lets them type their own. The types and their preset
-// services all live in constants/booking-business-types.ts.
+// Category cards -> a searchable list of types (one type per business; its
+// services are never mixed with another type's). "Other – enter my own" lets
+// them type their own. The types and their preset services all live in
+// constants/booking-business-types.ts.
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Checkbox, Field, Icon, Input, SignupColors as C } from '@/components/signup/fields';
+import { Field, Icon, Input, SignupColors as C } from '@/components/signup/fields';
 import type { SignupData } from '@/components/signup/types';
 import {
   BOOKING_CATEGORIES,
@@ -42,12 +43,6 @@ export function BookingTypePicker({ data, update, hasError, error }: Props) {
     const industry = industryFor(type, own);
     update({ bookingTypes: [type.id], industry: industry.name ? industry : null, industryText: industry.name });
     setQuery('');
-  }
-
-  function toggleExtra(id: string) {
-    const extras = data.bookingTypes.slice(1);
-    const next = extras.includes(id) ? extras.filter((x) => x !== id) : [...extras, id];
-    update({ bookingTypes: [data.bookingTypes[0], ...next] });
   }
 
   function typeOwn(text: string) {
@@ -101,9 +96,8 @@ export function BookingTypePicker({ data, update, hasError, error }: Props) {
     );
   }
 
-  // 2. The types in that category, then 3. "Do you also offer...".
+  // 2. The types in that category (one type only: their services are never mixed with another type's).
   const types = searchBookingTypes(query, category.id);
-  const extras = category.types.filter((t) => !t.other && t.id !== main?.id);
   return (
     <>
       <Field label="What type of business are you?" error={error}>
@@ -147,27 +141,6 @@ export function BookingTypePicker({ data, update, hasError, error }: Props) {
           />
         )}
       </Field>
-
-      {main && extras.length > 0 && (
-        <Field label="Do you also offer…" optional hint="We’ll suggest their services too.">
-          <View style={styles.chips}>
-            {extras.map((t) => {
-              const on = data.bookingTypes.includes(t.id);
-              return (
-                <Pressable
-                  key={t.id}
-                  onPress={() => toggleExtra(t.id)}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: on }}
-                  style={[styles.chip, on && styles.chipOn]}>
-                  <Checkbox checked={on} />
-                  <Text style={[styles.chipText, on && styles.chipTextOn]}>{t.name}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </Field>
-      )}
     </>
   );
 }
@@ -226,19 +199,4 @@ const styles = StyleSheet.create({
   },
   rowOn: { borderColor: C.primary, backgroundColor: C.primarySoft },
   rowTitle: { color: C.text, fontSize: 15, fontWeight: '500' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    minHeight: 40,
-    borderRadius: 999,
-    borderWidth: 1.5,
-    borderColor: C.border,
-    backgroundColor: C.field,
-  },
-  chipOn: { borderColor: C.primary, backgroundColor: C.primarySoft },
-  chipText: { color: C.text, fontSize: 14 },
-  chipTextOn: { color: C.primary, fontWeight: '600' },
 });

@@ -23,10 +23,8 @@ import { availabilityFor, useAvailability, WEEKDAY_NAMES } from '@/data/availabi
 import { format12h, formatShortDate, formatWeekday } from '@/data/employee-roster';
 import { employeeFullName, useEmployees, type Employee } from '@/data/employees';
 import {
-  autoFillFromAvailability,
   copyPreviousWeek,
   fromDateKey,
-  JOB_TYPES,
   shiftHours,
   shiftsInRange,
   toDateKey,
@@ -35,6 +33,8 @@ import {
 } from '@/data/shifts';
 import { useDesktopSheetStyle } from '@/hooks/use-desktop';
 import { useClearParamsOnLeave } from '@/lib/clear-params';
+import { bookingWords, plural } from '@/systems/bookings/constants/booking-business-types';
+import { useBookingSettings } from '@/systems/bookings/data/bookings';
 
 const VIEWS = ['Week', 'Day', 'Month'] as const;
 type RosterView = (typeof VIEWS)[number];
@@ -44,13 +44,8 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-// One colour per job type (fixed order, dark-surface categorical palette); "Other" is neutral.
-const JOB_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9'];
-
-function jobColor(jobType: string) {
-  const index = JOB_TYPES.indexOf(jobType as (typeof JOB_TYPES)[number]);
-  return JOB_COLORS[index] ?? C.textSecondary;
-}
+// Booking businesses have no job types: every roster entry is "on at the business", in one colour.
+const SHIFT_COLOR = C.accent;
 
 function startOfDay(date: Date) {
   const d = new Date(date);
@@ -94,13 +89,14 @@ function step(view: RosterView, anchor: Date, direction: 1 | -1) {
 }
 
 function draftFromShift(shift: RosterShift): ShiftDraft {
-  return { ...shift, date: fromDateKey(shift.date) };
+  return { id: shift.id, date: fromDateKey(shift.date), start: shift.start, end: shift.end, employeeIds: shift.employeeIds, notes: shift.notes };
 }
 
 export default function OwnerRosterScreen() {
   const employees = useEmployees();
   const shifts = useShifts();
   const availability = useAvailability();
+  const staffWord = plural(bookingWords(useBookingSettings()?.businessTypes).staff);
   const [view, setView] = useState<RosterView>('Week');
   const [anchor, setAnchor] = useState(() => startOfDay(new Date()));
 
@@ -153,8 +149,8 @@ export default function OwnerRosterScreen() {
           goBack(params.from === 'job' ? '/bookings/jobs' : params.from === 'notification' ? ('/bookings/alerts' as Href) : '/bookings/menu')
         }
         title="Roster"
-        subtitle="Plan shifts and assign your team."
-        right={<Button label="Add Shift" icon={{ ios: 'plus', android: 'add', web: 'add' }} onPress={() => openNew()} />}
+        subtitle={`Roster your ${staffWord} on. Customers can book them between their start and end times.`}
+        right={<Button label="Roster On" icon={{ ios: 'plus', android: 'add', web: 'add' }} onPress={() => openNew()} />}
       />
 
       <View style={styles.controls}>
@@ -189,7 +185,7 @@ export default function OwnerRosterScreen() {
         <Card>
           <EmptyState
             icon={OwnerIcons.people}
-            message="No employees yet. Once employees are added they'll appear here for rostering. You can still create shifts and assign people later."
+            message="No employees yet. Once employees are added they'll appear here for rostering."
           />
         </Card>
       ) : (
@@ -206,20 +202,18 @@ export default function OwnerRosterScreen() {
       )}
 
       <ResponsiveRow>
-        <Card title="Unassigned Shifts" icon={OwnerIcons.info}>
-          {unassigned.length === 0 ? (
-            <Text style={styles.muted}>No unassigned shifts in this {view.toLowerCase()}.</Text>
-          ) : (
-            unassigned.map((shift, i) => (
+        {unassigned.length > 0 && (
+          <Card title="Nobody Rostered" icon={OwnerIcons.info}>
+            {unassigned.map((shift, i) => (
               <Pressable
                 key={shift.id}
                 onPress={() => openShift(shift)}
                 accessibilityRole="button"
                 style={({ pressed }) => [styles.unassignedRow, i > 0 && styles.divider, pressed && styles.pressed]}>
-                <View style={[styles.colorDot, { backgroundColor: jobColor(shift.jobType) }]} />
+                <View style={[styles.colorDot, { backgroundColor: SHIFT_COLOR }]} />
                 <View style={styles.flex}>
                   <Text style={styles.unassignedTitle}>
-                    {format12h(shift.start)} – {format12h(shift.end)} · {shift.jobType}
+                    {format12h(shift.start)} – {format12h(shift.end)}
                   </Text>
                   <Text style={styles.muted}>
                     {formatWeekday(fromDateKey(shift.date))} {formatShortDate(fromDateKey(shift.date))}
@@ -227,13 +221,13 @@ export default function OwnerRosterScreen() {
                 </View>
                 <Icon name={OwnerIcons.chevron} color={C.textSecondary} size={14} />
               </Pressable>
-            ))
-          )}
-        </Card>
+            ))}
+          </Card>
+        )}
 
-        <Card title="Shift Summary" icon={OwnerIcons.chart}>
+        <Card title="Roster Summary" icon={OwnerIcons.chart}>
           <View style={styles.summary}>
-            <SummaryStat label="Total Shifts" value={`${visibleShifts.length}`} />
+            <SummaryStat label="Times Rostered" value={`${visibleShifts.length}`} />
             <SummaryStat label="Employees Rostered" value={`${rosteredIds.size}`} />
             <SummaryStat label="Total Hours" value={`${Math.round(totalHours * 10) / 10}`} />
           </View>
@@ -242,7 +236,7 @@ export default function OwnerRosterScreen() {
 
       <Card title="Quick Actions">
         <View>
-          <ActionRow icon={{ ios: 'plus', android: 'add', web: 'add' }} label="Add Shift" onPress={() => openNew()} />
+          <ActionRow icon={{ ios: 'plus', android: 'add', web: 'add' }} label="Roster Someone On" onPress={() => openNew()} />
           <ActionRow
             icon={{ ios: 'doc.on.doc', android: 'content_copy', web: 'content_copy' }}
             label="Copy Previous Week"
@@ -252,26 +246,8 @@ export default function OwnerRosterScreen() {
               setView('Week');
               setMessage(
                 count === 0
-                  ? 'Nothing to copy — last week has no shifts that aren’t already here.'
-                  : `Copied ${count} shift${count === 1 ? '' : 's'} from last week.`,
-              );
-            }}
-          />
-          <ActionRow
-            icon={{ ios: 'wand.and.stars', android: 'auto_fix_high', web: 'auto_fix_high' }}
-            label="Auto Fill (Based on Availability)"
-            showDivider
-            onPress={() => {
-              const count = autoFillFromAvailability(
-                range.start,
-                range.end,
-                employees.map((e) => e.id),
-                availability,
-              );
-              setMessage(
-                count === 0
-                  ? 'No unassigned shifts could be filled from employee availability.'
-                  : `Filled ${count} shift${count === 1 ? '' : 's'} with available employees.`,
+                  ? 'Nothing to copy — last week has no roster times that aren’t already here.'
+                  : `Copied ${count} roster time${count === 1 ? '' : 's'} from last week.`,
               );
             }}
           />
@@ -355,10 +331,10 @@ function EmployeeRow({
           <Pressable
             onPress={() => onAdd(date)}
             accessibilityRole="button"
-            accessibilityLabel={`Add shift for ${employee.firstName} on ${formatWeekday(date)} ${date.getDate()}`}
+            accessibilityLabel={`Roster ${employee.firstName} on, ${formatWeekday(date)} ${date.getDate()}`}
             style={({ pressed }) => [styles.emptySlot, pressed && styles.pressed]}>
             <Icon name={{ ios: 'plus', android: 'add', web: 'add' }} color={C.textSecondary} size={14} />
-            {single && <Text style={styles.muted}>Add shift</Text>}
+            {single && <Text style={styles.muted}>Roster on</Text>}
           </Pressable>
         )}
       </View>
@@ -396,12 +372,12 @@ function EmployeeRow({
 }
 
 function ShiftBlock({ shift, onPress }: { shift: RosterShift; onPress: () => void }) {
-  const color = jobColor(shift.jobType);
+  const color = SHIFT_COLOR;
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${shift.jobType} ${format12h(shift.start)} to ${format12h(shift.end)}`}
+      accessibilityLabel={`Rostered on ${format12h(shift.start)} to ${format12h(shift.end)}`}
       style={({ pressed }) => [
         styles.shiftBlock,
         { borderLeftColor: color, backgroundColor: `${color}26` },
@@ -411,7 +387,7 @@ function ShiftBlock({ shift, onPress }: { shift: RosterShift; onPress: () => voi
         {format12h(shift.start)} – {format12h(shift.end)}
       </Text>
       <Text style={styles.shiftJob} numberOfLines={2}>
-        {shift.jobType}
+        {shift.notes || 'Bookable'}
       </Text>
     </Pressable>
   );
@@ -462,7 +438,7 @@ function MonthGrid({
                 key={key}
                 onPress={() => onSelectDay(date)}
                 accessibilityRole="button"
-                accessibilityLabel={`${formatShortDate(date)}, ${count} shifts`}
+                accessibilityLabel={`${formatShortDate(date)}, ${count} rostered`}
                 style={({ pressed }) => [styles.monthCell, key === todayKey && styles.monthToday, pressed && styles.pressed]}>
                 <Text style={[styles.monthDay, !inMonth && styles.monthDayOut]}>{date.getDate()}</Text>
                 {count > 0 && inMonth && (
@@ -475,7 +451,7 @@ function MonthGrid({
           })}
         </View>
       ))}
-      <Text style={styles.muted}>Tap a day to see its shifts.</Text>
+      <Text style={styles.muted}>Tap a day to see who’s rostered on.</Text>
     </Card>
   );
 }

@@ -9,6 +9,7 @@ import { businessStore, useBusiness } from '@/data/business';
 import { createStore } from '@/data/store';
 import { systemOf } from '@/data/systems';
 import { supabase } from '@/lib/supabase';
+import { bookingWords } from '@/systems/bookings/constants/booking-business-types';
 import { DEFAULT_TIME_ZONE, zonedParts } from '@/systems/bookings/data/booking-time';
 
 /** The public booking page. Change here if NexGain moves to its own domain. */
@@ -143,6 +144,8 @@ export const useTimeOff = () => timeOffStore.use();
 export const useBookings = () => bookingsStore.use();
 export const useBookingsLoad = () => bookingsLoadStore.use();
 export const useStaffPrices = () => staffPricesStore.use();
+/** What this business calls its people, bookings and customers, from the business type picked at sign-up. */
+export const useBookingWords = () => bookingWords(bookingSettingsStore.use()?.businessTypes);
 
 /** The business's time zone (where its bookings happen). */
 export const businessTimeZone = () => businessStore.get()?.timezone || DEFAULT_TIME_ZONE;
@@ -596,12 +599,21 @@ export type ManualBooking = {
 };
 
 const OVERLAP = '23P01';
+/** Raised by the database (bookings_on_roster) when the time isn't inside the person's rostered times. */
+const OFF_ROSTER = 'NXR01';
+
+/** A clear message for a booking the database refused. */
+function bookingSaveError(error: { code?: string; message: string }) {
+  if (error.code === OVERLAP) return 'That time overlaps another booking for this person. Choose another time.';
+  if (error.code === OFF_ROSTER) return 'This person isn’t rostered on for all of that time. Choose a time inside their roster, or roster them on first.';
+  return friendly(error.message);
+}
 const plusMinutes = (iso: string, minutes: number) => new Date(new Date(iso).getTime() + minutes * 60000).toISOString();
 
 /**
- * Adds a booking by hand. The owner can book outside opening hours or the
- * notice rules, but never over another booking for the same person (the
- * database refuses overlaps). Returns an error message, or null.
+ * Adds a booking by hand. The minimum-notice rule doesn't apply, but staff can
+ * only be booked inside their rostered times and never over another booking
+ * for the same person (the database refuses both). Returns an error message, or null.
  */
 export async function addManualBooking(b: ManualBooking): Promise<string | null> {
   const id = businessId();
@@ -632,7 +644,7 @@ export async function addManualBooking(b: ManualBooking): Promise<string | null>
     })
     .select(BOOKING_COLUMNS)
     .single<BookingRow>();
-  if (error) return error.code === OVERLAP ? 'That time overlaps another booking for this person. Choose another time.' : friendly(error.message);
+  if (error) return bookingSaveError(error);
   bookingsStore.set((list) => [...list.filter((x) => x.id !== data.id), bookingFromRow(data)].sort((a, c) => a.startsAt.localeCompare(c.startsAt)));
   return null;
 }
@@ -652,7 +664,7 @@ export async function moveBooking(bookingId: string, startsAt: string, staffId: 
     updated_at: new Date().toISOString(),
   };
   const { error } = await supabase.from('bookings').update(changes).eq('id', bookingId);
-  if (error) return error.code === OVERLAP ? 'That time overlaps another booking for this person. Choose another time.' : friendly(error.message);
+  if (error) return bookingSaveError(error);
   bookingsStore.set((list) =>
     list
       .map((x) => (x.id === bookingId ? { ...x, startsAt, endsAt, blockedUntil: changes.blocked_until, staffId } : x))

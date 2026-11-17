@@ -4,12 +4,14 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card, EmptyState, OwnerIcons } from '@/systems/bookings/components/owner/ui';
 import { Colors as C, Spacing } from '@/constants/theme';
 import { formatTimeIn, todayIn } from '@/systems/bookings/data/booking-time';
-import { bookingsOnDay, formatPrice, useBookings, useBookingStaff, useBusinessTimeZone } from '@/systems/bookings/data/bookings';
+import { plural, titleCase } from '@/systems/bookings/constants/booking-business-types';
+import { bookingsOnDay, formatPrice, useBookings, useBookingStaff, useBookingWords, useBusinessTimeZone } from '@/systems/bookings/data/bookings';
 
 /** Dashboard (NexGain Bookings): today's appointments, earliest first. */
 export function TodayBookings() {
   const timeZone = useBusinessTimeZone();
   const staff = useBookingStaff();
+  const many = plural(useBookingWords().booking);
   const today = bookingsOnDay(useBookings(), todayIn(timeZone), timeZone);
   const now = new Date();
   const nameOf = (id: string) => staff.find((s) => s.id === id)?.name ?? '';
@@ -17,7 +19,7 @@ export function TodayBookings() {
 
   return (
     <Card
-      title={`Today’s Bookings (${today.length})`}
+      title={`Today’s ${titleCase(many)} (${today.length})`}
       icon={OwnerIcons.calendar}
       right={
         <Pressable onPress={() => router.navigate('/bookings/calendar')} accessibilityRole="link" hitSlop={8}>
@@ -25,7 +27,7 @@ export function TodayBookings() {
         </Pressable>
       }>
       {today.length === 0 ? (
-        <EmptyState icon={OwnerIcons.calendar} message="No bookings today. Share your booking link to fill your diary." />
+        <EmptyState icon={OwnerIcons.calendar} message={`No ${many} today. Share your booking link to fill your diary.`} />
       ) : (
         <>
           {today.slice(0, 8).map((b, i) => {

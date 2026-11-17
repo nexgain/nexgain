@@ -131,9 +131,7 @@ export default function HomeScreen() {
               {todaysShift ? formatShiftTime(todaysShift) : 'No shift scheduled'}
             </Text>
             {todaysShift && (
-              <Text style={styles.shiftMeta}>
-                {todaysShift.role} · {todaysShift.location}
-              </Text>
+              <Text style={styles.shiftMeta}>Customers can book you then</Text>
             )}
           </View>
           <Icon name={Icons.chevron} color={C.textMuted} size={14} />

@@ -6,9 +6,14 @@ import { INDUSTRIES } from '@/data/industries';
 import {
   BOOKING_CATEGORIES,
   BOOKING_TYPES,
+  bookingWords,
   findBookingType,
+  plural,
   presetServices,
+  roleSuggestions,
   searchBookingTypes,
+  titleCase,
+  withArticle,
 } from '@/systems/bookings/constants/booking-business-types';
 import { bookingServicesProblem, currencySymbol } from '@/systems/bookings/components/signup/step-booking-services';
 import { EMPTY_SIGNUP } from '@/components/signup/types';
@@ -42,12 +47,54 @@ describe('preset services', () => {
     expect(presetServices(['hair/barber'], null).every((s) => s.price === null)).toBe(true);
   });
 
-  it('adds "Do you also offer" types, without the same service twice', () => {
-    const both = presetServices(['hair/barber', 'hair/hair-salon'], 'AU');
-    expect(both.filter((s) => s.name === 'Kids Cut')).toHaveLength(1);
-    expect(both.some((s) => s.category === 'Hair Salon')).toBe(true);
+  it('only ever shows the one business type picked, never another type’s services', () => {
+    const barber = presetServices(['hair/barber', 'hair/hair-salon'], 'AU');
+    expect(barber.every((s) => s.category === 'Barber')).toBe(true);
+    expect(barber.map((s) => s.name)).toContain('Beard Trim');
+    expect(barber.map((s) => s.name)).not.toContain('Balayage');
+    const beauty = presetServices(['beauty/beauty-therapist'], 'AU');
+    expect(beauty.every((s) => s.category === 'Beauty Therapist')).toBe(true);
+    expect(beauty.map((s) => s.name)).not.toContain('Gel Manicure');
     expect(findBookingType('hair/other')?.other).toBe(true);
     expect(presetServices(['hair/other'], 'AU')).toEqual([]);
+    // An old id that no longer exists: no presets (it's never swapped for another type's).
+    expect(presetServices(['beauty/beauty-salon-general'], 'AU')).toEqual([]);
+  });
+
+  it('gives every real type a full preset list, each service once', () => {
+    for (const t of BOOKING_TYPES.filter((x) => !x.other)) {
+      expect(t.services.length).toBeGreaterThanOrEqual(6);
+      const names = t.services.map((s) => s.name.toLowerCase());
+      expect(new Set(names).size).toBe(names.length);
+      for (const s of t.services) {
+        expect(s.minutes).toBeGreaterThanOrEqual(5);
+        expect(s.audPrice).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+});
+
+describe('wording for the business type', () => {
+  it('names the people, bookings and customers', () => {
+    expect(bookingWords(['hair/barber'])).toEqual({ staff: 'barber', booking: 'appointment', customer: 'client' });
+    expect(bookingWords(['hair/hair-salon']).staff).toBe('stylist');
+    expect(bookingWords(['body-art/tattoo-studio'])).toMatchObject({ staff: 'artist', booking: 'session' });
+    expect(bookingWords(['health/physiotherapy'])).toMatchObject({ staff: 'physio', customer: 'patient' });
+    expect(bookingWords(['fitness/yoga-studio'])).toMatchObject({ staff: 'instructor', booking: 'class' });
+    // An old id falls back to its category; nothing saved = general words.
+    expect(bookingWords(['beauty/beauty-salon-general']).staff).toBe('beauty therapist');
+    expect(bookingWords([])).toEqual({ staff: 'team member', booking: 'appointment', customer: 'client' });
+  });
+
+  it('formats the words', () => {
+    expect(titleCase('nail tech')).toBe('Nail Tech');
+    expect(titleCase('lash & brow artist')).toBe('Lash & Brow Artist');
+    expect(plural('barber')).toBe('barbers');
+    expect(plural('class')).toBe('classes');
+    expect(withArticle('appointment')).toBe('an appointment');
+    expect(withArticle('session')).toBe('a session');
+    expect(roleSuggestions(['hair/barber']).slice(0, 2)).toEqual(['Barber', 'Senior Barber']);
+    expect(roleSuggestions([])[0]).toBe('Apprentice');
   });
 });
 

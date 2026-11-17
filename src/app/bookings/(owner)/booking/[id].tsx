@@ -4,19 +4,13 @@ import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ChoiceRow, SaveNote } from '@/systems/bookings/components/owner/booking-ui';
 import { ConfirmDialog } from '@/systems/bookings/components/owner/confirm-dialog';
-import { DateField, FormField, TextField, TimeField } from '@/systems/bookings/components/owner/form';
+import { DateField, FormField, TextField } from '@/systems/bookings/components/owner/form';
 import { Badge, Button, Card, goBack, OwnerIcons, OwnerScreen, PageHeader } from '@/systems/bookings/components/owner/ui';
 import { Colors as C, Spacing } from '@/constants/theme';
-import {
-  formatDayKey,
-  formatDuration,
-  formatTimeIn,
-  minutesOf,
-  todayIn,
-  weekdayOf,
-  zonedParts,
-  zonedToIso,
-} from '@/systems/bookings/data/booking-time';
+import { useShifts } from '@/data/shifts';
+import { format12h, formatDayKey, formatDuration, formatTimeIn, todayIn, zonedParts } from '@/systems/bookings/data/booking-time';
+import { startTimes, type StartTime } from '@/systems/bookings/data/free-times';
+import { titleCase, withArticle } from '@/systems/bookings/constants/booking-business-types';
 import {
   addManualBooking,
   doesService,
@@ -30,8 +24,10 @@ import {
   useBookingServices,
   useBookingSettings,
   useBookingStaff,
+  useBookingWords,
   useBusinessTimeZone,
   useStaffPrices,
+  useTimeOff,
   type BookingStatus,
 } from '@/systems/bookings/data/bookings';
 
@@ -50,21 +46,78 @@ const toDate = (key: string) => {
 };
 const toKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-/** A gentle note when a time is outside opening hours or the person's hours (the owner can still book it). */
-function useHoursNote(date: string, time: string, staffId: string | null, minutes: number) {
+/**
+ * The times this person can start a booking that day: only while they're
+ * rostered on (the owner: opening hours), with room for the whole service
+ * before their shift ends. Times that overlap another booking are included as
+ * taken (greyed out). The database checks all of this again when saving.
+ */
+function useStartTimes(staffId: string | null, date: string, minutes: number, ignoreBookingId?: string) {
+  const timeZone = useBusinessTimeZone();
   const settings = useBookingSettings();
   const person = useBookingStaff().find((s) => s.id === staffId);
-  if (!settings || !time) return null;
-  const day = weekdayOf(date);
-  const open = settings.openingHours[day];
-  const start = minutesOf(time);
-  if (!open.open) return 'You’re usually closed this day.';
-  if (start < minutesOf(open.start) || start + minutes > minutesOf(open.end)) return 'This is outside your opening hours.';
-  const own = person?.hours?.[day];
-  if (own && (!own.working || start < minutesOf(own.start) || start + minutes > minutesOf(own.end))) {
-    return `${person!.name} doesn’t usually work then.`;
+  const shifts = useShifts();
+  const bookings = useBookings();
+  const timeOff = useTimeOff();
+  if (!settings || !person) return [];
+  return startTimes({
+    staff: person,
+    dateKey: date,
+    timeZone,
+    durationMinutes: minutes,
+    settings,
+    shifts,
+    bookings,
+    timeOff,
+    ignoreBookingId,
+  });
+}
+
+/** Tap a free time; taken times are greyed out and can't be picked. */
+function TimePicker({
+  times,
+  value,
+  onChange,
+  personName,
+  isOwner,
+}: {
+  times: StartTime[];
+  value: string | null;
+  onChange: (time: string) => void;
+  personName: string;
+  isOwner: boolean;
+}) {
+  const freeCount = times.filter((t) => t.free).length;
+  if (times.length === 0 || freeCount === 0) {
+    return (
+      <Text style={styles.warning}>
+        {times.length > 0
+          ? `${personName} is fully booked this day. Choose another day or person.`
+          : isOwner
+            ? 'You’re closed this day (Bookings Settings › Opening hours). Choose another day.'
+            : `${personName} isn’t rostered on this day, so they can’t be booked. Roster them on first, or choose another day.`}
+      </Text>
+    );
   }
-  return null;
+  return (
+    <View style={styles.times} accessibilityRole="radiogroup">
+      {times.map((t) => {
+        const on = t.free && t.time === value;
+        return (
+          <Pressable
+            key={t.time}
+            onPress={() => onChange(t.time)}
+            disabled={!t.free}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: on, disabled: !t.free }}
+            accessibilityLabel={`${format12h(t.time)}${t.free ? '' : ', taken'}`}
+            style={({ pressed }) => [styles.time, on && styles.timeOn, !t.free && styles.timeTaken, pressed && styles.pressed]}>
+            <Text style={[styles.timeText, on && styles.timeTextOn, !t.free && styles.timeTextTaken]}>{format12h(t.time)}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
 }
 
 // One booking: see it, move it, mark it Completed or No-show, or cancel it.
@@ -76,6 +129,7 @@ export default function BookingScreen() {
 
 function NewBooking({ date: startDate, staffId: startStaff, time: startTime }: { date?: string; staffId?: string; time?: string }) {
   const timeZone = useBusinessTimeZone();
+  const addTitle = `Add ${withArticle(titleCase(useBookingWords().booking))}`;
   const services = useBookingServices().filter((s) => s.active);
   const staff = useBookingStaff();
   const prices = useStaffPrices();
@@ -86,19 +140,22 @@ function NewBooking({ date: startDate, staffId: startStaff, time: startTime }: {
   const who = staffForService(service, staff, prices);
   const [staffId, setStaffId] = useState<string>(startStaff && who.some((s) => s.id === startStaff) ? startStaff : (who[0]?.id ?? ''));
   const [date, setDate] = useState(startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate) ? startDate : todayIn(timeZone));
-  const [time, setTime] = useState(startTime && /^\d{2}:\d{2}$/.test(startTime) ? startTime : '09:00');
+  const [time, setTime] = useState<string | null>(startTime && /^\d{2}:\d{2}$/.test(startTime) ? startTime : null);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<Message>(null);
-  const hoursNote = useHoursNote(date, time, staffId, service?.durationMinutes ?? 0);
+  const times = useStartTimes(staffId, date, service?.durationMinutes ?? 0);
+  // Only a free time counts (changing the service, person or day can make the picked time taken).
+  const chosen = times.find((t) => t.free && t.time === time) ?? null;
+  const person = staff.find((s) => s.id === staffId);
 
   if (services.length === 0) {
     return (
       <OwnerScreen>
-        <PageHeader onBack={() => goBack('/bookings/calendar')} title="Add a Booking" />
+        <PageHeader onBack={() => goBack('/bookings/calendar')} title={addTitle} />
         <Card>
           <Text style={styles.muted}>Add a service in Bookings Settings first.</Text>
         </Card>
@@ -114,11 +171,12 @@ function NewBooking({ date: startDate, staffId: startStaff, time: startTime }: {
 
   async function save() {
     if (!staffId) return setMessage({ tone: 'error', text: 'Nobody does this service yet. Tick it for someone in Employees › their profile › Services & Prices.' });
+    if (!chosen) return setMessage({ tone: 'error', text: 'Choose a free time.' });
     setBusy(true);
     const error = await addManualBooking({
       serviceId,
       staffId,
-      startsAt: zonedToIso(date, time, timeZone),
+      startsAt: chosen.startsAt,
       customerName: name,
       customerPhone: phone,
       customerEmail: email,
@@ -131,7 +189,7 @@ function NewBooking({ date: startDate, staffId: startStaff, time: startTime }: {
 
   return (
     <OwnerScreen>
-      <PageHeader onBack={() => goBack('/bookings/calendar')} title="Add a Booking" subtitle="For walk-ins and phone bookings." />
+      <PageHeader onBack={() => goBack('/bookings/calendar')} title={addTitle} subtitle="For walk-ins and phone bookings." />
       <Card>
         <ChoiceRow
           label="Service"
@@ -143,19 +201,12 @@ function NewBooking({ date: startDate, staffId: startStaff, time: startTime }: {
           onChange={pickService}
         />
         <ChoiceRow label="With" choices={who.map((s) => ({ value: s.id, label: s.name }))} value={staffId} onChange={setStaffId} />
-        <View style={styles.row}>
-          <View style={styles.flex}>
-            <FormField label="Date">
-              <DateField label="Booking date" value={toDate(date)} onChange={(d) => setDate(toKey(d))} />
-            </FormField>
-          </View>
-          <View style={styles.flex}>
-            <FormField label="Time">
-              <TimeField label="Booking time" value={time} onChange={setTime} />
-            </FormField>
-          </View>
-        </View>
-        {hoursNote && <Text style={styles.warning}>{hoursNote} You can still book it.</Text>}
+        <FormField label="Date">
+          <DateField label="Booking date" value={toDate(date)} onChange={(d) => setDate(toKey(d))} />
+        </FormField>
+        <FormField label="Time">
+          <TimePicker times={times} value={time} onChange={setTime} personName={person?.name ?? 'This person'} isOwner={!!person?.isOwner} />
+        </FormField>
       </Card>
       <Card title="Customer" icon={OwnerIcons.person}>
         <FormField label="Name">
@@ -197,7 +248,12 @@ function BookingDetails({ id }: { id: string }) {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [busy, setBusy] = useState(false);
   const local = booking ? zonedParts(booking.startsAt, timeZone) : null;
-  const hoursNote = useHoursNote(date ?? local?.date ?? '2026-01-01', time ?? local?.time ?? '', staffId ?? booking?.staffId ?? null, booking?.durationMinutes ?? 0);
+  const moveDate = date ?? local?.date ?? '2026-01-01';
+  const moveStaff = staffId ?? booking?.staffId ?? null;
+  const times = useStartTimes(moveStaff, moveDate, booking?.durationMinutes ?? 0, booking?.id);
+  // Until another time is tapped: the booking's own time, if the day and person haven't changed.
+  const moveTime = time ?? (local && moveDate === local.date && moveStaff === booking?.staffId ? local.time : null);
+  const chosen = times.find((t) => t.free && t.time === moveTime) ?? null;
 
   if (!booking || !local) {
     return (
@@ -224,10 +280,8 @@ function BookingDetails({ id }: { id: string }) {
   }
 
   async function saveMove() {
-    const error = await run(
-      () => moveBooking(booking!.id, zonedToIso(date ?? local!.date, time ?? local!.time, timeZone), staffId ?? booking!.staffId),
-      'Booking moved.',
-    );
+    if (!chosen) return setMessage({ tone: 'error', text: 'Choose a free time.' });
+    const error = await run(() => moveBooking(booking!.id, chosen.startsAt, moveStaff ?? booking!.staffId), 'Booking moved.');
     if (!error) setMoving(false);
   }
 
@@ -274,22 +328,21 @@ function BookingDetails({ id }: { id: string }) {
 
       {booking.status === 'confirmed' && moving && (
         <Card title="Move Booking" icon={OwnerIcons.clock}>
-          <View style={styles.row}>
-            <View style={styles.flex}>
-              <FormField label="Date">
-                <DateField label="New date" value={toDate(date ?? local.date)} onChange={(d) => setDate(toKey(d))} />
-              </FormField>
-            </View>
-            <View style={styles.flex}>
-              <FormField label="Time">
-                <TimeField label="New time" value={time ?? local.time} onChange={setTime} />
-              </FormField>
-            </View>
-          </View>
           {who.length > 1 && (
-            <ChoiceRow label="With" choices={who.map((s) => ({ value: s.id, label: s.name }))} value={staffId ?? booking.staffId} onChange={setStaffId} />
+            <ChoiceRow label="With" choices={who.map((s) => ({ value: s.id, label: s.name }))} value={moveStaff ?? booking.staffId} onChange={setStaffId} />
           )}
-          {hoursNote && <Text style={styles.warning}>{hoursNote} You can still move it there.</Text>}
+          <FormField label="Date">
+            <DateField label="New date" value={toDate(moveDate)} onChange={(d) => setDate(toKey(d))} />
+          </FormField>
+          <FormField label="Time">
+            <TimePicker
+              times={times}
+              value={moveTime}
+              onChange={setTime}
+              personName={staff.find((s) => s.id === moveStaff)?.name ?? 'This person'}
+              isOwner={!!staff.find((s) => s.id === moveStaff)?.isOwner}
+            />
+          </FormField>
           <Text style={styles.muted}>The customer isn’t told automatically. Let them know about the new time.</Text>
           <View style={styles.row}>
             <View style={styles.flex}>
@@ -353,6 +406,23 @@ function Detail({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   muted: { color: C.textSecondary, fontSize: 14, lineHeight: 20 },
   warning: { color: C.warning, fontSize: 14, fontWeight: '600' },
+  times: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  time: {
+    minWidth: 84,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.two + 2,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.surfaceRaised,
+    alignItems: 'center',
+  },
+  timeOn: { borderColor: C.accent, backgroundColor: C.accent },
+  timeTaken: { opacity: 0.4, backgroundColor: C.surface },
+  timeText: { color: C.text, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  timeTextOn: { color: C.onAccent },
+  timeTextTaken: { color: C.textMuted, textDecorationLine: 'line-through' },
+  pressed: { opacity: 0.7 },
   row: { flexDirection: 'row', gap: Spacing.two },
   flex: { flex: 1 },
   detail: { gap: 2 },
