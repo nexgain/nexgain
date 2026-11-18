@@ -258,7 +258,7 @@ export function fromRow(row: BusinessRow): BusinessProfile {
     manualTaxRate: row.manual_tax_rate === null || row.manual_tax_rate === undefined ? null : Number(row.manual_tax_rate),
     linkExpensesToJobs: row.link_expenses_to_jobs ?? false,
     paySchedule: payScheduleFromRow(row.pay_schedule),
-    systemType: row.system_type === 'bookings' ? 'bookings' : 'service',
+    systemType: row.system_type === 'bookings' || row.system_type === 'retail' ? row.system_type : 'service',
     timezone: row.timezone || 'Australia/Brisbane',
   };
 }
@@ -366,12 +366,17 @@ export async function createBusinessOnline(profile: Omit<BusinessProfile, 'id' |
     }
     if (systemError) console.warn('Could not save the booking system:', systemError.message);
   }
+  // NexGain Retail businesses (System 3).
+  if (profile.systemType === 'retail') {
+    const { error: systemError } = await supabase.from('businesses').update({ system_type: 'retail' }).eq('id', created.id);
+    if (systemError) console.warn('Could not save the retail system:', systemError.message);
+  }
   const saved = {
     ...created,
     emailApp: profile.emailApp,
     businessEmail: profile.businessEmail,
     country: profile.country,
-    systemType: profile.systemType === 'bookings' ? ('bookings' as const) : ('service' as const),
+    systemType: profile.systemType === 'bookings' || profile.systemType === 'retail' ? profile.systemType : ('service' as const),
   };
   businessStore.set(saved);
   return saved;

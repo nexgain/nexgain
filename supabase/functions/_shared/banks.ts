@@ -15,7 +15,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
 import { basiq } from './basiq.ts';
 import { rematchReceipts } from './receipts.ts';
-import { RULES, type Category } from './ai/sorting.ts';
+import { schemeForSystem, SERVICE_SCHEME, type AnyCategory, type SortingScheme } from './ai/sorting.ts';
 
 export type BankProviderId = 'basiq' | 'saltedge';
 
@@ -104,14 +104,19 @@ export async function ownerBusiness(req: Request, db: SupabaseClient) {
 // ---------------------------------------------------------------------------
 
 // The categories and known-merchant rules live in ./ai/sorting.ts (shared with the app).
+// Each system has its own (NexGain Retail: Stock purchases, Rent, Wages...).
 
 /** NexGain's category for a bank transaction, from its description, merchant and the bank's own labels. */
-export function categorise(txn: Pick<BankTxn, 'amount' | 'description' | 'merchant' | 'bankCategory' | 'bankClass'>): Category {
+export function categorise(
+  txn: Pick<BankTxn, 'amount' | 'description' | 'merchant' | 'bankCategory' | 'bankClass'>,
+  scheme: SortingScheme = SERVICE_SCHEME,
+): AnyCategory {
   if (txn.bankClass === 'transfer') return 'Transfers';
   if (txn.amount > 0) return 'Income';
-  if (txn.bankClass === 'bank-fee') return 'Bank fees';
+  // NexGain Retail has no "Bank fees" category: they go in Other.
+  if (txn.bankClass === 'bank-fee') return scheme.categories.includes('Bank fees') ? 'Bank fees' : 'Other';
   const text = [txn.merchant, txn.description, txn.bankCategory].filter(Boolean).join(' ').toLowerCase();
-  for (const [category, pattern] of RULES) if (pattern.test(text)) return category;
+  for (const [category, pattern] of scheme.rules) if (pattern.test(text)) return category;
   return 'Other';
 }
 
@@ -155,6 +160,9 @@ export async function saveLatest(db: SupabaseClient, provider: BankProvider, con
     ? dateKey(new Date(connection.last_synced_at).getTime() - 14 * DAY)
     : dateKey(Date.now() - 365 * DAY);
   const txns = await provider.transactions(connection.external_user_id, since);
+  // The business's system decides its categories.
+  const { data: business } = await db.from('businesses').select('system_type').eq('id', connection.business_id).maybeSingle();
+  const scheme = schemeForSystem(business?.system_type);
   const rows = txns
     .filter((t) => accountIds.has(t.accountExternalId))
     .map((t) => ({
@@ -166,7 +174,7 @@ export async function saveLatest(db: SupabaseClient, provider: BankProvider, con
       amount: t.amount,
       merchant: t.merchant,
       bank_category: t.bankCategory,
-      category: categorise(t),
+      category: categorise(t, scheme),
     }));
 
   let added = 0;

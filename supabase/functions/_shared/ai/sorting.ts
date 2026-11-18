@@ -9,6 +9,11 @@
 //      "Needs review" with a one-tap question.
 // It also matches money coming in to unpaid invoices, and suggests which job
 // an expense was for (when "Link expenses to jobs" is on).
+//
+// Each NexGain system has its own set of categories (a "scheme"). System 1 and
+// System 2 use SERVICE_SCHEME (the categories below). NexGain Retail (System 3)
+// uses RETAIL_SCHEME (at the end of this file): Stock purchases, Rent, Wages...
+// Everything defaults to SERVICE_SCHEME, so Systems 1 and 2 work as before.
 import { cleanMerchantName } from './transactions.ts';
 
 // Must match the names in the app (src/data/bank.ts and EXPENSE_CATEGORIES in src/data/finance.ts).
@@ -62,6 +67,21 @@ export const RULES: [Category, RegExp][] = [
   ['Bank fees', /\b(account fee|monthly fee|bank fee|merchant fee|dishonour fee|overdrawn fee|international transaction fee|fee)\b/],
 ];
 
+/** NexGain Retail's expense categories (RETAIL_CATEGORIES below). */
+export type RetailCategory =
+  | 'Stock purchases'
+  | 'Rent'
+  | 'Wages'
+  | 'Shipping & postage'
+  | 'Packaging'
+  | 'Marketing'
+  | 'Utilities'
+  | 'Shop fit-out & equipment'
+  | 'Other';
+
+/** A category in any system's scheme. */
+export type AnyCategory = Category | RetailCategory;
+
 export const INCOME: Category = 'Income';
 export const TRANSFERS: Category = 'Transfers';
 export const WAGES: Category = 'Wages & super';
@@ -71,15 +91,17 @@ export const WAGES: Category = 'Wages & super';
 // ---------------------------------------------------------------------------
 
 export type SpendGroupId = 'materials' | 'labour' | 'tools' | 'fuel' | 'vehicle' | 'other';
+/** NexGain Retail's groups (RETAIL_SPEND_GROUPS at the end of this file). */
+export type RetailSpendGroupId = 'stock' | 'rent' | 'wages' | 'shipping' | 'packaging' | 'marketing' | 'utilities' | 'fitout' | 'other';
 
-export type SpendGroup = {
-  id: SpendGroupId;
+export type SpendGroup<Id extends string = SpendGroupId> = {
+  id: Id;
   name: string;
   description: string;
   /** The detailed categories in this group ("other" takes everything else that's money out). */
-  categories: Category[];
+  categories: AnyCategory[];
   /** The category used when the owner picks this group in "Needs review". */
-  pick: Category;
+  pick: AnyCategory;
 };
 
 export const SPEND_GROUPS: SpendGroup[] = [
@@ -98,12 +120,13 @@ export const SPEND_GROUPS: SpendGroup[] = [
 ];
 
 /** Which group a category belongs to. Income and transfers aren't spending (null). */
-export function groupOf(category: string): SpendGroupId | null {
+export function groupOf<Id extends string = SpendGroupId>(category: string, groups: SpendGroup<Id>[] = SPEND_GROUPS as SpendGroup<Id>[]): Id | 'other' | null {
   if (category === INCOME || category === TRANSFERS) return null;
-  return SPEND_GROUPS.find((g) => g.id !== 'other' && (g.categories as string[]).includes(category))?.id ?? 'other';
+  return groups.find((g) => g.id !== 'other' && (g.categories as string[]).includes(category))?.id ?? 'other';
 }
 
-export const groupById = (id: string) => SPEND_GROUPS.find((g) => g.id === id) ?? null;
+export const groupById = <Id extends string = SpendGroupId>(id: string, groups: SpendGroup<Id>[] = SPEND_GROUPS as SpendGroup<Id>[]) =>
+  groups.find((g) => g.id === id) ?? null;
 
 // ---------------------------------------------------------------------------
 // Sorting
@@ -112,7 +135,7 @@ export const groupById = (id: string) => SPEND_GROUPS.find((g) => g.id === id) ?
 export type SortMethod = 'rule' | 'learned' | 'ai' | 'owner';
 
 export type Sorting = {
-  category: Category;
+  category: AnyCategory;
   /** 0 to 1: how sure NexGain is. */
   confidence: number;
   method: SortMethod;
@@ -174,7 +197,7 @@ function isRepeating(t: SortInput, history: SortInput[]) {
 }
 
 /** The category for one bank transaction, how sure NexGain is, and why. */
-export function sortTransaction(t: SortInput, ctx: SortContext): Sorting {
+export function sortTransaction(t: SortInput, ctx: SortContext, scheme: SortingScheme = SERVICE_SCHEME): Sorting {
   const text = [t.merchant, t.description, t.bankCategory].filter(Boolean).join(' ').toLowerCase();
   if (TRANSFER_WORDS.test(text)) return { category: TRANSFERS, confidence: 0.9, method: 'rule', reason: 'Looks like a transfer between accounts.' };
   if (t.amount > 0) return { category: INCOME, confidence: 0.95, method: 'rule', reason: 'Money coming in.' };
@@ -186,24 +209,24 @@ export function sortTransaction(t: SortInput, ctx: SortContext): Sorting {
   }
 
   const contractor = ctx.contractorNames.find((name) => name.trim().length >= 4 && text.includes(name.toLowerCase().trim()));
-  if (contractor) return { category: WAGES, confidence: 0.9, method: 'rule', reason: `A payment to your contractor ${contractor}.` };
+  if (contractor) return { category: scheme.wages, confidence: 0.9, method: 'rule', reason: `A payment to your contractor ${contractor}.` };
 
-  for (const [category, pattern] of RULES) {
+  for (const [category, pattern] of scheme.rules) {
     if (pattern.test(text)) {
       return { category, confidence: 0.95, method: 'rule', reason: `${cleanMerchantName(t.merchant || t.description)} is a known ${category.toLowerCase()} merchant.` };
     }
   }
 
   // Best guess from clues, more sure when several point the same way.
-  let best: { category: Category; score: number; word: string } | null = null;
-  for (const [category, pattern, weight] of CLUES) {
+  let best: { category: AnyCategory; score: number; word: string } | null = null;
+  for (const [category, pattern, weight] of scheme.clues) {
     const hits = text.match(new RegExp(pattern.source, 'g')) ?? [];
     if (hits.length === 0) continue;
     const score = Math.min(0.9, weight + (hits.length - 1) * 0.08);
     if (!best || score > best.score) best = { category, score, word: hits[0] ?? '' };
   }
-  if (isRepeating(t, ctx.history) && (!best || best.score < 0.65)) {
-    return { category: 'Software & subscriptions', confidence: 0.65, method: 'ai', reason: 'The same amount is charged every month, so it looks like a subscription.' };
+  if (scheme.subscription && isRepeating(t, ctx.history) && (!best || best.score < 0.65)) {
+    return { category: scheme.subscription, confidence: 0.65, method: 'ai', reason: 'The same amount is charged every month, so it looks like a subscription.' };
   }
   if (best) return { category: best.category, confidence: best.score, method: 'ai', reason: `The bank's description mentions "${best.word}".` };
   return { category: 'Other', confidence: 0.3, method: 'ai', reason: 'NexGain couldn’t tell what this was for.' };
@@ -334,3 +357,136 @@ export function travelCosts(
   }
   return out.sort((a, b) => b.fuel - a.fuel);
 }
+
+// ---------------------------------------------------------------------------
+// Category schemes: which categories, rules and groups each system uses
+// ---------------------------------------------------------------------------
+
+export type SortingScheme = {
+  id: 'service' | 'retail';
+  /** Every expense category, in the order they're offered (Income and Transfers aren't spending, so aren't listed). */
+  categories: AnyCategory[];
+  /** Known merchants: the first match wins. */
+  rules: [AnyCategory, RegExp][];
+  /** Clues for the best guess, with how sure each one makes NexGain. */
+  clues: [AnyCategory, RegExp, number][];
+  /** The groups on the Transactions page ("Expenses by category"). */
+  groups: SpendGroup<SpendGroupId | RetailSpendGroupId>[];
+  /** Payments to staff and contractors. */
+  wages: AnyCategory;
+  /** The same amount every month (null = no guess from that alone). */
+  subscription: AnyCategory | null;
+  /** Money in is matched to unpaid customer invoices (NexGain Retail has none). */
+  matchesInvoices: boolean;
+};
+
+/** Systems 1 and 2: trades and service businesses, and booking businesses. Unchanged. */
+export const SERVICE_SCHEME: SortingScheme = {
+  id: 'service',
+  categories: [
+    'Fuel',
+    'Materials & supplies',
+    'Equipment & tools',
+    'Vehicle',
+    'Rent',
+    'Utilities',
+    'Insurance',
+    'Phone & internet',
+    'Software & subscriptions',
+    'Advertising',
+    'Wages & super',
+    'Bank fees',
+    'Tax',
+    'Other',
+  ],
+  rules: RULES,
+  clues: CLUES,
+  groups: SPEND_GROUPS,
+  wages: WAGES,
+  subscription: 'Software & subscriptions',
+  matchesInvoices: true,
+};
+
+/** NexGain Retail's categories, in the order they're offered. */
+export const RETAIL_CATEGORIES: RetailCategory[] = [
+  'Stock purchases',
+  'Rent',
+  'Wages',
+  'Shipping & postage',
+  'Packaging',
+  'Marketing',
+  'Utilities',
+  'Shop fit-out & equipment',
+  'Other',
+];
+
+// Checked in order: the first match wins (so "google ads" is Marketing). Tax,
+// bank fees, insurance and software have no retail category of their own: Other.
+export const RETAIL_RULES: [RetailCategory, RegExp][] = [
+  ['Wages', /\b(wages?|salary|payroll|superannuation|super fund|clearing house|australiansuper|rest super|hostplus|cbus)\b/],
+  ['Marketing', /\b(google\s*\*?\s*ads|facebk|facebook|meta ads|instagram|tiktok|pinterest|mailchimp|klaviyo|influencer\w*|advertis\w*|marketing)\b/],
+  [
+    'Shipping & postage',
+    /\b(auspost|australia post|aust post|startrack|sendle|aramex|fastway|couriers? please|dhl|fedex|tnt|ups|shippit|ezypost|parcel ?point|postage|freight|courier\w*|shipping)\b/,
+  ],
+  ['Packaging', /\b(packaging|noissue|hero packaging|packhub|carton\w*|mailer bags?|satchels?|tissue paper|bubble wrap|swing tags?)\b/],
+  [
+    'Utilities',
+    /\b(agl|origin energy|energyaustralia|energy australia|red energy|alinta|simply energy|electricity|gas|water|sydney water|yarra valley water|telstra|optus|vodafone|tpg|aussie broadband|belong|iinet|internet|broadband|nbn)\b/,
+  ],
+  ['Rent', /\b(rent|rental|lease|real estate|property management|westfield|scentre|vicinity centres|stockland|shopping centre|market stall)\b/],
+  [
+    'Shop fit-out & equipment',
+    /\b(shop ?fit\w*|fit-?out|shelving|display stands?|mannequins?|clothing racks?|signage|pos hardware|cash register|barcode scanner|label printer|eftpos terminal|ikea)\b/,
+  ],
+  ['Stock purchases', /\b(wholesal\w*|stock order|inventory|faire|alibaba|aliexpress|trade order|distributor\w*|merchandise)\b/],
+];
+
+const RETAIL_CLUES: [RetailCategory, RegExp, number][] = [
+  [
+    'Stock purchases',
+    /\b(supply|supplies|supplier|trading|imports?|apparel|fashion|textiles?|garments?|clothing|footwear|cosmetics|pharma\w*|distribution|brands?|goods)\b/,
+    0.7,
+  ],
+  ['Wages', /\b(contract(or|ing)?|labour hire|staffing|recruitment|casual staff)\b/, 0.7],
+  ['Shipping & postage', /\b(post|parcel|deliver(y|ies)|express|logistics|transport)\b/, 0.65],
+  ['Packaging', /\b(bags?|boxes|box|wrap\w*|tape|stickers?)\b/, 0.6],
+  ['Marketing', /\b(ads|promo\w*|social|media|flyers?|photograph\w*|campaign)\b/, 0.6],
+  ['Shop fit-out & equipment', /\b(furniture|fixtures?|racks?|hangers|lighting|joinery|cabinet\w*|hardware|equipment)\b/, 0.6],
+  ['Utilities', /\b(mobile|telco|energy|power)\b/, 0.6],
+];
+
+/** NexGain Retail's groups: one per category, so a one-tap answer in "Needs review" is exact. */
+export const RETAIL_SPEND_GROUPS: SpendGroup<RetailSpendGroupId>[] = [
+  { id: 'stock', name: 'Stock', description: 'Stock bought from suppliers', categories: ['Stock purchases'], pick: 'Stock purchases' },
+  { id: 'rent', name: 'Rent', description: 'Shop rent and leases', categories: ['Rent'], pick: 'Rent' },
+  // Payroll's own wages entries are called "Wages & super".
+  { id: 'wages', name: 'Wages', description: 'Staff pay, super and contractors', categories: ['Wages', 'Wages & super'], pick: 'Wages' },
+  { id: 'shipping', name: 'Shipping & postage', description: 'Postage and couriers', categories: ['Shipping & postage'], pick: 'Shipping & postage' },
+  { id: 'packaging', name: 'Packaging', description: 'Bags, boxes and wrapping', categories: ['Packaging'], pick: 'Packaging' },
+  { id: 'marketing', name: 'Marketing', description: 'Ads, social media and promotions', categories: ['Marketing'], pick: 'Marketing' },
+  { id: 'utilities', name: 'Utilities', description: 'Power, water, phone and internet', categories: ['Utilities'], pick: 'Utilities' },
+  {
+    id: 'fitout',
+    name: 'Shop fit-out & equipment',
+    description: 'Shelving, displays and shop equipment',
+    categories: ['Shop fit-out & equipment'],
+    pick: 'Shop fit-out & equipment',
+  },
+  { id: 'other', name: 'Other', description: 'Bank fees, insurance, software and more', categories: ['Other'], pick: 'Other' },
+];
+
+/** System 3: NexGain Retail. */
+export const RETAIL_SCHEME: SortingScheme = {
+  id: 'retail',
+  categories: RETAIL_CATEGORIES,
+  rules: RETAIL_RULES,
+  clues: RETAIL_CLUES,
+  groups: RETAIL_SPEND_GROUPS,
+  wages: 'Wages',
+  subscription: null,
+  matchesInvoices: false,
+};
+
+/** The scheme for a business's system (businesses.system_type). Anything but 'retail' is the usual one. */
+export const schemeForSystem = (systemType: string | null | undefined) => (systemType === 'retail' ? RETAIL_SCHEME : SERVICE_SCHEME);

@@ -8,8 +8,9 @@ import { IndustrySearch } from '@/components/signup/industry-search';
 import type { StepProps } from '@/components/signup/types';
 import type { SystemType } from '@/data/systems';
 import { BookingTypePicker } from '@/systems/bookings/components/signup/booking-type-picker';
+import { RetailTypePicker } from '@/systems/retail/components/signup/retail-type-picker';
 
-/** The two NexGain systems, chosen before the industry (see src/data/systems.ts). */
+/** The three NexGain systems, chosen before the industry (see src/data/systems.ts). */
 const SYSTEMS: { id: SystemType; title: string; subtitle: string; icon: IconName }[] = [
   {
     id: 'service',
@@ -22,6 +23,12 @@ const SYSTEMS: { id: SystemType; title: string; subtitle: string; icon: IconName
     title: 'Customer bookings',
     subtitle: 'Barbers, salons, trainers and others whose customers book appointments.',
     icon: { ios: 'calendar', android: 'event', web: 'event' },
+  },
+  {
+    id: 'retail',
+    title: 'Retail & stock',
+    subtitle: 'Clothing, shoes, chemists, gift shops and brands that sell products and track stock.',
+    icon: { ios: 'bag.fill', android: 'storefront', web: 'storefront' },
   },
 ];
 
@@ -45,7 +52,11 @@ export function StepBusiness({ data, update, onNext }: StepProps) {
     systemType: !data.systemType && 'Choose what your business needs.',
     industry:
       !data.industry &&
-      (data.systemType === 'bookings'
+      (data.systemType === 'retail'
+        ? data.retailType
+          ? 'Type your type of shop.'
+          : 'Choose your type of business.'
+        : data.systemType === 'bookings'
         ? data.bookingTypes.length
           ? 'Type your type of business.'
           : 'Choose your type of business.'
@@ -141,7 +152,7 @@ export function StepBusiness({ data, update, onNext }: StepProps) {
                 key={system.id}
                 onPress={() =>
                   // Switching clears the industry: each choice has its own list.
-                  selected ? undefined : update({ systemType: system.id, industry: null, industryText: '', bookingTypes: [] })
+                  selected ? undefined : update({ systemType: system.id, industry: null, industryText: '', bookingTypes: [], retailType: null })
                 }
                 accessibilityRole="radio"
                 accessibilityState={{ selected }}
@@ -163,6 +174,10 @@ export function StepBusiness({ data, update, onNext }: StepProps) {
 
       {data.systemType === 'bookings' && (
         <BookingTypePicker data={data} update={update} hasError={tried && !!errors.industry} error={tried && errors.industry} />
+      )}
+
+      {data.systemType === 'retail' && (
+        <RetailTypePicker data={data} update={update} hasError={tried && !!errors.industry} error={tried && errors.industry} />
       )}
 
       {data.systemType === 'service' && (

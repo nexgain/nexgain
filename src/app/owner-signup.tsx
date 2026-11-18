@@ -32,6 +32,9 @@ import { homeFor, type SystemType } from '@/data/systems';
 import { countryNeedsBank, EMPTY_PAYER } from '@/lib/payment-files';
 import { StepBookingServices } from '@/systems/bookings/components/signup/step-booking-services';
 import { saveBookingSignup } from '@/systems/bookings/data/bookings';
+import { StepRetailCategories } from '@/systems/retail/components/signup/step-retail-categories';
+import { cleanCategories } from '@/systems/retail/constants/retail-business-types';
+import { saveRetailSignup } from '@/systems/retail/data/retail';
 
 const STEPS = [
   { title: 'Create your account', subtitle: "Let's get started. Create your NexGain owner account." },
@@ -50,6 +53,7 @@ const TEAM_STEP = 7;
 /** Which system the business uses: the chosen industry's, or the owner's choice for their own industry. */
 function systemOfSignup(data: SignupData): SystemType {
   if (data.systemType === 'bookings' && data.bookingTypes.length > 0) return 'bookings';
+  if (data.systemType === 'retail' && data.retailType) return 'retail';
   const industry = data.industry?.category ? findIndustry(data.industry.name) : null;
   return industry?.system ?? (data.systemType === 'bookings' ? 'bookings' : 'service');
 }
@@ -152,6 +156,14 @@ export default function OwnerSignupScreen() {
         });
         if (saved) console.warn('Your services were not saved; they can be added in Services & Prices.', saved);
       }
+      // NexGain Retail: the business type and its product categories.
+      if (business.id && systemOfSignup(data) === 'retail') {
+        const saved = await saveRetailSignup(business.id, {
+          typeId: data.retailType!,
+          categories: cleanCategories(data.retailCategories),
+        });
+        if (saved) console.warn('Your product categories were not saved; they can be added in Stock › Categories.', saved);
+      }
       // New Zealand: the owner's bank decides which payroll file to make (changeable in Payroll bank details).
       if (business.id && countryNeedsBank(data.country) && data.bank) {
         await savePayrollBank({ ...EMPTY_PAYER, country: data.country, bankName: data.bank }).catch(() =>
@@ -218,11 +230,13 @@ export default function OwnerSignupScreen() {
     <SignupShell
       steps={STEP_NAMES}
       step={step}
-      title={STEPS[step].title}
+      title={step === 3 && systemOfSignup(data) === 'retail' ? 'Product categories' : STEPS[step].title}
       subtitle={
         step === 3 && systemOfSignup(data) === 'bookings'
           ? 'Choose the services you offer. Customers pick from these when they book.'
-          : STEPS[step].subtitle
+          : step === 3 && systemOfSignup(data) === 'retail'
+            ? 'The groups your products go in. You add the products themselves in Stock.'
+            : STEPS[step].subtitle
       }
       onBack={goBack}
       onSelectStep={(s) => {
@@ -240,7 +254,14 @@ export default function OwnerSignupScreen() {
       {step === 0 && <StepAccount {...stepProps} />}
       {step === 1 && <StepBusiness {...stepProps} />}
       {step === 2 && <StepType {...stepProps} />}
-      {step === 3 && (systemOfSignup(data) === 'bookings' ? <StepBookingServices {...stepProps} /> : <StepServices {...stepProps} />)}
+      {step === 3 &&
+        (systemOfSignup(data) === 'bookings' ? (
+          <StepBookingServices {...stepProps} />
+        ) : systemOfSignup(data) === 'retail' ? (
+          <StepRetailCategories {...stepProps} />
+        ) : (
+          <StepServices {...stepProps} />
+        ))}
       {step === 4 && <StepSubscription {...stepProps} />}
       {step === 5 && <StepFinancial {...stepProps} />}
       {step === 6 && <StepConnect {...stepProps} accountCreated={accountCreated} ensureAccount={async () => accountCreated || createAccount()} />}

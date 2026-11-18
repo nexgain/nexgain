@@ -5,6 +5,7 @@ import type { EmailApp } from '@/data/business';
 import type { ChosenApp } from '@/data/business-apps';
 import type { SystemType } from '@/data/systems';
 import type { ServiceDraft } from '@/systems/bookings/constants/booking-business-types';
+import type { CategoryDraft } from '@/systems/retail/constants/retail-business-types';
 
 export type SelectedIndustry = {
   name: string;
@@ -22,12 +23,14 @@ export type SignupData = {
   businessName: string;
   logo: string | null;
   abn: string;
-  /** Jobs & quotes (System 1) or customer bookings (NexGain Bookings). Blank until chosen. */
+  /** Jobs & quotes (System 1), customer bookings (NexGain Bookings) or retail & stock (NexGain Retail). Blank until chosen. */
   systemType: SystemType | null;
   industryText: string;
   industry: SelectedIndustry | null;
   /** NexGain Bookings only: the business types chosen (ids from booking-business-types.ts), main one first. */
   bookingTypes: string[];
+  /** NexGain Retail only: the business type picked (an id from retail-business-types.ts). */
+  retailType: string | null;
   // Step 3
   businessType: string;
   teamSize: string;
@@ -45,6 +48,10 @@ export type SignupData = {
   bookingServicesFor: string | null;
   /** NexGain Bookings only: "Do you do the work yourself?" (null until answered). */
   ownerWorks: boolean | null;
+  /** NexGain Retail only: the product categories the shop starts with. */
+  retailCategories: CategoryDraft[];
+  /** The retail type the categories were suggested for. */
+  retailCategoriesFor: string | null;
   // Step 6
   financialYearStartMonth: number;
   gstRegistered: boolean;
@@ -80,6 +87,7 @@ export const EMPTY_SIGNUP: SignupData = {
   industryText: '',
   industry: null,
   bookingTypes: [],
+  retailType: null,
   businessType: 'Service Business',
   teamSize: '1–5',
   vehicles: '0',
@@ -90,6 +98,8 @@ export const EMPTY_SIGNUP: SignupData = {
   bookingServices: [],
   bookingServicesFor: null,
   ownerWorks: null,
+  retailCategories: [],
+  retailCategoriesFor: null,
   financialYearStartMonth: 7,
   gstRegistered: true,
   currency: 'AUD – Australian Dollar',
