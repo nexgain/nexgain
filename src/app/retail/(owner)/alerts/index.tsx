@@ -1,0 +1,61 @@
+import { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+
+import {
+  DeletedBar,
+  FilterPills,
+  NotificationGroups,
+  NotificationsEmpty,
+  OWNER_PALETTE,
+  SearchBar,
+} from '@/components/notifications/notification-views';
+import { ScreenHeader } from '@/systems/retail/components/owner/invoices-ui';
+import { OwnerScreen } from '@/systems/retail/components/owner/ui';
+import {
+  deleteNotification,
+  groupByDate,
+  matchesFilter,
+  matchesSearch,
+  OWNER_FILTERS,
+  ownerNotifications,
+  useNotifications,
+} from '@/data/notifications';
+
+export default function OwnerNotificationsScreen() {
+  // Opened from the Dashboard's "See more" (from=dashboard) or the More tab (from=menu).
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  const all = ownerNotifications(useNotifications());
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<string>('All');
+
+  const searched = all.filter((n) => matchesSearch(n, query));
+  const counts = Object.fromEntries(OWNER_FILTERS.map((f) => [f, searched.filter((n) => matchesFilter(n, f)).length]));
+  const groups = groupByDate(searched.filter((n) => matchesFilter(n, filter)));
+
+  return (
+    <OwnerScreen>
+      <ScreenHeader title="Notifications" onBack={() => router.navigate(from === 'dashboard' ? '/retail/dashboard' : '/retail/menu')} />
+      <SearchBar value={query} onChange={setQuery} palette={OWNER_PALETTE} placeholder="Search notifications..." />
+      <FilterPills filters={OWNER_FILTERS} counts={counts} active={filter} onChange={setFilter} palette={OWNER_PALETTE} />
+      <DeletedBar palette={OWNER_PALETTE} />
+
+      {all.length === 0 ? (
+        <NotificationsEmpty
+          palette={OWNER_PALETTE}
+          message="Roster updates, contractor invoices and payments will show up here as they happen."
+        />
+      ) : groups.length === 0 ? (
+        <NotificationsEmpty palette={OWNER_PALETTE} message="No notifications match your search or filter." />
+      ) : (
+        <NotificationGroups
+          groups={groups}
+          palette={OWNER_PALETTE}
+          onDelete={(n) => deleteNotification(n.id)}
+          onOpen={(n) => {
+            router.push({ pathname: '/retail/alerts/[id]', params: { id: n.id } });
+          }}
+        />
+      )}
+    </OwnerScreen>
+  );
+}

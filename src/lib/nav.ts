@@ -32,7 +32,7 @@ const under = (path: string, list: string[]) => list.some((p) => path === p || p
 export function systemPath(path: string, system = systemOf(businessStore.get())): string {
   if (system !== 'hospitality') return path;
   // Relative links, the start page, login pages and already-prefixed links stay as they are.
-  if (!path.startsWith('/') || path === '/' || under(path, GLOBAL) || under(path, ['/hospitality', '/bookings'])) return path;
+  if (!path.startsWith('/') || path === '/' || under(path, GLOBAL) || under(path, ['/hospitality', '/bookings', '/retail'])) return path;
   const [pathname, query = ''] = path.split('?');
   if (under(pathname, NOT_IN_HOSPITALITY)) {
     console.warn(`"${pathname}" isn't part of NexGain Hospitality; opening the home page instead.`);

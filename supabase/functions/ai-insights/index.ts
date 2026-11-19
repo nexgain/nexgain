@@ -16,6 +16,8 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { adminDb, CORS, env, ownerBusinessId, reply } from '../_shared/connections.ts';
 import { bookingInsights, type BookingRow } from '../_shared/ai/booking-insights.ts';
 import { runHealthCheck } from '../_shared/ai/insights.ts';
+import { loadRetailData } from '../_shared/ai/retail-data.ts';
+import { retailInsights } from '../_shared/ai/retail-insights.ts';
 import { loadSnapshot } from '../_shared/ai/snapshot.ts';
 import type { Insight, InsightArea } from '../_shared/ai/types.ts';
 
@@ -50,11 +52,17 @@ async function bookingChecks(db: SupabaseClient, businessId: string): Promise<In
   });
 }
 
+/** NexGain Retail shops only: reorders, slow stock, best sellers, margins, sell-outs, stock loss, cost rises, staff and busy times. */
+async function retailChecks(db: SupabaseClient, businessId: string): Promise<Insight[]> {
+  const data = await loadRetailData(db, businessId);
+  return data ? retailInsights(data) : [];
+}
+
 /** Checks one business and brings its ai_insights rows up to date. Returns how many it found. */
 async function checkBusiness(db: SupabaseClient, businessId: string, ownerId: string | null) {
   const snapshot = await loadSnapshot(db, businessId);
   if (!snapshot) return 0;
-  const found = [...runHealthCheck(snapshot), ...(await bookingChecks(db, businessId))];
+  const found = [...runHealthCheck(snapshot), ...(await bookingChecks(db, businessId)), ...(await retailChecks(db, businessId))];
   const nowIso = new Date().toISOString();
 
   const { data: existingData, error: readError } = await db

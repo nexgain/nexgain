@@ -18,6 +18,8 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { CORS, env, reply } from '../_shared/connections.ts';
 import { todayKey } from '../_shared/ai/dates.ts';
 import { SYSTEM_PROMPT, withToday } from '../_shared/ai/prompt.ts';
+import { loadRetailData } from '../_shared/ai/retail-data.ts';
+import { RETAIL_PROMPT, RETAIL_TOOL_DEFINITIONS, runRetailTool } from '../_shared/ai/retail-insights.ts';
 import { loadSnapshot } from '../_shared/ai/snapshot.ts';
 import { runTool, TOOL_DEFINITIONS } from '../_shared/ai/tools.ts';
 import type { ResultCard } from '../_shared/ai/types.ts';
@@ -29,6 +31,9 @@ const MAX_ROUNDS = 8;
 const MAX_HISTORY_CHARS = 1_500_000;
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/** Lookups a retail shop doesn't have (no jobs, quotes, customer invoices or clients; its revenue is its sales). */
+const NOT_FOR_RETAIL = new Set(['search_jobs', 'search_invoices', 'search_clients', 'get_revenue_and_profit']);
 
 type Block = { type: string; [key: string]: unknown };
 type MessageParam = { role: 'user' | 'assistant'; content: string | Block[] };
@@ -65,6 +70,15 @@ Deno.serve(async (req) => {
 
   const snapshot = await loadSnapshot(db, business.id as string);
   if (!snapshot) return reply(500, { error: 'no_data', message: "Couldn't load your business data. Please try again." });
+  // NexGain Retail shops: their stock and sales, and the retail lookups (null for anyone else).
+  const retail = await loadRetailData(db, business.id as string);
+  const tools = retail ? [...TOOL_DEFINITIONS.filter((t) => !NOT_FOR_RETAIL.has(t.name)), ...RETAIL_TOOL_DEFINITIONS] : TOOL_DEFINITIONS;
+  const system = retail
+    ? [
+        { type: 'text', text: SYSTEM_PROMPT },
+        { type: 'text', text: RETAIL_PROMPT, cache_control: { type: 'ephemeral' } },
+      ]
+    : [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }];
 
   const now = new Date();
   const messages: MessageParam[] = [
@@ -87,8 +101,8 @@ Deno.serve(async (req) => {
         thinking: { type: 'adaptive', block_binding: { prefix_mismatch_behavior: 'drop_block' } },
         output_config: { effort: 'medium' },
         // The instructions and tools never change, so they're cached between messages.
-        system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
-        tools: TOOL_DEFINITIONS,
+        system,
+        tools,
         messages,
       };
       const response = await client.beta.messages.create(params as unknown as Parameters<typeof client.beta.messages.create>[0]);
@@ -115,8 +129,10 @@ Deno.serve(async (req) => {
 
       // Run every lookup Claude asked for, then send all the results back together.
       const results = toolUses.map((use) => {
-        const outcome = runTool(snapshot, String(use.name), (use.input ?? {}) as Record<string, unknown>, now);
-        if (outcome.cards) cards.push(...outcome.cards);
+        const name = String(use.name);
+        const input = (use.input ?? {}) as Record<string, unknown>;
+        const outcome = retail && name.startsWith('retail_') ? runRetailTool(retail, name, input, now) : runTool(snapshot, name, input, now);
+        if ('cards' in outcome && outcome.cards) cards.push(...outcome.cards);
         return { type: 'tool_result', tool_use_id: String(use.id), content: JSON.stringify(outcome.result) };
       });
       messages.push({ role: 'user', content: results });

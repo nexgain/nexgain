@@ -1,5 +1,5 @@
 -- =====================================================================
--- NexGain Hospitality (System 3): cafes, restaurants and other food
+-- NexGain Hospitality (System 4): cafes, restaurants and other food
 -- businesses. Phase 1: the menu and sales.
 --
 --   menu_categories   the menu's sections, e.g. Coffee, Breakfast, Cakes
@@ -17,17 +17,19 @@
 -- Staff recording sales comes later, behind the owner's "Staff can record
 -- sales" switch.
 --
--- Run once, after the earlier files:
+-- Run once, after the earlier files (including the NexGain Retail files
+-- 20261127000000 to 20261127000600, which must run first):
 --   Supabase > SQL Editor > New query > paste this whole file > Run.
 -- Safe to run again.
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
--- A third system: 'hospitality'. Every existing business stays as it is.
+-- A fourth system: 'hospitality'. Every existing business stays as it is.
+-- (Keeps 'retail', added by 20261127000000_retail.sql.)
 -- ---------------------------------------------------------------------
 alter table public.businesses drop constraint if exists businesses_system_type_check;
 alter table public.businesses add constraint businesses_system_type_check
-  check (system_type in ('service', 'bookings', 'hospitality'));
+  check (system_type in ('service', 'bookings', 'retail', 'hospitality'));
 
 -- ---------------------------------------------------------------------
 -- Tables

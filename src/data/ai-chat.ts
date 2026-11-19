@@ -15,7 +15,7 @@ import { newId } from '@/lib/ids';
 import { sessionStorage as phoneStorage } from '@/lib/session-storage';
 import { supabase } from '@/lib/supabase';
 
-import { answerQuestion, type RosterProposal } from '../../supabase/functions/_shared/ai/answer';
+import { answerQuestion, type FreeAnswer, type RosterProposal } from '../../supabase/functions/_shared/ai/answer';
 import type { ResultCard } from '../../supabase/functions/_shared/ai/types';
 
 /**
@@ -25,6 +25,21 @@ import type { ResultCard } from '../../supabase/functions/_shared/ai/types';
  * deployed; each of those questions costs a few cents).
  */
 export const USE_CLAUDE = false;
+
+/**
+ * Extra free answers for one system, tried before the normal ones (NexGain
+ * Retail's stock and sales questions). null = none (the other systems).
+ * `first` returns null for questions it doesn't handle; `notUnderstood` is
+ * the reply when nothing understood the question.
+ */
+export type ExtraAnswers = {
+  first: (question: string, now: Date) => FreeAnswer | null;
+  notUnderstood: () => FreeAnswer;
+};
+let extraAnswers: ExtraAnswers | null = null;
+export function setExtraAnswers(answers: ExtraAnswers | null) {
+  extraAnswers = answers;
+}
 
 /** How many previous chats are kept on the phone (oldest are dropped). */
 const MAX_SAVED_CHATS = 30;
@@ -165,7 +180,12 @@ export async function askAssistant(question: string, options: { jobId?: string }
   // Free first: answered on the phone from the owner's own data (or the sample business in the preview).
   let free: ReturnType<typeof answerQuestion> | null = null;
   try {
-    free = answerQuestion(sample ?? (await appSnapshot()), text, new Date(), context);
+    const extra = sample ? null : extraAnswers;
+    free = extra?.first(text, new Date()) ?? null;
+    if (!free) {
+      free = answerQuestion(sample ?? (await appSnapshot()), text, new Date(), context);
+      if (!free.understood && extra) free = extra.notUnderstood();
+    }
   } catch (e) {
     console.warn('Free AI answer failed:', e instanceof Error ? e.message : e);
   }

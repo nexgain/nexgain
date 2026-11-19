@@ -32,6 +32,9 @@ import { homeFor, type SystemType } from '@/data/systems';
 import { countryNeedsBank, EMPTY_PAYER } from '@/lib/payment-files';
 import { StepBookingServices } from '@/systems/bookings/components/signup/step-booking-services';
 import { saveBookingSignup } from '@/systems/bookings/data/bookings';
+import { StepRetailCategories } from '@/systems/retail/components/signup/step-retail-categories';
+import { cleanCategories } from '@/systems/retail/constants/retail-business-types';
+import { saveRetailSignup } from '@/systems/retail/data/retail';
 import { StepStarterMenu } from '@/systems/hospitality/components/signup/step-starter-menu';
 import { findHospitalityType } from '@/systems/hospitality/constants/hospitality-types';
 import { saveStarterMenu } from '@/systems/hospitality/data/menu';
@@ -54,6 +57,7 @@ const TEAM_STEP = 7;
 function systemOfSignup(data: SignupData): SystemType {
   if (data.systemType === 'hospitality') return 'hospitality';
   if (data.systemType === 'bookings' && data.bookingTypes.length > 0) return 'bookings';
+  if (data.systemType === 'retail' && data.retailType) return 'retail';
   const industry = data.industry?.category ? findIndustry(data.industry.name) : null;
   return industry?.system ?? (data.systemType === 'bookings' ? 'bookings' : 'service');
 }
@@ -156,6 +160,14 @@ export default function OwnerSignupScreen() {
         });
         if (saved) console.warn('Your services were not saved; they can be added in Services & Prices.', saved);
       }
+      // NexGain Retail: the business type and its product categories.
+      if (business.id && systemOfSignup(data) === 'retail') {
+        const saved = await saveRetailSignup(business.id, {
+          typeId: data.retailType!,
+          categories: cleanCategories(data.retailCategories),
+        });
+        if (saved) console.warn('Your product categories were not saved; they can be added in Stock › Categories.', saved);
+      }
       // NexGain Hospitality: the starter menu categories.
       if (business.id && systemOfSignup(data) === 'hospitality') {
         const saved = await saveStarterMenu(business.id, data.menuCategories);
@@ -231,17 +243,19 @@ export default function OwnerSignupScreen() {
   const subtitle =
     step === 3 && system === 'bookings'
       ? 'Choose the services you offer. Customers pick from these when they book.'
-      : step === 3 && hospitality
-        ? 'Your menu’s sections. Each business type starts with a layout that suits it.'
-        : step === EMAIL_STEP && hospitality
-          ? 'How you send emails (like supplier orders), and your bank details.'
-          : STEPS[step].subtitle;
+      : step === 3 && system === 'retail'
+        ? 'The groups your products go in. You add the products themselves in Stock.'
+        : step === 3 && hospitality
+          ? 'Your menu’s sections. Each business type starts with a layout that suits it.'
+          : step === EMAIL_STEP && hospitality
+            ? 'How you send emails (like supplier orders), and your bank details.'
+            : STEPS[step].subtitle;
 
   return (
     <SignupShell
       steps={hospitality ? STEP_NAMES.map((n) => (n === 'Services' ? 'Menu' : n)) : STEP_NAMES}
       step={step}
-      title={step === 3 && hospitality ? 'Your starter menu' : STEPS[step].title}
+      title={step === 3 && hospitality ? 'Your starter menu' : step === 3 && system === 'retail' ? 'Product categories' : STEPS[step].title}
       subtitle={subtitle}
       onBack={goBack}
       onSelectStep={(s) => {
@@ -262,6 +276,8 @@ export default function OwnerSignupScreen() {
       {step === 3 &&
         (system === 'bookings' ? (
           <StepBookingServices {...stepProps} />
+        ) : system === 'retail' ? (
+          <StepRetailCategories {...stepProps} />
         ) : hospitality ? (
           <StepStarterMenu {...stepProps} />
         ) : (

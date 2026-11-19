@@ -116,9 +116,6 @@
     .terms { background: var(--amber-soft); color: #78350f; border-radius: 12px; padding: 12px 14px; margin-top: 14px; font-size: 14px; }
     .terms strong { display: block; margin-bottom: 4px; }
     .terms p { margin: 4px 0 0; }
-    .channels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
-    .channel { background: #fff; border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 4px; font-size: 15px; min-height: 44px; }
-    .channel.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); }
     .pay-box { border: 1.5px dashed var(--line); border-radius: 12px; padding: 12px 14px; margin-top: 12px; font-size: 14px; color: var(--muted); }
     .who { display: flex; align-items: center; gap: 12px; }
     .avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none; display: inline-flex; align-items: center; justify-content: center;
@@ -349,8 +346,8 @@
     var pickedService = null;
     var pickedStaff = null; // null = anyone available
     var pickedSlot = null;
-    // confirmBy: how they want their confirmation: 'email', 'sms' (text) or 'both'.
-    var details = { name: '', phone: '', email: '', notes: '', confirmBy: 'email' };
+    // The confirmation is emailed automatically (and texted too, once text messages are set up).
+    var details = { name: '', phone: '', email: '', notes: '' };
 
     /** The bookable people who do this service. */
     function staffFor(service) {
@@ -538,15 +535,9 @@
         ]),
       ].concat(
         field('name', 'Your name', 'text', { autocomplete: 'name', maxlength: 100, required: true }),
-        [
-          el('label', { text: 'Send my confirmation by' }),
-          el('div', { class: 'channels', role: 'radiogroup', 'aria-label': 'Send my confirmation by' }, [['email', 'Email'], ['sms', 'Text'], ['both', 'Both']].map(function (c) {
-            return el('button', { class: 'channel' + (details.confirmBy === c[0] ? ' on' : ''), type: 'button', role: 'radio', 'aria-checked': details.confirmBy === c[0] ? 'true' : 'false',
-              onclick: function () { details.confirmBy = c[0]; enterDetails(); }, text: c[1] });
-          })),
-        ],
-        field('phone', details.confirmBy === 'email' ? 'Mobile number (optional)' : 'Mobile number', 'tel', { autocomplete: 'tel', maxlength: 30, required: details.confirmBy !== 'email' }),
-        field('email', details.confirmBy === 'sms' ? 'Email (optional)' : 'Email', 'email', { autocomplete: 'email', maxlength: 200, required: details.confirmBy !== 'sms' }),
+        field('email', 'Email', 'email', { autocomplete: 'email', maxlength: 200, required: true }),
+        field('phone', 'Mobile number (optional)', 'tel', { autocomplete: 'tel', maxlength: 30 }),
+        [el('p', { class: 'muted', text: 'We’ll email your booking confirmation.' })],
         notes,
         [
           errorText ? el('div', { class: 'error', role: 'alert', text: errorText }) : null,
@@ -563,10 +554,9 @@
       details.phone = details.phone.trim();
       details.email = details.email.trim();
       if (!details.name) return enterDetails('Please enter your name.');
-      var wantsText = details.confirmBy !== 'email', wantsEmail = details.confirmBy !== 'sms';
       var phoneDigits = details.phone.replace(/[^0-9]/g, '').length;
-      if ((wantsText || details.phone) && phoneDigits < 6) return enterDetails('Please enter your mobile number.');
-      if ((wantsEmail || details.email) && !/^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]+$/.test(details.email)) return enterDetails('Please enter a valid email address.');
+      if (details.phone && phoneDigits < 6) return enterDetails('Please check your mobile number.');
+      if (!/^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]+$/.test(details.email)) return enterDetails('Please enter a valid email address.');
       button.disabled = true;
       var hasDeposit = !!depositText(pickedService, pickedStaff);
       button.textContent = hasDeposit ? 'Paying…' : 'Booking…';
@@ -574,7 +564,7 @@
         .then(function (paid) {
           if (!paid.ok) { var e = new Error(paid.message || 'The payment didn’t go through.'); e.code = 'payment'; throw e; }
           return post({ action: 'book', b: slug, service: pickedService.id, staff: pickedStaff || '', start: pickedSlot.start,
-            name: details.name, phone: details.phone, email: details.email, notes: details.notes, paymentToken: paid.token, confirmBy: details.confirmBy });
+            name: details.name, phone: details.phone, email: details.email, notes: details.notes, paymentToken: paid.token, confirmBy: 'both' });
         })
         .then(function (r) { done(r.booking, r, 'booked'); })
         .catch(function (e) {
@@ -605,12 +595,11 @@
 
     /** "We’ve emailed … and texted …", or what to do when neither could be sent. */
     function sentText(b, r) {
-      var by = b.confirmBy || 'email';
       var bits = [];
       if (r.emailed) bits.push('emailed ' + b.customerEmail);
       if (r.texted) bits.push('texted ' + b.customerPhone);
-      if (bits.length) return 'We’ve ' + bits.join(' and ') + ' the details.' + (by === 'both' && bits.length === 1 ? ' (The other message couldn’t be sent.)' : '');
-      return 'Please take a screenshot of this page or save the link below; a confirmation couldn’t be sent' + (by === 'sms' ? ' by text right now.' : '.');
+      if (bits.length) return 'We’ve ' + bits.join(' and ') + ' your confirmation.';
+      return 'Please take a screenshot of this page or save the link below; a confirmation couldn’t be sent right now.';
     }
 
     function done(b, r, kind) {

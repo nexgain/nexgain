@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 
-// NexGain Hospitality (System 3): the owner and employee sections for cafes,
+// NexGain Hospitality (System 4): the owner and employee sections for cafes,
 // restaurants and other food businesses. Everything lives under
 // /hospitality/. Hospitality-only screens (Menu, Sales...) are in
 // (owner)/ here and src/systems/hospitality; the rest (Payroll, Transactions,

@@ -366,7 +366,12 @@ export async function createBusinessOnline(profile: Omit<BusinessProfile, 'id' |
     }
     if (systemError) console.warn('Could not save the booking system:', systemError.message);
   }
-  // NexGain Hospitality businesses (System 3).
+  // NexGain Retail businesses (System 3).
+  if (profile.systemType === 'retail') {
+    const { error: systemError } = await supabase.from('businesses').update({ system_type: 'retail' }).eq('id', created.id);
+    if (systemError) console.warn('Could not save the retail system:', systemError.message);
+  }
+  // NexGain Hospitality businesses (System 4).
   if (profile.systemType === 'hospitality') {
     const { error: systemError } = await supabase.from('businesses').update({ system_type: 'hospitality' }).eq('id', created.id);
     if (systemError) console.warn('Could not save the hospitality system:', systemError.message);

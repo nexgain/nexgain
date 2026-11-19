@@ -19,6 +19,7 @@
 // Setup: deploy as "sort-transactions" with "Verify JWT" ON (the default).
 import Anthropic from 'npm:@anthropic-ai/sdk@1';
 
+import { RETAIL_CATEGORIES } from '../_shared/ai/sorting.ts';
 import { ownerBusiness } from '../_shared/banks.ts';
 import { adminDb, CORS, reply } from '../_shared/connections.ts';
 
@@ -41,13 +42,16 @@ const CATEGORIES = [
   'Other',
 ];
 
+/** NexGain Retail (System 3): its own categories (RETAIL_SCHEME in _shared/ai/sorting.ts). */
+const RETAIL = [...RETAIL_CATEGORIES, 'Transfers'];
+
 /** Below this, the owner is asked (same as REVIEW_BELOW in _shared/ai/sorting.ts). */
 const SURE = 0.6;
 /** Transactions per Claude request, and most handled per call. */
 const BATCH = 40;
 const MAX = 120;
 
-const SCHEMA = {
+const schemaFor = (categories: string[]) => ({
   type: 'object',
   additionalProperties: false,
   required: ['results'],
@@ -60,13 +64,30 @@ const SCHEMA = {
         required: ['n', 'category', 'confidence'],
         properties: {
           n: { type: 'integer', description: 'The transaction number from the list' },
-          category: { type: 'string', enum: CATEGORIES },
+          category: { type: 'string', enum: categories },
           confidence: { type: 'number', description: 'How sure, from 0 to 1' },
         },
       },
     },
   },
-} as const;
+});
+
+/** NexGain Retail: shops and brands that sell products. */
+function retailPrompt(business: { name: string; industry: string | null }) {
+  return `You sort bank transactions (money going out) for an Australian retail shop's bookkeeping app.
+The business: "${business.name}"${business.industry ? `, a ${business.industry}` : ''}. It sells physical products and keeps stock.
+
+For each transaction pick the single best category from the list, and a confidence from 0 to 1.
+- "Stock purchases" is buying the products the shop sells: wholesalers, suppliers, brands and distributors (e.g. a clothing wholesaler for a boutique, a pharmacy wholesaler like Sigma or API for a chemist).
+- "Shipping & postage" is Australia Post, StarTrack, Sendle, couriers and freight. "Packaging" is bags, boxes, mailers, tissue and tags.
+- "Marketing" is ads (Google, Facebook, Instagram, TikTok), email marketing, influencers and promotions.
+- "Utilities" is power, gas, water, phone and internet. "Rent" is the shop's rent or lease (including shopping centres).
+- "Shop fit-out & equipment" is shelving, displays, racks, signage, POS hardware and other shop equipment.
+- "Wages" is paying staff or super funds. "Transfers" is moving money between the business's own accounts, or loan/credit card repayments.
+- "Other" is for business costs that fit no other category (bank fees, insurance, software, tax).
+- Be honest about confidence. Use 0.8 or more only when the merchant or description makes it clear. Use under 0.6 when you're guessing (e.g. a person's name, a vague code, a shop that sells many kinds of things). The owner is asked about anything under 0.6.
+Return one result for every transaction number.`;
+}
 
 function systemPrompt(business: { name: string; industry: string | null }) {
   return `You sort bank transactions (money going out) for an Australian small business's bookkeeping app.
@@ -98,10 +119,14 @@ Deno.serve(async (req) => {
     return reply(503, { error: 'setup', message: 'AI sorting isn’t set up yet.' });
   }
 
-  const { data: business } = await db.from('businesses').select('name, industry').eq('id', owner.id).maybeSingle<{
+  const { data: business } = await db.from('businesses').select('name, industry, system_type').eq('id', owner.id).maybeSingle<{
     name: string | null;
     industry: string | null;
+    system_type: string | null;
   }>();
+  const retail = business?.system_type === 'retail';
+  const categories = retail ? RETAIL : CATEGORIES;
+  const prompt = (retail ? retailPrompt : systemPrompt)({ name: business?.name || 'this business', industry: business?.industry ?? null });
 
   // Money out that the quick rules weren't sure about, not yet seen by Claude or the owner.
   const { data, error } = await db
@@ -151,8 +176,8 @@ Deno.serve(async (req) => {
         max_tokens: 8000,
         betas: ['server-side-fallback-2026-07-01'],
         fallbacks: 'default',
-        output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
-        system: systemPrompt({ name: business?.name || 'this business', industry: business?.industry ?? null }),
+        output_config: { effort: 'low', format: { type: 'json_schema', schema: schemaFor(categories) } },
+        system: prompt,
         messages: [{ role: 'user', content: `Sort these transactions:\n${list}` }],
       });
       if (response.stop_reason === 'refusal' || response.stop_reason === 'max_tokens') {
@@ -168,7 +193,7 @@ Deno.serve(async (req) => {
 
     for (const [n, row] of batch.entries()) {
       const r = results.find((x) => x.n === n + 1);
-      const valid = r && CATEGORIES.includes(r.category) && Number.isFinite(r.confidence);
+      const valid = r && categories.includes(r.category) && Number.isFinite(r.confidence);
       const confidence = valid ? Math.max(0, Math.min(1, Math.round(r.confidence * 100) / 100)) : 0;
       const sure = valid && confidence >= SURE;
       // Marked "claude" either way, so it's never sent twice; only a sure answer changes the category.

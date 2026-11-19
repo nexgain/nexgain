@@ -179,21 +179,22 @@ export function smsMessage(kind: Kind, view: View) {
 }
 
 /**
- * Sends the customer their confirmation (or change / cancellation) the way they
- * chose: email, text or both. Never stops the booking if it can't.
+ * Sends the customer their confirmation (or change / cancellation)
+ * automatically by email, and by text to the mobile number they entered too
+ * (texts only once Twilio is set up; until then they're skipped, at no cost).
+ * Never stops the booking if it can't.
  */
 async function notifyCustomer(db: Db, token: string, kind: Kind, view: View) {
   const sent = { email: false, sms: false };
   try {
     const { data: bk } = await db.from('bookings').select('business_id').eq('manage_token', token).maybeSingle();
     if (!bk) return sent;
-    const by = view.confirmBy ?? 'email';
-    if ((by === 'email' || by === 'both') && EMAIL.test(view.customerEmail)) {
+    if (EMAIL.test(view.customerEmail)) {
       const { subject, body } = emailMessage(kind, view);
       const r = await sendEmail(db, { businessId: bk.business_id, to: view.customerEmail, subject, text: body, fromName: view.business.name, replyTo: view.business.email });
       sent.email = r.sent;
     }
-    if ((by === 'sms' || by === 'both') && view.customerPhone) {
+    if (view.customerPhone) {
       const { data: biz } = await db.from('businesses').select('country').eq('id', bk.business_id).maybeSingle();
       const r = await sendSms({ to: view.customerPhone, country: biz?.country ?? null, text: smsMessage(kind, view) });
       sent.sms = r.sent;
@@ -371,11 +372,10 @@ Deno.serve(async (req) => {
     }
     let booking = result.booking;
     // Money: take the deposit after booking; refund it / charge the fee after cancelling.
-    // How the customer wants their confirmation: email, text or both.
+    // Confirmations always go to the email (and the mobile, once texts are set up).
     if (kind === 'booked') {
-      const confirmBy = ['email', 'sms', 'both'].includes(body.confirmBy) ? body.confirmBy : 'email';
-      await db.from('bookings').update({ confirm_by: confirmBy }).eq('manage_token', booking.token);
-      booking = { ...booking, confirmBy };
+      await db.from('bookings').update({ confirm_by: 'both' }).eq('manage_token', booking.token);
+      booking = { ...booking, confirmBy: 'both' };
     }
     if (kind === 'booked' && Number(booking.depositAmount ?? 0) > 0) {
       const paid = await settleDeposit(db, booking, typeof body.paymentToken === 'string' ? body.paymentToken : null);

@@ -16,6 +16,7 @@ import Anthropic from 'npm:@anthropic-ai/sdk@1';
 
 import { ownerBusiness } from '../_shared/banks.ts';
 import { adminDb, CORS, reply, toBase64 } from '../_shared/connections.ts';
+import { RETAIL_CATEGORIES } from '../_shared/ai/sorting.ts';
 import { applyReceiptCategory, matchReceipt, RECEIPT_COLUMNS, type ReceiptRow } from '../_shared/receipts.ts';
 
 // Must match TRANSACTION_CATEGORIES in the app (src/data/bank.ts), minus the ones a receipt can't be.
@@ -34,9 +35,12 @@ const CATEGORIES = [
   'Other',
 ];
 
+/** NexGain Retail (System 3): its own categories (RETAIL_SCHEME in _shared/ai/sorting.ts). */
+const RETAIL: string[] = RETAIL_CATEGORIES;
+
 const nullable = (schema: Record<string, unknown>) => ({ anyOf: [schema, { type: 'null' }] });
 
-const SCHEMA = {
+const schemaFor = (categories: string[]) => ({
   type: 'object',
   additionalProperties: false,
   required: ['is_receipt', 'supplier', 'abn', 'date', 'total', 'gst', 'line_items', 'category', 'crop', 'rotation'],
@@ -60,7 +64,7 @@ const SCHEMA = {
         },
       },
     },
-    category: { type: 'string', enum: CATEGORIES },
+    category: { type: 'string', enum: categories },
     crop: nullable({
       type: 'object',
       additionalProperties: false,
@@ -70,7 +74,7 @@ const SCHEMA = {
     }),
     rotation: { type: 'integer', enum: [0, 90, 180, 270], description: 'Degrees clockwise to turn the image so the text reads upright' },
   },
-} as const;
+});
 
 const SYSTEM = `You read receipts, tax invoices and bills for an Australian small-business bookkeeping app.
 Copy what is printed; never guess. Use null for anything that isn't shown or can't be read clearly.
@@ -81,6 +85,12 @@ Copy what is printed; never guess. Use null for anything that isn't shown or can
 - category: what the purchase is for a trade or service business. Fuel = petrol/diesel at a service station. Materials & supplies = building, plumbing, electrical, hardware and job materials. Equipment & tools = tools and equipment bought or hired. Vehicle = repairs, servicing, tyres, rego, tolls, parking. Use Other if nothing fits.
 - crop: where the receipt paper is in the photo, so the photo can be trimmed. Use null for a PDF, a screenshot, or when the receipt already fills the image.
 - rotation: 0 if the text already reads upright.`;
+
+/** The same instructions, with NexGain Retail's categories. */
+const RETAIL_SYSTEM = SYSTEM.replace(
+  /- category: .*\n/,
+  '- category: what the purchase is for a retail shop. Stock purchases = products the shop sells, bought from a wholesaler, supplier or brand. Shipping & postage = Australia Post, couriers and freight. Packaging = bags, boxes, mailers and tags. Marketing = ads and promotions. Utilities = power, gas, water, phone and internet. Rent = shop rent. Shop fit-out & equipment = shelving, displays, signage and shop equipment. Wages = staff pay. Use Other if nothing fits.\n',
+);
 
 type Reading = {
   is_receipt: boolean;
@@ -124,6 +134,10 @@ Deno.serve(async (req) => {
   const business = await ownerBusiness(req, db).catch(() => null);
   if (!business) return reply(403, { error: 'forbidden', message: 'Only a business owner can add receipts.' });
 
+  const { data: owner } = await db.from('businesses').select('system_type').eq('id', business.id).maybeSingle();
+  const retail = owner?.system_type === 'retail';
+  const categories = retail ? RETAIL : CATEGORIES;
+
   const { data: receipt } = await db
     .from('receipts')
     .select(`${RECEIPT_COLUMNS}, file_path, file_type`)
@@ -162,8 +176,8 @@ Deno.serve(async (req) => {
       // If Claude declines (a false positive), Anthropic's recommended fallback model reads it instead.
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
-      system: SYSTEM,
+      output_config: { effort: 'medium', format: { type: 'json_schema', schema: schemaFor(categories) } },
+      system: retail ? RETAIL_SYSTEM : SYSTEM,
       messages: [{ role: 'user', content: [fileBlock, { type: 'text', text: 'Read this receipt.' }] }],
     });
 
@@ -187,7 +201,7 @@ Deno.serve(async (req) => {
         quantity: l.quantity,
         amount: money(l.amount),
       })),
-      category: CATEGORIES.includes(reading.category) ? reading.category : 'Other',
+      category: categories.includes(reading.category) ? reading.category : 'Other',
       updated_at: new Date().toISOString(),
     };
     const { error: saveError } = await db.from('receipts').update(fields).eq('id', receipt.id);

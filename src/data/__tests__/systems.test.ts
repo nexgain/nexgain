@@ -35,4 +35,11 @@ describe('which system opens after login', () => {
     expect(homeFor('owner', fakeBookingBusiness)).toBe('/bookings/dashboard');
     expect(homeFor('employee', fakeBookingBusiness)).toBe('/bookings/home');
   });
+
+  it('opens NexGain Retail for retail businesses, for the owner and their employees', () => {
+    const fakeRetailBusiness = { systemType: 'retail' as const };
+    expect(systemOf(fakeRetailBusiness)).toBe('retail');
+    expect(homeFor('owner', fakeRetailBusiness)).toBe('/retail/dashboard');
+    expect(homeFor('employee', fakeRetailBusiness)).toBe('/retail/home');
+  });
 });

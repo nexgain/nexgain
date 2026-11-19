@@ -11,6 +11,11 @@
 // the AI read the ones it isn't sure about (askAi), and matches money coming
 // in to unpaid invoices. "Needs review" (reviewItems)
 // asks the owner about anything NexGain isn't sure of.
+//
+// The categories and groups come from the business's system (see the schemes
+// in supabase/functions/_shared/ai/sorting.ts): Systems 1 and 2 use the usual
+// ones; NexGain Retail uses its own (Stock purchases, Rent, Wages...) and has
+// no invoices to match.
 import { businessStore, updateBusiness, useBusiness } from '@/data/business';
 import {
   bankSyncListeners,
@@ -41,9 +46,10 @@ import {
   groupOf,
   matchPayment,
   merchantKey,
+  groupById,
   REVIEW_BELOW,
+  schemeForSystem,
   sortTransaction,
-  SPEND_GROUPS,
   suburbOf,
   suggestJob,
   travelCosts,
@@ -64,6 +70,17 @@ export {
   type SpendGroupId,
   type UnpaidInvoice,
 } from '../../supabase/functions/_shared/ai/sorting';
+
+/** The categories and groups for the signed-in business's system. */
+export const currentScheme = () => schemeForSystem(businessStore.get()?.systemType);
+/**
+ * The groups on the Transactions page, for this business's system. Typed with
+ * System 1's group ids so its screens are unchanged; for NexGain Retail they're
+ * really RetailSpendGroupId ('stock', 'rent'...), and only the retail screens see them.
+ */
+export const currentSpendGroups = () => currentScheme().groups as SpendGroup[];
+/** A group by id, for this business's system. */
+export const currentGroupById = (id: string) => groupById(id, currentSpendGroups());
 
 // ---------------------------------------------------------------------------
 // The feed: real bank data or the sample preview
@@ -184,7 +201,7 @@ function sortNew(transactions: BankTransaction[], ctx: SortContext) {
   const changed: BankTransaction[] = [];
   const all = transactions.map((t) => {
     if (t.categorySource !== 'auto' || t.categoryMethod !== null) return t;
-    const s = sortTransaction(asInput(t), ctx);
+    const s = sortTransaction(asInput(t), ctx, currentScheme());
     const next = { ...t, category: s.category, confidence: s.confidence, categoryMethod: s.method };
     changed.push(next);
     return next;
@@ -234,7 +251,7 @@ async function runProcess() {
   bankTransactionsStore.set(all);
 
   // New money in: one clear invoice match is marked paid automatically.
-  const invoices = unpaidInvoicesOf(docsStore.get());
+  const invoices = currentScheme().matchesInvoices ? unpaidInvoicesOf(docsStore.get()) : [];
   for (const t of changed) {
     if (t.amount <= 0 || t.category !== INCOME_CATEGORY || t.invoiceId || t.invoiceReviewDone) continue;
     const match = matchPayment(t, invoices);
@@ -319,8 +336,11 @@ export function reviewItems(feed: MoneyFeed): ReviewItem[] {
   const invoiceItems: ReviewItem[] = [];
   const categoryItems: ReviewItem[] = [];
   const jobItems: ReviewItem[] = [];
+  const matchesInvoices = currentScheme().matchesInvoices;
   for (const t of feed.transactions) {
     if (t.amount > 0) {
+      // NexGain Retail has no customer invoices, so money in is never asked about.
+      if (!matchesInvoices) continue;
       if (t.category !== INCOME_CATEGORY || t.invoiceId || t.invoiceReviewDone || daysSince(t.date) > 60) continue;
       const match = matchPayment(t, feed.invoices);
       if (match.kind === 'several') invoiceItems.push({ kind: 'invoice', txn: t, invoices: match.invoices });
@@ -603,7 +623,7 @@ export function transactionRanges(now = new Date()): MoneyRange[] {
 function spending(items: TransactionItem[], start: Date, end: Date, group?: SpendGroupId) {
   return items.filter((i) => {
     if (i.amount >= 0 || i.date < start || i.date >= end) return false;
-    const g = groupOf(i.category);
+    const g = groupOf(i.category, currentSpendGroups());
     return g !== null && (!group || g === group);
   });
 }
@@ -630,16 +650,16 @@ export type GroupSummary = {
 };
 
 export function groupSummary(items: TransactionItem[], range: MoneyRange, groupId: SpendGroupId): GroupSummary {
-  const group = SPEND_GROUPS.find((g) => g.id === groupId)!;
+  const group = currentSpendGroups().find((g) => g.id === groupId)!;
   const inPeriod = spending(items, range.start, range.end, groupId);
   const now = total(inPeriod);
   const previous = range.previous ? total(spending(items, range.previous.start, range.previous.end, groupId)) : null;
   return { group, items: inPeriod, total: now, previous, change: changePercent(now, previous), upALot: isUpALot(now, previous) };
 }
 
-/** The six groups, in order: Materials, Labour, Tools, Fuel, Vehicle, Other. */
+/** The groups, in order: Materials, Labour, Tools, Fuel, Vehicle, Other (NexGain Retail: Stock, Rent, Wages...). */
 export function groupSummaries(items: TransactionItem[], range: MoneyRange) {
-  return SPEND_GROUPS.map((g) => groupSummary(items, range, g.id));
+  return currentSpendGroups().map((g) => groupSummary(items, range, g.id));
 }
 
 /** A group's spending in each of the last few months (this month last), for the bar chart. */
@@ -669,12 +689,14 @@ const todayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() +
 export function groupInsight(summary: GroupSummary, range: MoneyRange, jobs: JobOption[], purchases: ProductPurchase[] = []): string {
   const name = summary.group.name.toLowerCase();
 
-  // Materials: the same product costing more than last time (from receipts), not total spending.
-  if (summary.group.id === 'materials') {
+  // Materials (NexGain Retail: Stock): the same product costing more than last time (from receipts), not total spending.
+  const groupId: string = summary.group.id;
+  if (groupId === 'materials' || groupId === 'stock') {
     const rise = productPriceRises(purchases, todayKey())[0];
     if (rise) {
       const at = rise.now.supplier ? ` at ${rise.now.supplier}` : '';
-      return `${rise.product} went up ${rise.changePercent}%${at}: ${formatMoney(rise.before.unitPrice)} last time, ${formatMoney(rise.now.unitPrice)} now. Ask about the rise or compare another supplier, and update your quote prices to cover it.`;
+      const advice = groupId === 'stock' ? 'check your sell price still covers it' : 'update your quote prices to cover it';
+      return `${rise.product} went up ${rise.changePercent}%${at}: ${formatMoney(rise.before.unitPrice)} last time, ${formatMoney(rise.now.unitPrice)} now. Ask about the rise or compare another supplier, and ${advice}.`;
     }
   }
   if (summary.items.length === 0) return `No ${name} spending in this period yet.`;
@@ -704,13 +726,15 @@ export function groupInsight(summary: GroupSummary, range: MoneyRange, jobs: Job
   const share = Math.round((topAmount / summary.total) * 100);
 
   if (summary.upALot && summary.change !== null && summary.group.id !== 'materials') {
-    return `${summary.group.name} is up ${summary.change}% on the same time ${range.previousLabel}. The biggest part was ${topName} (${formatMoney(topAmount)}). Check your quotes cover it.`;
+    const check = currentScheme().id === 'retail' ? 'Check your prices still cover it.' : 'Check your quotes cover it.';
+    return `${summary.group.name} is up ${summary.change}% on the same time ${range.previousLabel}. The biggest part was ${topName} (${formatMoney(topAmount)}). ${check}`;
   }
   if (summary.change !== null && summary.change <= -15) {
     return `${summary.group.name} is down ${Math.abs(summary.change)}% on the same time ${range.previousLabel}. Nice work keeping it down.`;
   }
   if (byMerchant.size > 1 && share >= 50) {
-    return `${topName} is ${share}% of your ${name} spending in this period. If you buy there often, ask them about a trade account discount.`;
+    const ask = currentScheme().id === 'retail' ? 'ask them about a better wholesale price' : 'ask them about a trade account discount';
+    return `${topName} is ${share}% of your ${name} spending in this period. If you buy there often, ${ask}.`;
   }
   return `${summary.items.length} ${name} transaction${summary.items.length === 1 ? '' : 's'} so far, about the same as usual.`;
 }
@@ -722,9 +746,9 @@ export function groupInsight(summary: GroupSummary, range: MoneyRange, jobs: Job
  * bank feed to see them.
  */
 export function spendingByGroup(items: TransactionItem[], start: Date, end: Date, extraLabour = 0) {
-  return SPEND_GROUPS.map((group) => ({
+  return currentSpendGroups().map((group) => ({
     group,
-    total: total(spending(items, start, end, group.id)) + (group.id === 'labour' ? extraLabour : 0),
+    total: total(spending(items, start, end, group.id)) + (group.id === 'labour' || (group.id as string) === 'wages' ? extraLabour : 0),
   }))
     .filter((g) => g.total > 0)
     .sort((a, b) => b.total - a.total);

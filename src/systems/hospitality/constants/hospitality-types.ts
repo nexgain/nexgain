@@ -1,4 +1,4 @@
-// NexGain Hospitality (System 3): the food & drink business types shown in
+// NexGain Hospitality (System 4): the food & drink business types shown in
 // owner sign-up, and the starter menu layout each one gets. The starter menu
 // is only the categories (sections); the owner renames, adds or deletes them
 // in sign-up or later on the Menu page, and adds their own items and prices.
