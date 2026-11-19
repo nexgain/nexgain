@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router } from '@/lib/nav';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, EmptyState, Icon, IconBadge, OwnerIcons, type IconName } from '@/components/owner/ui';

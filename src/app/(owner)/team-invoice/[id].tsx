@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Redirect, useLocalSearchParams } from 'expo-router';
+import { systemHref } from '@/lib/nav';
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { downloadContractorInvoice, type InvoiceBank } from '@/components/contractor-invoice-pdf';
@@ -40,7 +41,7 @@ export default function TeamInvoiceScreen() {
     };
   }, [id]);
 
-  if (me) return <Redirect href="/home" />;
+  if (me) return <Redirect href={systemHref('/home')} />;
 
   if (!invoice) {
     return (

@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, useIsHospitality } from '@/lib/nav';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { FormField, SwitchRow, TextField } from '@/components/owner/form';
@@ -20,6 +20,8 @@ import { businessUsesSuper } from '@/data/super-rules';
 // and super settings.
 export default function BusinessProfileScreen() {
   const business = useBusiness();
+  // Food businesses (NexGain Hospitality) have no quotes or invoices: their wording is about supplier orders.
+  const food = useIsHospitality();
   const payment = useBusinessPayment();
   const accounts = useConnectedAccounts();
   const sendingFrom = business ? findAccount(accounts, EMAIL_PROVIDER[shownEmailApp(business.emailApp)]) : undefined;
@@ -53,7 +55,7 @@ export default function BusinessProfileScreen() {
         </Card>
       ) : (
         <Card title="Business Details">
-          <Text style={styles.muted}>Shown in the top right corner of every quote you send.</Text>
+          <Text style={styles.muted}>{food ? 'Shown on the orders you send to suppliers.' : 'Shown in the top right corner of every quote you send.'}</Text>
           <FormField label="Business Name">
             <TextField
               value={business.businessName}
@@ -72,7 +74,7 @@ export default function BusinessProfileScreen() {
               keyboardType="phone-pad"
               accessibilityLabel="Business Phone"
             />
-            <Text style={styles.muted}>Included in the job reminders your clients get.</Text>
+            <Text style={styles.muted}>{food ? 'Included in the orders you send to suppliers.' : 'Included in the job reminders your clients get.'}</Text>
           </FormField>
 
           <FormField label="Logo">
@@ -94,10 +96,11 @@ export default function BusinessProfileScreen() {
       )}
 
       {business && (
-        <Card title="Sending Quotes & Invoices" icon={{ ios: 'envelope.fill', android: 'mail', web: 'mail' }}>
+        <Card title={food ? 'Sending Emails' : 'Sending Quotes & Invoices'} icon={{ ios: 'envelope.fill', android: 'mail', web: 'mail' }}>
           <Text style={styles.muted}>
-            Quotes, invoices and receipts go from your own email address with the PDF attached. Connect Gmail or Outlook in
-            More › Integrations to send them straight from the app.
+            {food
+              ? 'Supplier orders go from your own email address. Connect Gmail or Outlook in More › Integrations to send them straight from the app.'
+              : 'Quotes, invoices and receipts go from your own email address with the PDF attached. Connect Gmail or Outlook in More › Integrations to send them straight from the app.'}
           </Text>
           <FormField label="Email App">
             <Segmented options={EMAIL_APP_CHOICES} value={shownEmailApp(business.emailApp)} onChange={(emailApp) => updateBusiness({ emailApp })} />
@@ -119,7 +122,7 @@ export default function BusinessProfileScreen() {
 
       {business && (
         <Card title="Bank Details" icon={OwnerIcons.bank}>
-          <Text style={styles.muted}>Printed on every invoice so customers can pay you by bank transfer.</Text>
+          <Text style={styles.muted}>{food ? 'Your business bank account.' : 'Printed on every invoice so customers can pay you by bank transfer.'}</Text>
           <FormField label="Account Name">
             <TextField
               value={payment.accountName}
@@ -166,14 +169,18 @@ export default function BusinessProfileScreen() {
           <SwitchRow
             label="Registered for GST"
             hint={
-              business.gstRegistered
-                ? 'GST (10%) is added to new quotes and invoices, and the GST page tracks each quarter.'
-                : 'No GST on quotes and invoices, and the GST page and reminders are hidden.'
+              food
+                ? business.gstRegistered
+                  ? 'The GST page tracks the GST in your sales and spending each quarter.'
+                  : 'The GST page and reminders are hidden.'
+                : business.gstRegistered
+                  ? 'GST (10%) is added to new quotes and invoices, and the GST page tracks each quarter.'
+                  : 'No GST on quotes and invoices, and the GST page and reminders are hidden.'
             }
             value={business.gstRegistered}
             onChange={(gstRegistered) => updateBusiness({ gstRegistered })}
           />
-          <Text style={styles.muted}>Quotes and invoices already made keep the GST they were made with.</Text>
+          {!food && <Text style={styles.muted}>Quotes and invoices already made keep the GST they were made with.</Text>}
         </Card>
       )}
 

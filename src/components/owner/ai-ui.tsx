@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { router, type Href } from 'expo-router';
+import { type Href } from 'expo-router';
+import { router } from '@/lib/nav';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Checkbox } from '@/components/owner/form';

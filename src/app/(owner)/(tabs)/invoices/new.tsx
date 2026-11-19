@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { router, useLocalSearchParams, type Href } from 'expo-router';
+import { useLocalSearchParams, type Href } from 'expo-router';
+import { router } from '@/lib/nav';
 import { BackHandler, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ConfirmDialog } from '@/components/owner/confirm-dialog';

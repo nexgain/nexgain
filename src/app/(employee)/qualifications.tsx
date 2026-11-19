@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Image } from 'expo-image';
-import { router, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
+import { router } from '@/lib/nav';
 import { ActivityIndicator, Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Card, Icon, IconBadge, type IconName } from '@/components/employee/ui';

@@ -114,9 +114,13 @@ export function StepFinancial({ data, update, onNext }: StepProps) {
         <Field
           label="Is your business registered for GST?"
           hint={
-            data.gstRegistered
-              ? 'GST (10%) is added to your quotes and invoices, and NexGain tracks your GST each quarter.'
-              : "GST won't be added to your quotes and invoices."
+            data.systemType === 'hospitality'
+              ? data.gstRegistered
+                ? 'NexGain tracks the GST in your sales and spending each quarter.'
+                : "NexGain won't work out GST for you."
+              : data.gstRegistered
+                ? 'GST (10%) is added to your quotes and invoices, and NexGain tracks your GST each quarter.'
+                : "GST won't be added to your quotes and invoices."
           }>
           <YesNo label="Registered for GST" value={data.gstRegistered} onChange={(gstRegistered) => update({ gstRegistered })} />
         </Field>

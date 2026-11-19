@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { router, usePathname, type Href } from 'expo-router';
+import { usePathname, type Href } from 'expo-router';
+import { router, withoutSystemPrefix } from '@/lib/nav';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 
 import { Desktop, FontSize, Palette, Radius, Spacing } from '@/constants/theme';
@@ -50,7 +51,9 @@ export function DesktopShell({
   );
 }
 
-function isActive(pathname: string, item: NavItem) {
+function isActive(fullPath: string, item: NavItem) {
+  // Hospitality pages live under /hospitality/ but match the same menu items.
+  const pathname = withoutSystemPrefix(fullPath);
   return item.match.some((m) => (m.endsWith('/') ? pathname.startsWith(m) : pathname === m || pathname.startsWith(`${m}/`)));
 }
 

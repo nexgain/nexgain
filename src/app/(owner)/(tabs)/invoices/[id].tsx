@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { router } from '@/lib/nav';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatBsb } from '@/components/employee-signup/types';

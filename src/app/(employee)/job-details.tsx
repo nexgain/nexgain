@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { router, useIsHospitality } from '@/lib/nav';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Card, employeeStyles, Icon, IconBadge, Icons, ListRow } from '@/components/employee/ui';
@@ -18,6 +19,8 @@ import { useDesktopPageStyle } from '@/hooks/use-desktop';
 
 export default function JobDetailsScreen() {
   const desktopPage = useDesktopPageStyle('form');
+  // NexGain Hospitality staff: shift wording, no job report.
+  const food = useIsHospitality();
   const currentEmployee = useCurrentEmployee();
   const { date } = useLocalSearchParams<{ date?: string }>();
   const shiftSource = { shifts: useShifts(), employeeId: currentEmployee?.id ?? null };
@@ -54,7 +57,7 @@ export default function JobDetailsScreen() {
             month: 'long',
           })}
         </Text>
-        <Text style={styles.role}>{shift?.role ?? 'No job assigned yet'}</Text>
+        <Text style={styles.role}>{shift?.role ?? (food ? 'No shift yet' : 'No job assigned yet')}</Text>
 
         <View style={styles.detailRow}>
           <IconBadge name={Icons.clock} />
@@ -117,14 +120,17 @@ export default function JobDetailsScreen() {
         })}
       </Card>
 
-      <Card>
-        <ListRow
-          icon={<IconBadge name={{ ios: 'checklist', android: 'task_alt', web: 'task_alt' }} />}
-          title="Job Report Form"
-          subtitle="Complete after the job is finished"
-          onPress={() => router.push({ pathname: '/job-report', params: { date: shiftDate } })}
-        />
-      </Card>
+      {/* Food businesses (NexGain Hospitality) don't have job reports. */}
+      {!food && (
+        <Card>
+          <ListRow
+            icon={<IconBadge name={{ ios: 'checklist', android: 'task_alt', web: 'task_alt' }} />}
+            title="Job Report Form"
+            subtitle="Complete after the job is finished"
+            onPress={() => router.push({ pathname: '/job-report', params: { date: shiftDate } })}
+          />
+        </Card>
+      )}
     </ScrollView>
   );
 }

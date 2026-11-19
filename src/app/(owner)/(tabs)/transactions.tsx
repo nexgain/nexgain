@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
+import { router, useIsHospitality } from '@/lib/nav';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { SwitchRow } from '@/components/owner/form';
@@ -33,6 +34,8 @@ const PREVIEW = 5;
 // in six groups ("Expenses by category").
 export default function TransactionsScreen() {
   const feed = useMoneyFeed();
+  // Hospitality has no jobs: no "Link expenses to jobs" setting.
+  const hospitality = useIsHospitality();
   const { accounts, transactions: txns, connected, preview } = feed;
   const typedExpenses = useExpenses();
   // The sample preview shows the sample bank only.
@@ -334,7 +337,7 @@ export default function TransactionsScreen() {
         })
       ))}
 
-      {connected && (
+      {connected && !hospitality && (
         <Card title="Settings" icon={OwnerIcons.info}>
           <SwitchRow
             label="Link expenses to jobs"

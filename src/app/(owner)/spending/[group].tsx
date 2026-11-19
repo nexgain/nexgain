@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { router, useLocalSearchParams, type Href } from 'expo-router';
+import { useLocalSearchParams, type Href } from 'expo-router';
+import { router } from '@/lib/nav';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { BarChart } from '@/components/owner/charts';

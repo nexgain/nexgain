@@ -39,15 +39,18 @@ export function StepType({ data, update, onNext }: StepProps) {
         />
       </Field>
 
-      <Field label="Number of service vehicles">
-        <SelectField
-          title="Number of service vehicles"
-          value={data.vehicles as (typeof VEHICLES)[number]}
-          options={VEHICLES}
-          placeholder="Select number of vehicles"
-          onChange={(vehicles) => update({ vehicles })}
-        />
-      </Field>
+      {/* Food businesses don't have service vehicles. */}
+      {data.systemType !== 'hospitality' && (
+        <Field label="Number of service vehicles">
+          <SelectField
+            title="Number of service vehicles"
+            value={data.vehicles as (typeof VEHICLES)[number]}
+            options={VEHICLES}
+            placeholder="Select number of vehicles"
+            onChange={(vehicles) => update({ vehicles })}
+          />
+        </Field>
+      )}
 
       <Field label="How long have you been operating?" error={tried && yearsError}>
         <SelectField

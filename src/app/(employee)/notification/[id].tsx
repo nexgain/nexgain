@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { router, useLocalSearchParams, type Href } from 'expo-router';
+import { useLocalSearchParams, type Href } from 'expo-router';
+import { router } from '@/lib/nav';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import {

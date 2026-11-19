@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Redirect, router, Stack, useLocalSearchParams } from 'expo-router';
+import { Redirect, Stack, useLocalSearchParams } from 'expo-router';
+import { router, systemHref } from '@/lib/nav';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -56,7 +57,7 @@ export default function ContractorInvoiceScreen() {
   const me = useCurrentEmployee();
   const invoice = useContractorInvoices().find((i) => i.id === id);
 
-  if (me && !isContractor(me)) return <Redirect href="/home" />;
+  if (me && !isContractor(me)) return <Redirect href={systemHref('/home')} />;
   if (!invoice || !me) {
     return (
       <View style={[styles.screen, styles.centered]}>

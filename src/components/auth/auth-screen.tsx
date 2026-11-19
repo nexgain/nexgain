@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { router } from '@/lib/nav';
 import { SymbolView } from 'expo-symbols';
 import {
   Alert,

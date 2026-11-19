@@ -6,7 +6,7 @@ import { Platform } from 'react-native';
 import type { PaySchedule } from '@/data/pay-schedule';
 import { businessUsesGst } from '@/data/super-rules';
 import { createStore } from '@/data/store';
-import type { SystemType } from '@/data/systems';
+import { toSystemType, type SystemType } from '@/data/systems';
 import { supabase } from '@/lib/supabase';
 
 /** Australian GST rate, charged on quotes and invoices when GST registered. */
@@ -258,7 +258,7 @@ export function fromRow(row: BusinessRow): BusinessProfile {
     manualTaxRate: row.manual_tax_rate === null || row.manual_tax_rate === undefined ? null : Number(row.manual_tax_rate),
     linkExpensesToJobs: row.link_expenses_to_jobs ?? false,
     paySchedule: payScheduleFromRow(row.pay_schedule),
-    systemType: row.system_type === 'bookings' ? 'bookings' : 'service',
+    systemType: toSystemType(row.system_type),
     timezone: row.timezone || 'Australia/Brisbane',
   };
 }
@@ -366,12 +366,17 @@ export async function createBusinessOnline(profile: Omit<BusinessProfile, 'id' |
     }
     if (systemError) console.warn('Could not save the booking system:', systemError.message);
   }
+  // NexGain Hospitality businesses (System 3).
+  if (profile.systemType === 'hospitality') {
+    const { error: systemError } = await supabase.from('businesses').update({ system_type: 'hospitality' }).eq('id', created.id);
+    if (systemError) console.warn('Could not save the hospitality system:', systemError.message);
+  }
   const saved = {
     ...created,
     emailApp: profile.emailApp,
     businessEmail: profile.businessEmail,
     country: profile.country,
-    systemType: profile.systemType === 'bookings' ? ('bookings' as const) : ('service' as const),
+    systemType: toSystemType(profile.systemType),
   };
   businessStore.set(saved);
   return saved;

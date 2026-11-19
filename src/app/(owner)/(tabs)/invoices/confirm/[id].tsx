@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { Redirect, useLocalSearchParams } from 'expo-router';
+import { router, systemHref } from '@/lib/nav';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { DateField, FormField, TextField, TimeField } from '@/components/owner/form';
@@ -55,7 +56,7 @@ export default function ConfirmJobScreen() {
   const [error, setError] = useState<string | null>(null);
   const update = (changes: Partial<typeof form>) => setForm((f) => ({ ...f, ...changes }));
 
-  if (me) return <Redirect href="/home" />;
+  if (me) return <Redirect href={systemHref('/home')} />;
 
   if (!quote || quote.kind !== 'quote') {
     return (

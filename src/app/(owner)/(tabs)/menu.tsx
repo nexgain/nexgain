@@ -1,4 +1,5 @@
-import { router, type Href } from 'expo-router';
+import { type Href } from 'expo-router';
+import { router } from '@/lib/nav';
 import { View } from 'react-native';
 
 import { InviteCodeCard } from '@/components/owner/employee-ui';

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { Redirect, useLocalSearchParams } from 'expo-router';
+import { router, systemHref } from '@/lib/nav';
 import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { DateField, FormField, SwitchRow, TextField, TimeField } from '@/components/owner/form';
@@ -49,7 +50,7 @@ export default function JobDetailScreen() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<Message | null>(null);
 
-  if (me) return <Redirect href="/home" />;
+  if (me) return <Redirect href={systemHref('/home')} />;
 
   if (!job) {
     return (

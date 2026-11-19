@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { router, useLocalSearchParams, type Href } from 'expo-router';
+import { useLocalSearchParams, type Href } from 'expo-router';
+import { router, useIsHospitality } from '@/lib/nav';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { OptionSheet } from '@/components/owner/form';
@@ -46,6 +47,8 @@ type Sheet = { title: string; options: { label: string; onPick: () => void }[] }
 export default function TransactionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const feed = useMoneyFeed();
+  // Hospitality has no invoices or jobs to link a transaction to.
+  const hospitality = useIsHospitality();
   const txn = feed.transactions.find((t) => t.id === id);
   const account = feed.accounts.find((a) => a.id === txn?.accountId);
   const receipt = useReceipts().find((r) => r.bankTransactionId === id);
@@ -93,8 +96,8 @@ export default function TransactionDetailScreen() {
 
   const invoice = invoiceLabel(txn.invoiceId, feed);
   const job = jobLabel(txn.jobId, feed);
-  const moneyIn = txn.amount > 0 && txn.category === INCOME_CATEGORY;
-  const showJob = txn.amount < 0 && (feed.linkExpensesToJobs || txn.jobId !== null);
+  const moneyIn = !hospitality && txn.amount > 0 && txn.category === INCOME_CATEGORY;
+  const showJob = !hospitality && txn.amount < 0 && (feed.linkExpensesToJobs || txn.jobId !== null);
 
   function pickInvoice() {
     setSheet({

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Redirect, router } from 'expo-router';
+import { Redirect } from 'expo-router';
+import { router, systemHref } from '@/lib/nav';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { FieldButton, OptionSheet, TextField } from '@/components/owner/form';
@@ -37,7 +38,7 @@ export default function JobsScreen() {
   const [client, setClient] = useState(ALL_CLIENTS);
   const [sheet, setSheet] = useState<'date' | 'client' | null>(null);
 
-  if (me) return <Redirect href="/home" />;
+  if (me) return <Redirect href={systemHref('/home')} />;
 
   const clientName = (job: Job) => clients.find((c) => c.id === job.clientId)?.name ?? '';
   const today = todayKey();

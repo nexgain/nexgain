@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { router } from 'expo-router';
+import { router } from '@/lib/nav';
 
 import { DesktopShell, type NavSection } from '@/components/layout/desktop-shell';
 import { useCurrentEmployee } from '@/data/current-employee';

@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { router, type Href } from 'expo-router';
+import { type Href } from 'expo-router';
+import { router } from '@/lib/nav';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Linking from 'expo-linking';
 import { SymbolView } from 'expo-symbols';

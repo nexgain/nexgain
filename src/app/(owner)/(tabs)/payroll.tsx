@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { router } from 'expo-router';
+import { router } from '@/lib/nav';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 
 import { ConfirmDialog } from '@/components/owner/confirm-dialog';

@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from 'react';
-import { router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
+import { router } from '@/lib/nav';
 import { BackHandler } from 'react-native';
 
 import { NotificationDetail, OWNER_PALETTE, type DetailAction } from '@/components/notifications/notification-views';

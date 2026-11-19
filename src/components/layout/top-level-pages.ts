@@ -1,6 +1,7 @@
 import { usePathname } from 'expo-router';
 
 import { useIsDesktop } from '@/hooks/use-desktop';
+import { withoutSystemPrefix } from '@/lib/nav';
 
 /**
  * Pages listed in the computer layout's side menu. On a computer these are main
@@ -10,6 +11,9 @@ import { useIsDesktop } from '@/hooks/use-desktop';
 const TOP_LEVEL = new Set([
   // Owner
   '/dashboard',
+  // Hospitality owner (its other main pages share the names above)
+  '/menu-items',
+  '/sales',
   '/calendar',
   '/transactions',
   '/payroll',
@@ -45,5 +49,5 @@ const TOP_LEVEL = new Set([
 export function useIsDesktopMenuPage() {
   const desktop = useIsDesktop();
   const pathname = usePathname();
-  return desktop && TOP_LEVEL.has(pathname);
+  return desktop && TOP_LEVEL.has(withoutSystemPrefix(pathname));
 }

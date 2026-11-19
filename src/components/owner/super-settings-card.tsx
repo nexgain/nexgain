@@ -2,7 +2,7 @@
 // the business's default fund, the employer number with it, and the payment
 // provider (clearing house). The super rate and pay frequency already live in
 // Payroll Settings, so they're shown here with a link instead of being stored twice.
-import { router } from 'expo-router';
+import { router } from '@/lib/nav';
 import { StyleSheet, Text } from 'react-native';
 
 import { FormField, TextField } from '@/components/owner/form';

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { router } from '@/lib/nav';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { FieldButton, FormField, OptionSheet, TextField } from '@/components/owner/form';

@@ -11,7 +11,8 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { router, type Href } from 'expo-router';
+import { type Href } from 'expo-router';
+import { router } from '@/lib/nav';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 

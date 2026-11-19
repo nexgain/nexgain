@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { router, useLocalSearchParams, type Href } from 'expo-router';
+import { useLocalSearchParams, type Href } from 'expo-router';
+import { router } from '@/lib/nav';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { DateField, FormField, TextField } from '@/components/owner/form';

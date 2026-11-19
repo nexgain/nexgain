@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Redirect, router } from 'expo-router';
+import { Redirect } from 'expo-router';
+import { router, systemHref } from '@/lib/nav';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { InvoiceStatusPill, useInvoicesLoader } from '@/components/employee/invoice-ui';
@@ -21,7 +22,7 @@ export default function InvoicesScreen() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (me && !isContractor(me)) return <Redirect href="/home" />;
+  if (me && !isContractor(me)) return <Redirect href={systemHref('/home')} />;
 
   async function newInvoice() {
     if (!me || creating) return;

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { router, type Href } from 'expo-router';
+import { type Href } from 'expo-router';
+import { router } from '@/lib/nav';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Avatar, sendInvite, StatusBadge, type ListStatus } from '@/components/owner/employee-ui';

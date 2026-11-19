@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { router } from 'expo-router';
+import { router } from '@/lib/nav';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { EmployeeStepProps } from '@/components/employee-signup/types';

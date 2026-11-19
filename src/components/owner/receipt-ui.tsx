@@ -2,7 +2,8 @@
 // "reading your receipt" note, the photo (tap to open full screen and pinch to
 // zoom), and the Add receipt flow.
 import { useEffect, useState } from 'react';
-import { router, type Href } from 'expo-router';
+import { type Href } from 'expo-router';
+import { router } from '@/lib/nav';
 import { Image } from 'expo-image';
 import { ActivityIndicator, Linking, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import {

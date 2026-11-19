@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { router } from '@/lib/nav';
 import { StyleSheet, TextInput, View } from 'react-native';
 
 import { DocCard, KIND_LABEL, listTitle, ScreenHeader } from '@/components/owner/invoices-ui';

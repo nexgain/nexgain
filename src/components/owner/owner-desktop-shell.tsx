@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { router, type Href } from 'expo-router';
+import { type Href } from 'expo-router';
+import { router } from '@/lib/nav';
 
 import { DesktopShell, type NavSection } from '@/components/layout/desktop-shell';
 import { useBusiness } from '@/data/business';

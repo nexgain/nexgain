@@ -32,6 +32,9 @@ import { homeFor, type SystemType } from '@/data/systems';
 import { countryNeedsBank, EMPTY_PAYER } from '@/lib/payment-files';
 import { StepBookingServices } from '@/systems/bookings/components/signup/step-booking-services';
 import { saveBookingSignup } from '@/systems/bookings/data/bookings';
+import { StepStarterMenu } from '@/systems/hospitality/components/signup/step-starter-menu';
+import { findHospitalityType } from '@/systems/hospitality/constants/hospitality-types';
+import { saveStarterMenu } from '@/systems/hospitality/data/menu';
 
 const STEPS = [
   { title: 'Create your account', subtitle: "Let's get started. Create your NexGain owner account." },
@@ -49,6 +52,7 @@ const TEAM_STEP = 7;
 
 /** Which system the business uses: the chosen industry's, or the owner's choice for their own industry. */
 function systemOfSignup(data: SignupData): SystemType {
+  if (data.systemType === 'hospitality') return 'hospitality';
   if (data.systemType === 'bookings' && data.bookingTypes.length > 0) return 'bookings';
   const industry = data.industry?.category ? findIndustry(data.industry.name) : null;
   return industry?.system ?? (data.systemType === 'bookings' ? 'bookings' : 'service');
@@ -152,6 +156,11 @@ export default function OwnerSignupScreen() {
         });
         if (saved) console.warn('Your services were not saved; they can be added in Services & Prices.', saved);
       }
+      // NexGain Hospitality: the starter menu categories.
+      if (business.id && systemOfSignup(data) === 'hospitality') {
+        const saved = await saveStarterMenu(business.id, data.menuCategories);
+        if (saved) console.warn('Your menu categories were not saved; they can be added on the Menu page.', saved);
+      }
       // New Zealand: the owner's bank decides which payroll file to make (changeable in Payroll bank details).
       if (business.id && countryNeedsBank(data.country) && data.bank) {
         await savePayrollBank({ ...EMPTY_PAYER, country: data.country, bankName: data.bank }).catch(() =>
@@ -189,6 +198,10 @@ export default function OwnerSignupScreen() {
     if (step === 2 && industryName !== data.servicesFor) {
       update({ services: industry ? industry.services.slice(0, DEFAULT_SELECTED_COUNT) : [], servicesFor: industryName });
     }
+    // Entering the starter menu (hospitality): suggest the chosen type's menu categories.
+    if (step === 2 && data.systemType === 'hospitality' && data.hospitalityType !== data.menuCategoriesFor) {
+      update({ menuCategories: findHospitalityType(data.hospitalityType)?.menu ?? [], menuCategoriesFor: data.hospitalityType });
+    }
     // Entering Email & Bank: suggest the sign-up email as the business email.
     if (step === EMAIL_STEP - 1 && !data.businessEmail.trim()) {
       update({ businessEmail: data.email.trim() });
@@ -213,17 +226,23 @@ export default function OwnerSignupScreen() {
   }
 
   const stepProps = { data, update, onNext: goNext };
+  const system = systemOfSignup(data);
+  const hospitality = system === 'hospitality';
+  const subtitle =
+    step === 3 && system === 'bookings'
+      ? 'Choose the services you offer. Customers pick from these when they book.'
+      : step === 3 && hospitality
+        ? 'Your menu’s sections. Each business type starts with a layout that suits it.'
+        : step === EMAIL_STEP && hospitality
+          ? 'How you send emails (like supplier orders), and your bank details.'
+          : STEPS[step].subtitle;
 
   return (
     <SignupShell
-      steps={STEP_NAMES}
+      steps={hospitality ? STEP_NAMES.map((n) => (n === 'Services' ? 'Menu' : n)) : STEP_NAMES}
       step={step}
-      title={STEPS[step].title}
-      subtitle={
-        step === 3 && systemOfSignup(data) === 'bookings'
-          ? 'Choose the services you offer. Customers pick from these when they book.'
-          : STEPS[step].subtitle
-      }
+      title={step === 3 && hospitality ? 'Your starter menu' : STEPS[step].title}
+      subtitle={subtitle}
       onBack={goBack}
       onSelectStep={(s) => {
         setError(null);
@@ -240,7 +259,14 @@ export default function OwnerSignupScreen() {
       {step === 0 && <StepAccount {...stepProps} />}
       {step === 1 && <StepBusiness {...stepProps} />}
       {step === 2 && <StepType {...stepProps} />}
-      {step === 3 && (systemOfSignup(data) === 'bookings' ? <StepBookingServices {...stepProps} /> : <StepServices {...stepProps} />)}
+      {step === 3 &&
+        (system === 'bookings' ? (
+          <StepBookingServices {...stepProps} />
+        ) : hospitality ? (
+          <StepStarterMenu {...stepProps} />
+        ) : (
+          <StepServices {...stepProps} />
+        ))}
       {step === 4 && <StepSubscription {...stepProps} />}
       {step === 5 && <StepFinancial {...stepProps} />}
       {step === 6 && <StepConnect {...stepProps} accountCreated={accountCreated} ensureAccount={async () => accountCreated || createAccount()} />}

@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router } from '@/lib/nav';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Avatar, Card, EmployeeScreen, IconBadge, ListRow } from '@/components/employee/ui';

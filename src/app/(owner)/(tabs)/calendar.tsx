@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { Redirect, useLocalSearchParams } from 'expo-router';
+import { router, systemHref } from '@/lib/nav';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { EventEditor } from '@/components/owner/event-editor';
@@ -82,7 +83,7 @@ export default function CalendarScreen() {
   }
   useClearParamsOnLeave({ event: params.event, date: params.date });
 
-  if (me) return <Redirect href="/home" />;
+  if (me) return <Redirect href={systemHref('/home')} />;
 
   const clientName = (id: string | null) => clients.find((c) => c.id === id)?.name ?? '';
   const jobLabel = (job: Job) => [clientName(job.clientId), job.title].filter(Boolean).join(' · ');

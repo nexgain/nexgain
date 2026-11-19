@@ -22,17 +22,20 @@ export function StepConnect({
   accountCreated: boolean;
 }) {
   const [tried, setTried] = useState(false);
+  // Food businesses have no quotes or invoices: their emails are supplier orders.
+  const food = data.systemType === 'hospitality';
   const bsbDigits = data.bankBsb.replace(/\D/g, '');
   const errors = {
-    businessEmail: !isEmail(data.businessEmail) && 'Enter the email address you send quotes and invoices from.',
+    businessEmail: !isEmail(data.businessEmail) && (food ? 'Enter your business email address.' : 'Enter the email address you send quotes and invoices from.'),
     bsb: bsbDigits.length > 0 && bsbDigits.length !== 6 && 'A BSB has 6 digits.',
   };
 
   return (
     <>
       <Text style={styles.cardText}>
-        Connect Gmail or Outlook to send quotes, invoices and receipts straight from your own email address, with the
-        PDF attached. Or choose Mail or Other to have them open in your phone&apos;s email app, ready to send.
+        {food
+          ? 'Connect Gmail or Outlook to send supplier orders straight from your own email address. Or choose Mail or Other to have them open in your phone’s email app, ready to send.'
+          : 'Connect Gmail or Outlook to send quotes, invoices and receipts straight from your own email address, with the PDF attached. Or choose Mail or Other to have them open in your phone’s email app, ready to send.'}
       </Text>
       <ConnectApps
         theme="light"
@@ -68,10 +71,12 @@ export function StepConnect({
       />
 
       <Text style={styles.sectionTitle}>
-        Bank details for invoices <Text style={styles.optional}>(optional)</Text>
+        {food ? 'Business bank details' : 'Bank details for invoices'} <Text style={styles.optional}>(optional)</Text>
       </Text>
       <View style={fieldStyles.card}>
-        <Text style={styles.cardText}>Printed on your invoices so customers can pay you by bank transfer.</Text>
+        <Text style={styles.cardText}>
+          {food ? 'Your business bank account, kept with your business details.' : 'Printed on your invoices so customers can pay you by bank transfer.'}
+        </Text>
         <Field label="Account name">
           <Input
             value={data.bankAccountName}

@@ -1,4 +1,5 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { router } from '@/lib/nav';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Avatar } from '@/components/owner/employee-ui';

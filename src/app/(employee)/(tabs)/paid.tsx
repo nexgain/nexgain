@@ -1,4 +1,5 @@
-import { Redirect, router } from 'expo-router';
+import { Redirect } from 'expo-router';
+import { router, systemHref } from '@/lib/nav';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useInvoicesLoader } from '@/components/employee/invoice-ui';
@@ -27,7 +28,7 @@ export default function PaidScreen() {
     .filter((i) => i.status === 'paid' && i.paidAt)
     .sort((a, b) => (b.paidAt ?? '').localeCompare(a.paidAt ?? ''));
 
-  if (me && !isContractor(me)) return <Redirect href="/home" />;
+  if (me && !isContractor(me)) return <Redirect href={systemHref('/home')} />;
 
   // Financial year (1 July – 30 June by default, or the business's own start month).
   const fyStart = financialYearStart(new Date(), business?.financialYearStartMonth ?? 7);

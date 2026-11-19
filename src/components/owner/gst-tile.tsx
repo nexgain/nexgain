@@ -1,6 +1,6 @@
 // Dashboard tile: "Estimated GST this quarter: $X" (Australian GST-registered
 // businesses only). Opens the GST page.
-import { router } from 'expo-router';
+import { router } from '@/lib/nav';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Icon, OwnerIcons } from '@/components/owner/ui';

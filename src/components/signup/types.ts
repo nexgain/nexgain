@@ -28,6 +28,8 @@ export type SignupData = {
   industry: SelectedIndustry | null;
   /** NexGain Bookings only: the business types chosen (ids from booking-business-types.ts), main one first. */
   bookingTypes: string[];
+  /** NexGain Hospitality only: the food business type (an id from hospitality-types.ts). */
+  hospitalityType: string | null;
   // Step 3
   businessType: string;
   teamSize: string;
@@ -45,6 +47,10 @@ export type SignupData = {
   bookingServicesFor: string | null;
   /** NexGain Bookings only: "Do you do the work yourself?" (null until answered). */
   ownerWorks: boolean | null;
+  /** NexGain Hospitality only: the starter menu categories (editable). */
+  menuCategories: string[];
+  /** The hospitality type the menu categories were suggested for. */
+  menuCategoriesFor: string | null;
   // Step 6
   financialYearStartMonth: number;
   gstRegistered: boolean;
@@ -80,6 +86,7 @@ export const EMPTY_SIGNUP: SignupData = {
   industryText: '',
   industry: null,
   bookingTypes: [],
+  hospitalityType: null,
   businessType: 'Service Business',
   teamSize: '1–5',
   vehicles: '0',
@@ -90,6 +97,8 @@ export const EMPTY_SIGNUP: SignupData = {
   bookingServices: [],
   bookingServicesFor: null,
   ownerWorks: null,
+  menuCategories: [],
+  menuCategoriesFor: null,
   financialYearStartMonth: 7,
   gstRegistered: true,
   currency: 'AUD – Australian Dollar',

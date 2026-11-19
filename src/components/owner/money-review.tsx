@@ -1,6 +1,7 @@
 // The Transactions page's "Needs review" card and "Expenses by category" rows.
 import { useState } from 'react';
-import { router, type Href } from 'expo-router';
+import { type Href } from 'expo-router';
+import { router } from '@/lib/nav';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { OptionSheet } from '@/components/owner/form';

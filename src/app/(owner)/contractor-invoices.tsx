@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Redirect, router } from 'expo-router';
+import { Redirect } from 'expo-router';
+import { router, systemHref } from '@/lib/nav';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Badge, Card, EmptyState, goBack, Icon, OwnerIcons, OwnerScreen, PageHeader, TabRow } from '@/components/owner/ui';
@@ -42,7 +43,7 @@ export default function ContractorInvoicesScreen() {
   const [tab, setTab] = useState<Tab>('To review');
   const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
 
-  if (me) return <Redirect href="/home" />;
+  if (me) return <Redirect href={systemHref('/home')} />;
 
   const nameOf = (inv: ContractorInvoice) => {
     const e = employees.find((x) => x.id === inv.employeeId);
