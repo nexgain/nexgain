@@ -1,7 +1,7 @@
 // The Transactions page's "Needs review" card and "Expenses by category" rows.
 import { useState } from 'react';
 import { type Href } from 'expo-router';
-import { router } from '@/lib/nav';
+import { router, useIsHospitality } from '@/lib/nav';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { OptionSheet } from '@/components/owner/form';
@@ -13,43 +13,74 @@ import { formatShortDate } from '@/data/employee-roster';
 import {
   answerJob,
   chooseCategory,
-  groupById,
+  confirmInvoicePayment,
+  currentGroupById,
+  currentSpendGroups,
+  hospitalityReviewItems,
   invoiceLabel,
   linkInvoice,
   notForAnInvoice,
   recentAutoMatches,
   reviewItems,
-  SPEND_GROUPS,
   undoInvoiceMatch,
   type GroupSummary,
+  type HospitalityReviewItem,
   type MoneyFeed,
   type ReviewItem,
   type SpendGroupId,
 } from '@/data/money-sorting';
 import { formatMoney } from '@/data/payroll';
 import { fromDateKey } from '@/data/shifts';
+import { CARD_SALES, CASH, CATERING, DELIVERY, incomeQuestionText, oneInvoiceQuestion, OTHER_INCOME, shortDate } from '@/systems/hospitality/data/money';
+
+/** NexGain Hospitality's quick answers to "What was this for?" (money in). */
+const INCOME_ANSWERS: { label: string; category: string }[] = [
+  { label: 'Card sales', category: CARD_SALES },
+  { label: 'Delivery app', category: DELIVERY },
+  { label: 'Cash deposit', category: CASH },
+  { label: 'Catering/function', category: CATERING },
+  { label: 'Other', category: OTHER_INCOME },
+];
 
 /** Questions shown before "Show all". */
 const FIRST = 2;
 
 /** One colour per group, the same everywhere (Materials is always purple, Fuel orange...). */
-export const GROUP_COLORS: Record<SpendGroupId, string> = {
+export const GROUP_COLORS: Record<SpendGroupId, string> & Record<string, string> = {
   materials: '#8b5cf6',
   labour: '#3987e5',
   tools: '#199e70',
   fuel: '#f97316',
   vehicle: '#c98500',
   other: '#94a3b8',
+  // NexGain Hospitality's groups
+  food: '#199e70',
+  drinks: '#8b5cf6',
+  wages: '#3987e5',
+  rent: '#c98500',
+  utilities: '#f97316',
+  equipment: '#0ea5e9',
+  packaging: '#d946ef',
+  cleaning: '#14b8a6',
 };
 
 /** One icon per group, from the category icons. */
-export const GROUP_ICONS: Record<SpendGroupId, IconName> = {
+export const GROUP_ICONS: Record<SpendGroupId, IconName> & Record<string, IconName> = {
   materials: categoryIcon('Materials & supplies'),
   labour: categoryIcon('Wages & super'),
   tools: categoryIcon('Equipment & tools'),
   fuel: categoryIcon('Fuel'),
   vehicle: categoryIcon('Vehicle'),
   other: categoryIcon('Other'),
+  // NexGain Hospitality's groups
+  food: categoryIcon('Food & Supplies'),
+  drinks: categoryIcon('Drinks'),
+  wages: categoryIcon('Wages'),
+  rent: categoryIcon('Rent'),
+  utilities: categoryIcon('Utilities'),
+  equipment: categoryIcon('Equipment'),
+  packaging: categoryIcon('Packaging'),
+  cleaning: categoryIcon('Cleaning'),
 };
 
 const nameOf = (t: BankTransaction) => t.merchant || t.description || 'This transaction';
@@ -105,9 +136,11 @@ const seenMatches = new Set<string>();
 
 /** "Needs review": questions about anything NexGain isn't sure of. Hidden when there's nothing to ask. */
 export function NeedsReviewCard({ feed }: { feed: MoneyFeed }) {
-  const items = reviewItems(feed);
+  // NexGain Hospitality asks its own questions (no jobs; invoices only after the owner says yes).
+  const hospitality = useIsHospitality();
+  const items: (ReviewItem | HospitalityReviewItem)[] = hospitality ? hospitalityReviewItems(feed) : reviewItems(feed);
   const [, setSeen] = useState(0);
-  const matches = recentAutoMatches(feed).filter((t) => !seenMatches.has(t.id));
+  const matches = hospitality ? [] : recentAutoMatches(feed).filter((t) => !seenMatches.has(t.id));
   const [showAll, setShowAll] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<{ text: string; error?: boolean } | null>(null);
@@ -130,7 +163,7 @@ export function NeedsReviewCard({ feed }: { feed: MoneyFeed }) {
 
   const pickCategory = (t: BankTransaction, groupId: SpendGroupId) =>
     run(t.id, async () => {
-      const group = groupById(groupId)!;
+      const group = currentGroupById(groupId)!;
       const moved = await chooseCategory(t.id, group.pick);
       return `Saved as ${group.name}. NexGain will sort ${nameOf(t)} this way from now on${moved > 0 ? ` (${moved} more moved too)` : ''}.`;
     });
@@ -176,20 +209,39 @@ export function NeedsReviewCard({ feed }: { feed: MoneyFeed }) {
     });
   }
 
-  function question(item: ReviewItem): Question {
+  const sampleNote = feed.preview ? ' (sample only, nothing saved)' : '';
+
+  const confirmInvoice = (t: BankTransaction, invoiceId: string, number: string, part: 'full' | 'deposit') =>
+    run(t.id, async () => {
+      const error = await confirmInvoicePayment(t.id, invoiceId, part);
+      if (error) throw new Error(error);
+      return part === 'deposit' ? `Saved: the deposit for ${number} is paid${sampleNote}.` : `Invoice ${number} is marked as paid${sampleNote}.`;
+    });
+
+  const answerIncome = (t: BankTransaction, label: string, category: string) =>
+    run(t.id, async () => {
+      await chooseCategory(t.id, category);
+      return `Saved as ${label.toLowerCase()}${sampleNote}.`;
+    });
+
+  const notAnInvoice = (t: BankTransaction) =>
+    run(t.id, async () => (await notForAnInvoice(t.id), 'Got it, it’s not for an invoice.'));
+
+  function question(item: ReviewItem | HospitalityReviewItem): Question {
     const t = item.txn;
     const money = formatMoney(Math.abs(t.amount));
     const disabled = busy !== null;
     switch (item.kind) {
       case 'category': {
-        const guess = SPEND_GROUPS.find((g) => (g.categories as string[]).includes(t.category) && g.id !== 'other');
+        const groups = currentSpendGroups();
+        const guess = groups.find((g) => (g.categories as string[]).includes(t.category) && g.id !== 'other');
         return {
           icon: OwnerIcons.sparkles,
           text: `${nameOf(t)}, ${money} ${whenText(t.date)}. What was it for?`,
           hint: guess ? `Best guess: ${guess.name}.` : 'NexGain couldn’t tell from the bank’s description.',
           answers: [
             ...(guess ? [{ label: `Yes, ${guess.name}`, primary: true, onPress: () => pickCategory(t, guess.id) }] : []),
-            ...SPEND_GROUPS.filter((g) => g.id !== guess?.id).map((g) => ({
+            ...groups.filter((g) => g.id !== guess?.id).map((g) => ({
               label: g.name,
               onPress: () => pickCategory(t, g.id),
             })),
@@ -227,6 +279,54 @@ export function NeedsReviewCard({ feed }: { feed: MoneyFeed }) {
               onPress: () => run(t.id, async () => (await notForAnInvoice(t.id), 'Got it. It stays as income.')),
             },
           ],
+          disabled,
+        };
+      // NexGain Hospitality: exactly what's owing on one or more invoices. Never decided without the owner.
+      case 'hosp-invoice': {
+        if (item.candidates.length === 1) {
+          const c = item.candidates[0];
+          return {
+            icon: OwnerIcons.receipt,
+            text: oneInvoiceQuestion(t, c),
+            hint: c.why ? `${c.why}.` : null,
+            answers: [
+              {
+                label: c.part === 'deposit' ? 'Yes, it’s the deposit' : 'Yes, mark as paid',
+                primary: true,
+                onPress: () => confirmInvoice(t, c.invoice.id, c.invoice.number, c.part),
+              },
+              { label: 'No, it’s something else', onPress: () => notAnInvoice(t) },
+            ],
+            disabled,
+          };
+        }
+        const named = item.candidates[0].why;
+        return {
+          icon: OwnerIcons.receipt,
+          text: `We got ${money} ${whenText(t.date)}. Which invoice is it for?`,
+          hint: named ? `${named}, so it’s shown first. Please pick the right one.` : `${item.candidates.length} unpaid invoices are for ${money}. Please pick the right one.`,
+          answers: [
+            ...item.candidates.map((c) => {
+              const who = c.invoice.client.business || c.invoice.client.name;
+              const sent = shortDate(c.invoice.createdAt.slice(0, 10));
+              const due = c.invoice.dueDate ? `, due ${shortDate(c.invoice.dueDate)}` : '';
+              return {
+                label: `${c.invoice.number} · ${who} · sent ${sent}${due}${c.part === 'deposit' ? ' (deposit)' : ''}`,
+                onPress: () => confirmInvoice(t, c.invoice.id, c.invoice.number, c.part),
+              };
+            }),
+            { label: 'None of these', onPress: () => notAnInvoice(t) },
+          ],
+          disabled,
+        };
+      }
+      // NexGain Hospitality: "We got $500 by direct debit. What was this for?"
+      case 'hosp-income':
+        return {
+          icon: OwnerIcons.money,
+          text: incomeQuestionText(t),
+          hint: `${nameOf(t)}, ${whenText(t.date)}. NexGain remembers your answer for next time.`,
+          answers: INCOME_ANSWERS.map((a) => ({ label: a.label, onPress: () => answerIncome(t, a.label, a.category) })),
           disabled,
         };
       case 'job':

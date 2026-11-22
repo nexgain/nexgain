@@ -22,6 +22,7 @@ import {
 import { formatMoney } from '@/data/payroll';
 import { needsReceipt, useReceipts } from '@/data/receipts';
 import { fromDateKey } from '@/data/shifts';
+import { hospitalityCategoriesFor, MoneyInDetail } from '@/systems/hospitality/components/owner/money-cards';
 
 /** How NexGain picked the category, in plain English. */
 function sortedBy(t: BankTransaction) {
@@ -208,6 +209,9 @@ export default function TransactionDetailScreen() {
         )}
       </Card>
 
+      {/* NexGain Hospitality: daily sales, delivery income or the invoice it paid. */}
+      {hospitality && <MoneyInDetail txn={txn} feed={feed} />}
+
       {moneyIn && (
         <Card title="Invoice" icon={OwnerIcons.receipt}>
           {invoice ? (
@@ -256,7 +260,7 @@ export default function TransactionDetailScreen() {
           </Text>
         )}
         <View>
-          {TRANSACTION_CATEGORIES.map((category, i) => {
+          {(hospitality ? hospitalityCategoriesFor(txn.amount) : TRANSACTION_CATEGORIES).map((category, i) => {
             const selected = category === txn.category;
             return (
               <Pressable

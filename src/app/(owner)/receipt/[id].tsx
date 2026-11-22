@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLocalSearchParams, type Href } from 'expo-router';
-import { router } from '@/lib/nav';
+import { router, useIsHospitality } from '@/lib/nav';
+import { HOSPITALITY_CATEGORIES } from '@/data/money-sorting';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { DateField, FormField, TextField } from '@/components/owner/form';
@@ -54,6 +55,8 @@ const formatAbn = (abn: string) => abn.replace(/^(\d{2})(\d{3})(\d{3})(\d{3})$/,
 // transaction it belongs to, and Replace / Delete.
 export default function ReceiptScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  // NexGain Hospitality: Food & Supplies, Drinks, Wages...
+  const hospitality = useIsHospitality();
   const receipts = useReceipts();
   const receipt = receipts.find((r) => r.id === id);
   const readError = useReceiptErrors()[id ?? ''];
@@ -223,7 +226,7 @@ export default function ReceiptScreen() {
           </View>
           <FormField label="Category">
             <View style={styles.chips}>
-              {RECEIPT_CATEGORIES.map((category) => {
+              {(hospitality ? HOSPITALITY_CATEGORIES : RECEIPT_CATEGORIES).map((category) => {
                 const selected = draft.category === category;
                 return (
                   <Pressable

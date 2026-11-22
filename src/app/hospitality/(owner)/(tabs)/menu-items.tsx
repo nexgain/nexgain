@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useNavigation } from 'expo-router';
+import { ActivityIndicator, BackHandler, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { Button, Card, EmptyState, Icon, OwnerScreen, PageHeader, TabRow } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { router } from '@/lib/nav';
-import { MenuIcons, MenuItemRow } from '@/systems/hospitality/components/owner/menu-ui';
+import { BackLink, MenuIcons, MenuItemRow } from '@/systems/hospitality/components/owner/menu-ui';
 import { setItemActive, useHospitalityLoaded, useMenuCategories, useMenuItems, type MenuItem } from '@/systems/hospitality/data/menu';
 import { dateKey, isSpecialNow } from '@/systems/hospitality/data/sales-stats';
 
@@ -14,7 +15,38 @@ const NO_CATEGORY = 'No category';
 
 // The Menu tab: every item by category, searchable. Specials running today
 // are shown first. The switch on each item hides it (86'd or seasonal).
+//
+// Opened from the Dashboard's "Open the menu" button (?from=dashboard), it
+// shows "‹ Dashboard" in the top left, and Android's back button goes back to
+// the Dashboard too. Tapping the Menu tab at the bottom clears it.
 export default function MenuScreen() {
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  const navigation = useNavigation();
+  const fromDashboard = from === 'dashboard';
+
+  const backToDashboard = useCallback(() => {
+    navigation.setParams({ from: undefined } as never);
+    router.navigate('/hospitality/dashboard');
+  }, [navigation]);
+
+  // The Menu tab button at the bottom: the owner chose Menu themselves, so no back arrow.
+  useEffect(
+    () => navigation.addListener('tabPress' as never, () => navigation.setParams({ from: undefined } as never)),
+    [navigation],
+  );
+
+  // Android's back button (and back swipe) goes back to the Dashboard instead of closing the app.
+  useFocusEffect(
+    useCallback(() => {
+      if (!fromDashboard) return;
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        backToDashboard();
+        return true;
+      });
+      return () => sub.remove();
+    }, [fromDashboard, backToDashboard]),
+  );
+
   const loaded = useHospitalityLoaded();
   const categories = [...useMenuCategories()].sort((a, b) => a.sort - b.sort);
   const items = useMenuItems();
@@ -69,6 +101,7 @@ export default function MenuScreen() {
 
   return (
     <OwnerScreen>
+      {fromDashboard && <BackLink label="Dashboard" onPress={backToDashboard} />}
       <PageHeader
         title="Menu"
         subtitle={`${items.length} item${items.length === 1 ? '' : 's'} in ${categories.length} categor${categories.length === 1 ? 'y' : 'ies'}. The switch hides an item (86’d or out of season).`}

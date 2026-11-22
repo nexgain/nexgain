@@ -40,6 +40,8 @@ describe('hospitality businesses', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
     expect(h('/jobs')).toBe('/hospitality/dashboard');
     expect(h('/invoices/new')).toBe('/hospitality/dashboard');
+    // Opening one invoice (e.g. from the GST page) goes to hospitality's own invoice page.
+    expect(h('/invoices/[id]')).toBe('/hospitality/invoice/[id]');
     expect(h('/job/[id]')).toBe('/hospitality/dashboard');
     expect(h('/job-report')).toBe('/hospitality/home');
     // "/menu" (More) is shared; "/menu-items" isn't "/menu".

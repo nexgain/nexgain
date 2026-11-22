@@ -25,6 +25,19 @@ const CATEGORY_ICONS: Record<string, IconName> = {
   Tax: OwnerIcons.percent,
   [TRANSFERS_CATEGORY]: { ios: 'arrow.left.arrow.right', android: 'swap_horiz', web: 'swap_horiz' },
   Other: { ios: 'square.grid.2x2.fill', android: 'category', web: 'category' },
+  // NexGain Hospitality: money in
+  'Card / till sales': { ios: 'creditcard.fill', android: 'credit_card', web: 'credit_card' },
+  'Delivery apps': { ios: 'bicycle', android: 'delivery_dining', web: 'delivery_dining' },
+  'Cash deposits': { ios: 'banknote.fill', android: 'payments', web: 'payments' },
+  'Catering & functions': { ios: 'person.3.fill', android: 'groups', web: 'groups' },
+  'Other income': { ios: 'arrow.down.left', android: 'south_west', web: 'south_west' },
+  // NexGain Hospitality: money out
+  'Food & Supplies': { ios: 'cart.fill', android: 'shopping_cart', web: 'shopping_cart' },
+  Drinks: { ios: 'wineglass.fill', android: 'local_bar', web: 'local_bar' },
+  Wages: OwnerIcons.people,
+  Equipment: { ios: 'wrench.and.screwdriver.fill', android: 'construction', web: 'construction' },
+  Packaging: { ios: 'takeoutbag.and.cup.and.straw.fill', android: 'takeout_dining', web: 'takeout_dining' },
+  Cleaning: { ios: 'sparkles', android: 'cleaning_services', web: 'cleaning_services' },
 };
 
 export function categoryIcon(category: string): IconName {

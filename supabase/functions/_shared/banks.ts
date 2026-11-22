@@ -112,7 +112,15 @@ export function categorise(
   scheme: SortingScheme = SERVICE_SCHEME,
 ): AnyCategory {
   if (txn.bankClass === 'transfer') return 'Transfers';
-  if (txn.amount > 0) return 'Income';
+  if (txn.amount > 0) {
+    // NexGain Hospitality: Card / till sales, Delivery apps... (unknown ones are asked about in the app).
+    if (scheme.income) {
+      const text = [txn.merchant, txn.description, txn.bankCategory].filter(Boolean).join(' ').toLowerCase();
+      for (const [category, pattern] of scheme.income.rules) if (pattern.test(text)) return category;
+      return scheme.income.fallback;
+    }
+    return 'Income';
+  }
   // NexGain Retail has no "Bank fees" category: they go in Other.
   if (txn.bankClass === 'bank-fee') return scheme.categories.includes('Bank fees') ? 'Bank fees' : 'Other';
   const text = [txn.merchant, txn.description, txn.bankCategory].filter(Boolean).join(' ').toLowerCase();

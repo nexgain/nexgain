@@ -13,6 +13,9 @@
 // Each NexGain system has its own set of categories (a "scheme"). System 1 and
 // System 2 use SERVICE_SCHEME (the categories below). NexGain Retail (System 3)
 // uses RETAIL_SCHEME (at the end of this file): Stock purchases, Rent, Wages...
+// NexGain Hospitality (System 4) uses HOSPITALITY_SCHEME: food & drink
+// expense categories, and its own categories for money coming in (Card / till
+// sales, Delivery apps...).
 // Everything defaults to SERVICE_SCHEME, so Systems 1 and 2 work as before.
 import { cleanMerchantName } from './transactions.ts';
 
@@ -79,8 +82,23 @@ export type RetailCategory =
   | 'Shop fit-out & equipment'
   | 'Other';
 
+/** NexGain Hospitality's categories for money out (HOSPITALITY_CATEGORIES at the end of this file). */
+export type HospitalityCategory =
+  | 'Food & Supplies'
+  | 'Drinks'
+  | 'Wages'
+  | 'Rent'
+  | 'Utilities'
+  | 'Equipment'
+  | 'Packaging'
+  | 'Cleaning'
+  | 'Other';
+
+/** NexGain Hospitality's categories for money coming in. */
+export type HospitalityIncomeCategory = 'Card / till sales' | 'Delivery apps' | 'Cash deposits' | 'Catering & functions' | 'Other income';
+
 /** A category in any system's scheme. */
-export type AnyCategory = Category | RetailCategory;
+export type AnyCategory = Category | RetailCategory | HospitalityCategory | HospitalityIncomeCategory;
 
 export const INCOME: Category = 'Income';
 export const TRANSFERS: Category = 'Transfers';
@@ -93,6 +111,8 @@ export const WAGES: Category = 'Wages & super';
 export type SpendGroupId = 'materials' | 'labour' | 'tools' | 'fuel' | 'vehicle' | 'other';
 /** NexGain Retail's groups (RETAIL_SPEND_GROUPS at the end of this file). */
 export type RetailSpendGroupId = 'stock' | 'rent' | 'wages' | 'shipping' | 'packaging' | 'marketing' | 'utilities' | 'fitout' | 'other';
+/** NexGain Hospitality's groups (HOSPITALITY_SPEND_GROUPS at the end of this file). */
+export type HospitalitySpendGroupId = 'food' | 'drinks' | 'wages' | 'rent' | 'utilities' | 'equipment' | 'packaging' | 'cleaning' | 'other';
 
 export type SpendGroup<Id extends string = SpendGroupId> = {
   id: Id;
@@ -121,7 +141,7 @@ export const SPEND_GROUPS: SpendGroup[] = [
 
 /** Which group a category belongs to. Income and transfers aren't spending (null). */
 export function groupOf<Id extends string = SpendGroupId>(category: string, groups: SpendGroup<Id>[] = SPEND_GROUPS as SpendGroup<Id>[]): Id | 'other' | null {
-  if (category === INCOME || category === TRANSFERS) return null;
+  if (category === INCOME || category === TRANSFERS || isHospitalityIncome(category)) return null;
   return groups.find((g) => g.id !== 'other' && (g.categories as string[]).includes(category))?.id ?? 'other';
 }
 
@@ -200,7 +220,16 @@ function isRepeating(t: SortInput, history: SortInput[]) {
 export function sortTransaction(t: SortInput, ctx: SortContext, scheme: SortingScheme = SERVICE_SCHEME): Sorting {
   const text = [t.merchant, t.description, t.bankCategory].filter(Boolean).join(' ').toLowerCase();
   if (TRANSFER_WORDS.test(text)) return { category: TRANSFERS, confidence: 0.9, method: 'rule', reason: 'Looks like a transfer between accounts.' };
-  if (t.amount > 0) return { category: INCOME, confidence: 0.95, method: 'rule', reason: 'Money coming in.' };
+  if (t.amount > 0) {
+    // NexGain Hospitality: card/till payouts, delivery apps, cash... (anything else is asked about).
+    if (scheme.income) {
+      for (const [category, pattern] of scheme.income.rules) {
+        if (pattern.test(text)) return { category, confidence: 0.95, method: 'rule', reason: `${cleanMerchantName(t.merchant || t.description)} looks like ${category.toLowerCase()}.` };
+      }
+      return { category: scheme.income.fallback, confidence: 0.4, method: 'rule', reason: 'NexGain couldn’t tell what this money was for.' };
+    }
+    return { category: INCOME, confidence: 0.95, method: 'rule', reason: 'Money coming in.' };
+  }
 
   const key = merchantKey(t);
   const learned = key ? ctx.learned.get(key) : undefined;
@@ -363,7 +392,7 @@ export function travelCosts(
 // ---------------------------------------------------------------------------
 
 export type SortingScheme = {
-  id: 'service' | 'retail';
+  id: 'service' | 'retail' | 'hospitality';
   /** Every expense category, in the order they're offered (Income and Transfers aren't spending, so aren't listed). */
   categories: AnyCategory[];
   /** Known merchants: the first match wins. */
@@ -371,13 +400,21 @@ export type SortingScheme = {
   /** Clues for the best guess, with how sure each one makes NexGain. */
   clues: [AnyCategory, RegExp, number][];
   /** The groups on the Transactions page ("Expenses by category"). */
-  groups: SpendGroup<SpendGroupId | RetailSpendGroupId>[];
+  groups: SpendGroup<SpendGroupId | RetailSpendGroupId | HospitalitySpendGroupId>[];
   /** Payments to staff and contractors. */
   wages: AnyCategory;
   /** The same amount every month (null = no guess from that alone). */
   subscription: AnyCategory | null;
   /** Money in is matched to unpaid customer invoices (NexGain Retail has none). */
   matchesInvoices: boolean;
+  /**
+   * NexGain Hospitality only: categories for money coming in, with known names
+   * (Square, Uber Eats...). Anything else gets `fallback` and is asked about.
+   * Without this, money in is just "Income".
+   */
+  income?: { categories: AnyCategory[]; rules: [AnyCategory, RegExp][]; fallback: AnyCategory };
+  /** false = never mark an invoice paid by itself (NexGain Hospitality always asks the owner first). */
+  autoMatchesInvoices?: boolean;
 };
 
 /** Systems 1 and 2: trades and service businesses, and booking businesses. Unchanged. */
@@ -488,5 +525,96 @@ export const RETAIL_SCHEME: SortingScheme = {
   matchesInvoices: false,
 };
 
-/** The scheme for a business's system (businesses.system_type). Anything but 'retail' is the usual one. */
-export const schemeForSystem = (systemType: string | null | undefined) => (systemType === 'retail' ? RETAIL_SCHEME : SERVICE_SCHEME);
+// ---------------------------------------------------------------------------
+// System 4: NexGain Hospitality (cafes, restaurants, bars...)
+// ---------------------------------------------------------------------------
+
+/** NexGain Hospitality's categories for money out, in the order they're offered. */
+export const HOSPITALITY_CATEGORIES: HospitalityCategory[] = ['Food & Supplies', 'Drinks', 'Wages', 'Rent', 'Utilities', 'Equipment', 'Packaging', 'Cleaning', 'Other'];
+
+/** NexGain Hospitality's categories for money coming in, in the order they're offered. */
+export const HOSPITALITY_INCOME_CATEGORIES: HospitalityIncomeCategory[] = ['Card / till sales', 'Delivery apps', 'Cash deposits', 'Catering & functions', 'Other income'];
+
+export function isHospitalityIncome(category: string | null | undefined) {
+  return (HOSPITALITY_INCOME_CATEGORIES as string[]).includes(category ?? '');
+}
+
+// Money in, checked in order: the first match wins. Card and till payouts
+// (Square, Tyro, Stripe, bank EFTPOS...) are matched to the day's sales in the
+// app; delivery apps are just labelled.
+export const HOSPITALITY_INCOME_RULES: [HospitalityIncomeCategory, RegExp][] = [
+  ['Delivery apps', /\b(uber\s*\*?\s*eats|ubereats|doordash|door dash|menulog|deliveroo|easi|hungrypanda|hungry panda|mr yum|mryum)\b/],
+  [
+    'Card / till sales',
+    /\b(square|sq \*|squareup|tyro|stripe|lightspeed|zeller|eftpos|merchant (settlement|stl|sttl|deposit)|settlement|smartpay|windcave|kounta|abacus|loyverse|bepoz|swiftpos|shopify payments|paypal|card sales)\b/,
+  ],
+  ['Cash deposits', /\b(cash dep\w*|atm dep\w*|coin dep\w*|branch deposit|quick deposit)\b/],
+  ['Catering & functions', /\b(catering|function|event booking|venue hire|room hire)\b/],
+];
+
+// Money out, checked in order: the first match wins (so "origin energy" is
+// Utilities, not Food). Bank fees and tax have no hospitality category: Other.
+export const HOSPITALITY_RULES: [HospitalityCategory, RegExp][] = [
+  ['Wages', /\b(wages?|salary|payroll|superannuation|super fund|clearing house|australiansuper|rest super|hostplus|cbus|aware super)\b/],
+  [
+    'Utilities',
+    /\b(agl|origin energy|energyaustralia|energy australia|red energy|alinta|simply energy|lumo|electricity|elgas|supagas|kleenheat|sydney water|yarra valley water|telstra|optus|vodafone|tpg|aussie broadband|belong|iinet|internet|broadband|nbn)\b/,
+  ],
+  ['Rent', /\b(rent|rental|lease|real estate|property management|westfield|scentre|vicinity centres|stockland|shopping centre)\b/],
+  [
+    'Drinks',
+    /\b(carlton united|cub|lion nathan|lion beer|asahi|coca[- ]?cola|ccep|schweppes|pepsi\w*|bws|dan murphys?|liquorland|liquor|bottle ?shop|brewing|brewery|distiller\w*|winery|wines?|beverages?)\b/,
+  ],
+  ['Packaging', /\b(biopak|detpak|packaging|takeaway containers?|coffee cups?|napkins|serviettes|paper bags?|bunzl)\b/],
+  ['Cleaning', /\b(ecolab|cleaning|cleaners?|janitorial|jani-?king|hygiene|chemicals?|pest control|flick|rentokil|linen|laundry)\b/],
+  [
+    'Equipment',
+    /\b(la marzocco|coffee machine|espresso machine|kitchen equipment|catering equipment|fridge|freezer|oven|dishwasher|ikea|bunnings|harvey norman|jb hi-?fi|officeworks|equipment|appliances?)\b/,
+  ],
+  [
+    'Food & Supplies',
+    /\b(bidfood|pfd|foodservice|food service|coles|woolworths|aldi|costco|iga|harris farm|metcash|campbells|ritchies|butcher\w*|seafood|fresh produce|fruit|vegetables?|dairy|milk|bakery|bread|eggs|poultry|campos|vittoria|lavazza|grinders|single o|five senses|roasters?)\b/,
+  ],
+];
+
+const HOSPITALITY_CLUES: [HospitalityCategory, RegExp, number][] = [
+  ['Food & Supplies', /\b(foods?|fresh|farms?|markets?|meats?|grocer\w*|wholesal\w*|produce|provisions|pantry|supplies|supplier|trading)\b/, 0.7],
+  ['Drinks', /\b(drinks?|bev\w*|bottl\w*|cellars?|kegs?)\b/, 0.65],
+  ['Wages', /\b(contract(or|ing)?|labour hire|staffing|recruitment|casual staff)\b/, 0.7],
+  ['Equipment', /\b(hardware|kitchen|repair\w*|maintenance|furniture|fixtures?)\b/, 0.6],
+  ['Cleaning', /\b(hygien\w*|sanit\w*|wash\w*)\b/, 0.6],
+  ['Packaging', /\b(bags?|boxes|box|containers?|wrap\w*|foil|straws?)\b/, 0.6],
+  ['Utilities', /\b(mobile|telco|energy|power|gas)\b/, 0.6],
+];
+
+/** NexGain Hospitality's groups: one per category, so a one-tap answer in "Needs review" is exact. */
+export const HOSPITALITY_SPEND_GROUPS: SpendGroup<HospitalitySpendGroupId>[] = [
+  { id: 'food', name: 'Food & Supplies', description: 'Food, coffee and kitchen supplies', categories: ['Food & Supplies'], pick: 'Food & Supplies' },
+  { id: 'drinks', name: 'Drinks', description: 'Drinks, beer, wine and spirits', categories: ['Drinks'], pick: 'Drinks' },
+  // Payroll's own wages entries are called "Wages & super".
+  { id: 'wages', name: 'Wages', description: 'Staff pay, super and contractors', categories: ['Wages', 'Wages & super'], pick: 'Wages' },
+  { id: 'rent', name: 'Rent', description: 'Rent and leases', categories: ['Rent'], pick: 'Rent' },
+  { id: 'utilities', name: 'Utilities', description: 'Power, gas, water, phone and internet', categories: ['Utilities'], pick: 'Utilities' },
+  { id: 'equipment', name: 'Equipment', description: 'Kitchen equipment and repairs', categories: ['Equipment'], pick: 'Equipment' },
+  { id: 'packaging', name: 'Packaging', description: 'Takeaway cups, containers and bags', categories: ['Packaging'], pick: 'Packaging' },
+  { id: 'cleaning', name: 'Cleaning', description: 'Cleaning, linen and pest control', categories: ['Cleaning'], pick: 'Cleaning' },
+  { id: 'other', name: 'Other', description: 'Bank fees, insurance, software and more', categories: ['Other'], pick: 'Other' },
+];
+
+/** System 4: NexGain Hospitality. Payments are matched to invoices only after the owner says yes. */
+export const HOSPITALITY_SCHEME: SortingScheme = {
+  id: 'hospitality',
+  categories: HOSPITALITY_CATEGORIES,
+  rules: HOSPITALITY_RULES,
+  clues: HOSPITALITY_CLUES,
+  groups: HOSPITALITY_SPEND_GROUPS,
+  wages: 'Wages',
+  subscription: null,
+  matchesInvoices: true,
+  autoMatchesInvoices: false,
+  income: { categories: HOSPITALITY_INCOME_CATEGORIES, rules: HOSPITALITY_INCOME_RULES, fallback: 'Other income' },
+};
+
+/** The scheme for a business's system (businesses.system_type). Anything else is the usual one. */
+export const schemeForSystem = (systemType: string | null | undefined) =>
+  systemType === 'retail' ? RETAIL_SCHEME : systemType === 'hospitality' ? HOSPITALITY_SCHEME : SERVICE_SCHEME;

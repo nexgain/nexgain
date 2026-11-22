@@ -12,6 +12,8 @@ import { fromDateKey } from '@/data/shifts';
 import { createStore } from '@/data/store';
 import { supabase } from '@/lib/supabase';
 
+import { isHospitalityIncome } from '../../supabase/functions/_shared/ai/sorting';
+
 export type BankConnection = {
   provider: 'basiq' | 'saltedge';
   /** pending: the bank login wasn't finished. active: connected. */
@@ -61,6 +63,11 @@ export type BankTransaction = {
 
 export const INCOME_CATEGORY = 'Income';
 export const TRANSFERS_CATEGORY = 'Transfers';
+
+/** Money-in categories: "Income", or NexGain Hospitality's (Card / till sales, Delivery apps...). */
+export function isIncomeCategory(category: string | null | undefined) {
+  return category === INCOME_CATEGORY || isHospitalityIncome(category);
+}
 
 /** Every category a transaction can have, in the order they're offered. Matches supabase/functions/_shared/banks.ts. */
 export const TRANSACTION_CATEGORIES: string[] = [
@@ -351,7 +358,7 @@ export function categorySections(items: TransactionItem[]) {
   const groups = new Map<string, TransactionItem[]>();
   for (const item of items) groups.set(item.category, [...(groups.get(item.category) ?? []), item]);
   const rank = (category: string, total: number) =>
-    category === INCOME_CATEGORY ? -Infinity : category === TRANSFERS_CATEGORY ? Infinity : category === 'Other' ? 1e12 : -Math.abs(total);
+    isIncomeCategory(category) ? -1e15 - Math.abs(total) : category === TRANSFERS_CATEGORY ? Infinity : category === 'Other' ? 1e12 : -Math.abs(total);
   return [...groups.entries()]
     .map(([category, list]) => ({
       category,

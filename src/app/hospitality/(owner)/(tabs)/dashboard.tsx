@@ -3,9 +3,13 @@ import { StyleSheet, Text, View } from 'react-native';
 import { ActionRow, Card, EmptyState, OwnerIcons, OwnerScreen, PageHeader, StatCard, StatGrid } from '@/components/owner/ui';
 import { Colors as C, Spacing } from '@/constants/theme';
 import { useBusiness } from '@/data/business';
+import { useDocs } from '@/data/invoices';
 import { formatMoney } from '@/data/payroll';
 import { router } from '@/lib/nav';
+import { useMoneyFeed } from '@/data/money-sorting';
 import { MenuIcons, MenuItemRow } from '@/systems/hospitality/components/owner/menu-ui';
+import { MoneyInsightsCard } from '@/systems/hospitality/components/owner/money-cards';
+import { invoiceAmounts, paidInvoicesIn } from '@/systems/hospitality/data/invoice-status';
 import { useMenuItems, useSales } from '@/systems/hospitality/data/menu';
 import { addDays, dateKey, isSpecialNow, itemSales, salesIn, salesPeriods, salesTotals, specialEnded } from '@/systems/hospitality/data/sales-stats';
 
@@ -22,16 +26,24 @@ export default function HospitalityDashboard() {
   const business = useBusiness();
   const sales = useSales();
   const items = useMenuItems();
+  const feed = useMoneyFeed();
   const now = new Date();
   const today = dateKey(now);
   const [todayP, week, month] = salesPeriods(now);
 
-  const todayTotals = salesTotals(salesIn(sales, todayP.start, todayP.end));
-  const sameDayLastWeek = salesTotals(salesIn(sales, addDays(todayP.start, -7), addDays(todayP.end, -7)));
+  const docs = useDocs();
+  // Recorded sales plus invoices paid in the period (Catering & functions), each counted once.
+  const totalsFor = (start: Date, end: Date) => {
+    const t = salesTotals(salesIn(sales, start, end));
+    const invoiced = paidInvoicesIn(docs, start, end).reduce((sum, d) => sum + invoiceAmounts(d).total, 0);
+    return { ...t, revenue: Math.round((t.revenue + invoiced) * 100) / 100 };
+  };
+  const todayTotals = totalsFor(todayP.start, todayP.end);
+  const sameDayLastWeek = totalsFor(addDays(todayP.start, -7), addDays(todayP.end, -7));
   const weekSales = salesIn(sales, week.start, week.end);
-  const weekTotals = salesTotals(weekSales);
-  const lastWeekTotals = salesTotals(salesIn(sales, addDays(week.start, -7), addDays(week.end, -7)));
-  const monthTotals = salesTotals(salesIn(sales, month.start, month.end));
+  const weekTotals = totalsFor(week.start, week.end);
+  const lastWeekTotals = totalsFor(addDays(week.start, -7), addDays(week.end, -7));
+  const monthTotals = totalsFor(month.start, month.end);
   const best = itemSales(weekSales).slice(0, 3);
   const specials = items.filter((i) => isSpecialNow(i, today));
   const ended = items.filter((i) => i.active && specialEnded(i, today));
@@ -54,6 +66,9 @@ export default function HospitalityDashboard() {
           <ActionRow icon={MenuIcons.plus} label="Add a menu item" onPress={() => router.push({ pathname: '/hospitality/menu-item/[id]', params: { id: 'new' } })} showDivider />
         </View>
       </Card>
+
+      {/* Card payouts vs sales, delivery share, card fees, overdue invoices. */}
+      <MoneyInsightsCard feed={feed} />
 
       <Card title="Best sellers this week" icon={MenuIcons.trophy}>
         {best.length === 0 ? (
@@ -103,7 +118,12 @@ export default function HospitalityDashboard() {
               {hidden} item{hidden === 1 ? ' is' : 's are'} hidden (not on sale).
             </Text>
           )}
-          <ActionRow icon={MenuIcons.menu} label="Open the menu" onPress={() => router.navigate('/hospitality/menu-items')} />
+          <ActionRow
+            icon={MenuIcons.menu}
+            label="Open the menu"
+            // from=dashboard: the Menu page shows "‹ Dashboard" to come back.
+            onPress={() => router.navigate({ pathname: '/hospitality/menu-items', params: { from: 'dashboard' } })}
+          />
         </Card>
       )}
     </OwnerScreen>

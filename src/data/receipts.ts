@@ -24,7 +24,20 @@ import { supabase } from '@/lib/supabase';
 export const GST_RECEIPT_THRESHOLD = 82.5;
 
 /** Money out that never needs a receipt. */
-const NO_RECEIPT_NEEDED = new Set([INCOME_CATEGORY, TRANSFERS_CATEGORY, WAGES_CATEGORY, 'Tax', 'Bank fees']);
+const NO_RECEIPT_NEEDED = new Set([
+  INCOME_CATEGORY,
+  TRANSFERS_CATEGORY,
+  WAGES_CATEGORY,
+  'Tax',
+  'Bank fees',
+  // NexGain Hospitality: money in, and wages
+  'Card / till sales',
+  'Delivery apps',
+  'Cash deposits',
+  'Catering & functions',
+  'Other income',
+  'Wages',
+]);
 
 export type ReceiptLineItem = { description: string; quantity: number | null; amount: number | null };
 

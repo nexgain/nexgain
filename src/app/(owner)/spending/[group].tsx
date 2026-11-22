@@ -12,7 +12,7 @@ import { Colors as C, Spacing } from '@/constants/theme';
 import { transactionItems, type TransactionItem } from '@/data/bank';
 import { useExpenses } from '@/data/finance';
 import {
-  groupById,
+  currentGroupById,
   groupInsight,
   groupSummary,
   monthlyTotals,
@@ -41,7 +41,8 @@ const METHODS = [
 // transactions.
 export default function SpendingGroupScreen() {
   const params = useLocalSearchParams<{ group: string; range?: string }>();
-  const group = groupById(params.group);
+  // The business's own groups (NexGain Hospitality: Food & Supplies, Drinks...; everyone else as before).
+  const group = currentGroupById(params.group);
   const feed = useMoneyFeed();
   const typedExpenses = useExpenses();
   const receipts = useReceipts();

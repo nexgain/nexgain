@@ -19,7 +19,7 @@
 // Setup: deploy as "sort-transactions" with "Verify JWT" ON (the default).
 import Anthropic from 'npm:@anthropic-ai/sdk@1';
 
-import { RETAIL_CATEGORIES } from '../_shared/ai/sorting.ts';
+import { HOSPITALITY_CATEGORIES, RETAIL_CATEGORIES } from '../_shared/ai/sorting.ts';
 import { ownerBusiness } from '../_shared/banks.ts';
 import { adminDb, CORS, reply } from '../_shared/connections.ts';
 
@@ -44,6 +44,9 @@ const CATEGORIES = [
 
 /** NexGain Retail (System 3): its own categories (RETAIL_SCHEME in _shared/ai/sorting.ts). */
 const RETAIL = [...RETAIL_CATEGORIES, 'Transfers'];
+
+/** NexGain Hospitality (System 4): its own categories (HOSPITALITY_SCHEME in _shared/ai/sorting.ts). */
+const HOSPITALITY = [...HOSPITALITY_CATEGORIES, 'Transfers'];
 
 /** Below this, the owner is asked (same as REVIEW_BELOW in _shared/ai/sorting.ts). */
 const SURE = 0.6;
@@ -89,6 +92,24 @@ For each transaction pick the single best category from the list, and a confiden
 Return one result for every transaction number.`;
 }
 
+/** NexGain Hospitality: cafes, restaurants, bars and other food businesses. */
+function hospitalityPrompt(business: { name: string; industry: string | null }) {
+  return `You sort bank transactions (money going out) for an Australian food business's bookkeeping app.
+The business: "${business.name}"${business.industry ? `, a ${business.industry}` : ''}. It sells food and drinks (a cafe, restaurant, bar or similar).
+
+For each transaction pick the single best category from the list, and a confidence from 0 to 1.
+- "Food & Supplies" is food, coffee beans, milk, bread, meat, fruit and veg, and kitchen ingredients (e.g. Bidfood, PFD, Coles, Woolworths, Costco, a butcher, a coffee roaster).
+- "Drinks" is soft drinks, beer, wine and spirits bought to sell (e.g. Coca-Cola, CUB, Lion, Dan Murphy's).
+- "Packaging" is takeaway cups, lids, containers, bags and napkins (e.g. BioPak, Detpak, Bunzl).
+- "Cleaning" is cleaning products, cleaners, linen, laundry and pest control.
+- "Equipment" is kitchen and coffee equipment, furniture, repairs and appliances.
+- "Utilities" is power, gas, water, phone and internet. "Rent" is the shop's rent or lease.
+- "Wages" is paying staff or super funds. "Transfers" is moving money between the business's own accounts, or loan/credit card repayments.
+- "Other" is for business costs that fit no other category (bank fees, insurance, software, tax).
+- Be honest about confidence. Use 0.8 or more only when the merchant or description makes it clear. Use under 0.6 when you're guessing (e.g. a person's name, a vague code, a shop that sells many kinds of things). The owner is asked about anything under 0.6.
+Return one result for every transaction number.`;
+}
+
 function systemPrompt(business: { name: string; industry: string | null }) {
   return `You sort bank transactions (money going out) for an Australian small business's bookkeeping app.
 The business: "${business.name}"${business.industry ? `, a ${business.industry} business` : ''}.
@@ -125,8 +146,12 @@ Deno.serve(async (req) => {
     system_type: string | null;
   }>();
   const retail = business?.system_type === 'retail';
-  const categories = retail ? RETAIL : CATEGORIES;
-  const prompt = (retail ? retailPrompt : systemPrompt)({ name: business?.name || 'this business', industry: business?.industry ?? null });
+  const hospitality = business?.system_type === 'hospitality';
+  const categories = retail ? RETAIL : hospitality ? HOSPITALITY : CATEGORIES;
+  const prompt = (retail ? retailPrompt : hospitality ? hospitalityPrompt : systemPrompt)({
+    name: business?.name || 'this business',
+    industry: business?.industry ?? null,
+  });
 
   // Money out that the quick rules weren't sure about, not yet seen by Claude or the owner.
   const { data, error } = await db

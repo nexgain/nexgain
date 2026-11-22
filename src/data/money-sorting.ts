@@ -16,6 +16,11 @@
 // in supabase/functions/_shared/ai/sorting.ts): Systems 1 and 2 use the usual
 // ones; NexGain Retail uses its own (Stock purchases, Rent, Wages...) and has
 // no invoices to match.
+//
+// NexGain Hospitality (System 4) asks its own questions about money coming in
+// (src/systems/hospitality/data/money.ts): card/till payouts are matched to the
+// day's recorded sales, and a payment is only ever linked to an invoice after
+// the owner says yes.
 import { businessStore, updateBusiness, useBusiness } from '@/data/business';
 import {
   bankSyncListeners,
@@ -41,6 +46,10 @@ import { formatMoney } from '@/data/payroll';
 import { useReceipts } from '@/data/receipts';
 import { createStore } from '@/data/store';
 import { supabase } from '@/lib/supabase';
+import { buildHospitalitySample } from '@/systems/hospitality/data/bank-sample';
+import { infoOf } from '@/systems/hospitality/data/invoice-status';
+import { useSales } from '@/systems/hospitality/data/menu';
+import { CATERING, moneyInQuestions, salesByDay, type HospitalityQuestion } from '@/systems/hospitality/data/money';
 
 import {
   groupOf,
@@ -63,6 +72,8 @@ import {
 import { productPriceRises, purchasesFromReceipts, type ProductPurchase } from '../../supabase/functions/_shared/ai/products';
 
 export {
+  HOSPITALITY_CATEGORIES,
+  HOSPITALITY_INCOME_CATEGORIES,
   groupById,
   SPEND_GROUPS,
   type JobOption,
@@ -94,6 +105,8 @@ type Preview = {
   contractorNames: string[];
   learned: Map<string, string>;
   purchases: ProductPurchase[];
+  /** NexGain Hospitality's preview: sample invoices and recorded sales. */
+  hospitality?: { docs: SalesDoc[]; daySales: Map<string, number> };
 };
 
 /** The sample preview, while it's switched on (null = real data). */
@@ -115,7 +128,13 @@ export type MoneyFeed = {
   linkExpensesToJobs: boolean;
   /** Products bought, from receipts (for price rises on the Materials page). */
   purchases: ProductPurchase[];
+  /** NexGain Hospitality: the business's invoices (real, or the preview's samples). */
+  docs?: SalesDoc[];
+  /** NexGain Hospitality: recorded sales per day ("YYYY-MM-DD" -> total), for matching card payouts. */
+  daySales?: Map<string, number>;
 };
+
+const NO_DAY_SALES = new Map<string, number>();
 
 /** Unpaid invoices from the Invoices section. */
 export function unpaidInvoicesOf(docs: SalesDoc[]): UnpaidInvoice[] {
@@ -155,6 +174,8 @@ export function useMoneyFeed(): MoneyFeed {
   const clients = useClients();
   const business = useBusiness();
   const receipts = useReceipts();
+  const sales = useSales();
+  const hospitality = business?.systemType === 'hospitality';
   const linkExpensesToJobs = business?.linkExpensesToJobs ?? false;
   if (preview) {
     return {
@@ -166,6 +187,8 @@ export function useMoneyFeed(): MoneyFeed {
       jobs: preview.jobs,
       linkExpensesToJobs,
       purchases: preview.purchases,
+      docs: preview.hospitality?.docs ?? [],
+      daySales: preview.hospitality?.daySales ?? NO_DAY_SALES,
     };
   }
   return {
@@ -177,6 +200,8 @@ export function useMoneyFeed(): MoneyFeed {
     jobs: jobOptionsOf(jobs, clients),
     linkExpensesToJobs,
     purchases: purchasesFromReceipts(receipts),
+    docs: hospitality ? docs : [],
+    daySales: hospitality ? salesByDay(sales) : NO_DAY_SALES,
   };
 }
 
@@ -250,8 +275,10 @@ async function runProcess() {
   }
   bankTransactionsStore.set(all);
 
-  // New money in: one clear invoice match is marked paid automatically.
-  const invoices = currentScheme().matchesInvoices ? unpaidInvoicesOf(docsStore.get()) : [];
+  // New money in: one clear invoice match is marked paid automatically
+  // (not in NexGain Hospitality: the owner is always asked first).
+  const scheme = currentScheme();
+  const invoices = scheme.matchesInvoices && scheme.autoMatchesInvoices !== false ? unpaidInvoicesOf(docsStore.get()) : [];
   for (const t of changed) {
     if (t.amount <= 0 || t.category !== INCOME_CATEGORY || t.invoiceId || t.invoiceReviewDone) continue;
     const match = matchPayment(t, invoices);
@@ -323,6 +350,25 @@ export type ReviewItem =
   | { kind: 'income'; txn: BankTransaction }
   /** Which job an expense was for (when "Link expenses to jobs" is on). */
   | { kind: 'job'; txn: BankTransaction; job: JobOption };
+
+/** NexGain Hospitality's questions: money in ("Is this payment for INV-0004?", "What was this for?") and categories. */
+export type HospitalityReviewItem = HospitalityQuestion<BankTransaction> | { kind: 'category'; txn: BankTransaction };
+
+/** NexGain Hospitality: its own money-in questions first, then categories. Never jobs. */
+export function hospitalityReviewItems(feed: MoneyFeed): HospitalityReviewItem[] {
+  const categoryItems: HospitalityReviewItem[] = feed.transactions
+    .filter(
+      (t) =>
+        t.amount < 0 &&
+        t.category !== TRANSFERS_CATEGORY &&
+        t.categorySource === 'auto' &&
+        !t.categoryReviewDone &&
+        t.confidence !== null &&
+        t.confidence < REVIEW_BELOW,
+    )
+    .map((t) => ({ kind: 'category' as const, txn: t }));
+  return [...moneyInQuestions(feed.transactions, feed.docs ?? []), ...categoryItems];
+}
 
 const daysSince = (date: string) => (Date.now() - Date.parse(`${date}T00:00:00`)) / 86_400_000;
 
@@ -514,6 +560,81 @@ export async function undoInvoiceMatch(txnId: string): Promise<string | null> {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// NexGain Hospitality: the owner confirms a payment is for an invoice
+// ---------------------------------------------------------------------------
+
+/** Changes the preview's sample invoices (NexGain Hospitality). */
+function patchPreviewDocs(change: (docs: SalesDoc[]) => SalesDoc[]) {
+  updatePreview((p) => (p.hospitality ? { ...p, hospitality: { ...p.hospitality, docs: change(p.hospitality.docs) } } : p));
+}
+
+/**
+ * "Yes, mark as paid" (part 'full') or "Yes, it's the deposit" ('deposit').
+ * Links the bank payment to the invoice (so it's never counted twice) and
+ * files it as Catering & functions. Returns an error message, or null.
+ */
+export async function confirmInvoicePayment(txnId: string, invoiceId: string, part: 'full' | 'deposit'): Promise<string | null> {
+  const preview = bankPreviewStore.get();
+  const list = preview ? preview.transactions : bankTransactionsStore.get();
+  const txn = list.find((t) => t.id === txnId);
+  if (!txn) return 'That payment isn’t here any more.';
+  if (!preview) {
+    const { error } = await supabase.rpc('hospitality_match_payment', { p_transaction: txnId, p_invoice: invoiceId, p_part: part });
+    if (error) return error.message;
+  }
+  patchTxns(new Set([txnId]), (t) => ({
+    ...t,
+    invoiceId,
+    invoiceMatchedBy: 'owner',
+    invoiceReviewDone: true,
+    category: CATERING,
+    categorySource: 'owner',
+    categoryMethod: 'owner',
+    confidence: 1,
+    categoryReviewDone: true,
+  }));
+  const paidAt = new Date(`${txn.date}T12:00:00`).toISOString();
+  const apply = (d: SalesDoc): SalesDoc =>
+    d.id !== invoiceId
+      ? d
+      : part === 'full'
+        ? { ...d, status: 'Paid', paidAt, receiptStatus: 'not_sent', hospitality: { ...infoOf(d), paidMethod: 'Bank transfer' } }
+        : { ...d, hospitality: { ...infoOf(d), depositPaid: true, depositPaidAt: paidAt } };
+  if (preview) patchPreviewDocs((docs) => docs.map(apply));
+  // The invoice shows as paid everywhere straight away (the database has saved the same change).
+  else docsStore.set((all) => all.map(apply));
+  return null;
+}
+
+/** Undoes "Yes, mark as paid": the payment is unlinked and the invoice goes back to how it was. */
+export async function undoInvoicePayment(txnId: string): Promise<string | null> {
+  const preview = bankPreviewStore.get();
+  const txn = (preview ? preview.transactions : bankTransactionsStore.get()).find((t) => t.id === txnId);
+  if (!txn?.invoiceId) return null;
+  const invoiceId = txn.invoiceId;
+  const docs = preview ? (preview.hospitality?.docs ?? []) : docsStore.get();
+  const doc = docs.find((d) => d.id === invoiceId);
+  if (!preview) {
+    const { error } = await supabase.rpc('hospitality_undo_payment', { p_transaction: txnId });
+    if (error) return error.message;
+  }
+  patchTxns(new Set([txnId]), (t) => ({ ...t, invoiceId: null, invoiceMatchedBy: null, invoiceReviewDone: false }));
+  if (doc) {
+    // A deposit payment only clears the deposit; a full payment makes it unpaid again.
+    const depositOnly = doc.status !== 'Paid' && infoOf(doc).depositPaid;
+    const apply = (d: SalesDoc): SalesDoc =>
+      d.id !== invoiceId
+        ? d
+        : depositOnly
+          ? { ...d, hospitality: { ...infoOf(d), depositPaid: false, depositPaidAt: null } }
+          : { ...d, status: 'Pending', paidAt: null, receiptStatus: null, hospitality: { ...infoOf(d), paidMethod: null } };
+    if (preview) patchPreviewDocs((all) => all.map(apply));
+    else docsStore.set((all) => all.map(apply));
+  }
+  return null;
+}
+
 export function setLinkExpensesToJobs(on: boolean) {
   updateBusiness({ linkExpensesToJobs: on });
 }
@@ -524,6 +645,23 @@ export function setLinkExpensesToJobs(on: boolean) {
 
 /** Shows the Transactions page with sample bank data (memory only, never saved). */
 export function startBankPreview() {
+  // NexGain Hospitality: a cafe's bank account, sales and invoices. Nothing is matched without the owner.
+  if (currentScheme().id === 'hospitality') {
+    const cafe = buildHospitalitySample();
+    const learned = new Map<string, string>();
+    const { all } = sortNew(cafe.transactions, contextFor(cafe.transactions, learned, []));
+    bankPreviewStore.set({
+      accounts: cafe.accounts,
+      transactions: all,
+      invoices: [],
+      jobs: [],
+      contractorNames: [],
+      learned,
+      purchases: [],
+      hospitality: { docs: cafe.invoices, daySales: cafe.daySales },
+    });
+    return;
+  }
   const sample = buildSampleBank();
   const learned = new Map<string, string>();
   const { all } = sortNew(sample.transactions, contextFor(sample.transactions, learned, sample.contractorNames));
@@ -554,6 +692,9 @@ export function stopBankPreview() {
 /** The invoice a payment was matched to (real or sample), for showing its number. */
 export function invoiceLabel(invoiceId: string | null, feed: MoneyFeed) {
   if (!invoiceId) return null;
+  // NexGain Hospitality (real or sample invoices).
+  const hosp = feed.docs?.find((d) => d.id === invoiceId);
+  if (hosp) return { id: hosp.id, number: hosp.number, clientName: hosp.client.business || hosp.client.name };
   if (feed.preview) return buildSampleBank().invoices.find((i) => i.id === invoiceId) ?? null;
   const d = docsStore.get().find((x) => x.id === invoiceId);
   return d ? { id: d.id, number: d.number, clientName: d.client.name } : null;
@@ -691,11 +832,12 @@ export function groupInsight(summary: GroupSummary, range: MoneyRange, jobs: Job
 
   // Materials (NexGain Retail: Stock): the same product costing more than last time (from receipts), not total spending.
   const groupId: string = summary.group.id;
-  if (groupId === 'materials' || groupId === 'stock') {
+  if (groupId === 'materials' || groupId === 'stock' || groupId === 'food') {
     const rise = productPriceRises(purchases, todayKey())[0];
     if (rise) {
       const at = rise.now.supplier ? ` at ${rise.now.supplier}` : '';
-      const advice = groupId === 'stock' ? 'check your sell price still covers it' : 'update your quote prices to cover it';
+      const advice =
+        groupId === 'stock' ? 'check your sell price still covers it' : groupId === 'food' ? 'check your menu prices still cover it' : 'update your quote prices to cover it';
       return `${rise.product} went up ${rise.changePercent}%${at}: ${formatMoney(rise.before.unitPrice)} last time, ${formatMoney(rise.now.unitPrice)} now. Ask about the rise or compare another supplier, and ${advice}.`;
     }
   }
@@ -726,7 +868,8 @@ export function groupInsight(summary: GroupSummary, range: MoneyRange, jobs: Job
   const share = Math.round((topAmount / summary.total) * 100);
 
   if (summary.upALot && summary.change !== null && summary.group.id !== 'materials') {
-    const check = currentScheme().id === 'retail' ? 'Check your prices still cover it.' : 'Check your quotes cover it.';
+    const scheme = currentScheme().id;
+    const check = scheme === 'retail' ? 'Check your prices still cover it.' : scheme === 'hospitality' ? 'Check your menu prices still cover it.' : 'Check your quotes cover it.';
     return `${summary.group.name} is up ${summary.change}% on the same time ${range.previousLabel}. The biggest part was ${topName} (${formatMoney(topAmount)}). ${check}`;
   }
   if (summary.change !== null && summary.change <= -15) {

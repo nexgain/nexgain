@@ -34,6 +34,8 @@ export function systemPath(path: string, system = systemOf(businessStore.get()))
   // Relative links, the start page, login pages and already-prefixed links stay as they are.
   if (!path.startsWith('/') || path === '/' || under(path, GLOBAL) || under(path, ['/hospitality', '/bookings', '/retail'])) return path;
   const [pathname, query = ''] = path.split('?');
+  // A shared screen opening one invoice (e.g. from GST): hospitality's own invoice page.
+  if (pathname === '/invoices/[id]') return `/hospitality/invoice/[id]${query ? `?${query}` : ''}`;
   if (under(pathname, NOT_IN_HOSPITALITY)) {
     console.warn(`"${pathname}" isn't part of NexGain Hospitality; opening the home page instead.`);
     return under(pathname, ['/job-report']) ? '/hospitality/home' : '/hospitality/dashboard';

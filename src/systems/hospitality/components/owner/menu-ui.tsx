@@ -1,11 +1,13 @@
 // NexGain Hospitality: pieces shared by the Menu, Record sale and Sales screens.
 import { useEffect, useState } from 'react';
 import { Image } from 'expo-image';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/owner/ui';
 import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { formatMoney } from '@/data/payroll';
+import { useDesktopSheetStyle } from '@/hooks/use-desktop';
 import { menuPhotoUrl, type MenuItem, type Sale } from '@/systems/hospitality/data/menu';
 import { profitOf } from '@/systems/hospitality/data/sales-stats';
 
@@ -134,7 +136,99 @@ export function QuantityStepper({
   );
 }
 
+/**
+ * "‹ Dashboard": a clear back button for the top left of a page, with the
+ * name of the page it goes back to (easier to spot than the tab bar).
+ */
+export function BackLink({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Back to ${label}`}
+      hitSlop={8}
+      style={({ pressed }) => [styles.backLink, pressed && styles.pressed]}>
+      <Icon name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }} color={C.accent} size={20} />
+      <Text style={styles.backLinkText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+export type PhotoChoice = 'camera' | 'library' | 'remove';
+
+/** "Add photo" pop-up: Take photo, Choose from library, Remove photo (when there is one) and Cancel. */
+export function PhotoSheet({
+  visible,
+  hasPhoto,
+  onChoose,
+  onClose,
+}: {
+  visible: boolean;
+  hasPhoto: boolean;
+  onChoose: (choice: PhotoChoice) => void;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const desktopSheet = useDesktopSheetStyle();
+  const options: { id: PhotoChoice; label: string; icon: React.ComponentProps<typeof Icon>['name']; danger?: boolean }[] = [
+    { id: 'camera', label: 'Take photo', icon: { ios: 'camera.fill', android: 'photo_camera', web: 'photo_camera' } },
+    { id: 'library', label: 'Choose from library', icon: { ios: 'photo.on.rectangle', android: 'photo_library', web: 'photo_library' } },
+    ...(hasPhoto ? [{ id: 'remove' as const, label: 'Remove photo', icon: { ios: 'trash', android: 'delete', web: 'delete' } as const, danger: true }] : []),
+  ];
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
+      <View style={[styles.sheet, { paddingBottom: insets.bottom + Spacing.three }, desktopSheet]}>
+        <Text style={styles.sheetTitle}>{hasPhoto ? 'Change photo' : 'Add photo'}</Text>
+        {options.map((o) => (
+          <Pressable
+            key={o.id}
+            onPress={() => {
+              onClose();
+              onChoose(o.id);
+            }}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.sheetOption, pressed && styles.pressed]}>
+            <Icon name={o.icon} color={o.danger ? C.danger : C.accent} size={20} />
+            <Text style={[styles.sheetOptionText, o.danger && styles.sheetDanger]}>{o.label}</Text>
+          </Pressable>
+        ))}
+        <Pressable onPress={onClose} accessibilityRole="button" style={({ pressed }) => [styles.sheetCancel, pressed && styles.pressed]}>
+          <Text style={styles.sheetCancelText}>Cancel</Text>
+        </Pressable>
+      </View>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
+  backLink: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, minHeight: 44, minWidth: 44, paddingRight: Spacing.two },
+  backLinkText: { color: C.accent, fontSize: 17, fontWeight: '600' },
+  backdrop: { flex: 1, backgroundColor: C.overlay },
+  sheet: {
+    backgroundColor: C.surface,
+    borderTopLeftRadius: Radius.large,
+    borderTopRightRadius: Radius.large,
+    paddingTop: Spacing.three,
+    paddingHorizontal: Spacing.four - 4,
+    gap: Spacing.two,
+  },
+  sheetTitle: { color: C.text, fontSize: 17, fontWeight: '700', marginBottom: Spacing.one },
+  sheetOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three - 4,
+    minHeight: 56,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.medium,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.background,
+  },
+  sheetOptionText: { color: C.text, fontSize: 17, fontWeight: '600' },
+  sheetDanger: { color: C.danger },
+  sheetCancel: { minHeight: 56, alignItems: 'center', justifyContent: 'center' },
+  sheetCancelText: { color: C.textSecondary, fontSize: 17, fontWeight: '600' },
   flex: { flex: 1, gap: 2 },
   pressed: { opacity: 0.7 },
   disabled: { opacity: 0.35 },

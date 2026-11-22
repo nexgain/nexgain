@@ -60,10 +60,20 @@ export default function OwnerNotificationDetail() {
     ? () => router.navigate({ pathname: '/team-invoice/[id]', params: { id: n.relatedId! } })
     : undefined;
 
+  // NexGain Hospitality's overdue invoices open the invoice (and its "Send reminder email" button).
+  const openHospitalityInvoice = (remind: boolean) =>
+    n.relatedDocId
+      ? () => router.navigate({ pathname: '/hospitality/invoice/[id]', params: { id: n.relatedDocId!, ...(remind ? { remind: '1' } : {}) } })
+      : undefined;
+
   const actions: DetailAction[] = typeInfo(n).actions.map((label) => ({
     label,
     onPress:
-      label === 'Review contractor invoice'
+      n.type === 'invoice_overdue' && label === 'Open invoice'
+        ? openHospitalityInvoice(false)
+        : n.type === 'invoice_overdue' && label === 'Send reminder email'
+          ? openHospitalityInvoice(true)
+          : label === 'Review contractor invoice'
         ? openInvoice
         : label === 'View transaction' && n.relatedId
           ? () => router.navigate({ pathname: '/transaction/[id]', params: { id: n.relatedId! } })

@@ -17,6 +17,7 @@ import {
 } from '@/data/invoices';
 import { formatMoney } from '@/data/payroll';
 import { fromDateKey } from '@/data/shifts';
+import { systemOf } from '@/data/systems';
 import { openEmailDraft, type EmailResult } from '@/lib/email';
 
 function escape(text: string) {
@@ -63,6 +64,12 @@ function invoiceHeader(doc: SalesDoc, business: BusinessProfile | null, receipt:
 export function buildDocHtml(doc: SalesDoc, payment: BusinessPayment, { receipt = false }: HtmlOptions = {}) {
   const { subtotal, gst, total } = docTotals(doc.items, doc.gstRate);
   const business = businessStore.get();
+  // NexGain Hospitality invoices: no "Job" box; the customer's business, a deposit and the amount owing.
+  // (Everyone else's quotes and invoices are exactly as before.)
+  const food = systemOf(business) === 'hospitality';
+  const deposit = food ? (doc.hospitality?.deposit ?? 0) : 0;
+  const depositPaid = food && deposit > 0 && !!doc.hospitality?.depositPaid;
+  const owing = Math.round((total - (depositPaid ? deposit : 0)) * 100) / 100;
   const header = doc.kind === 'quote' ? quoteHeader(doc, business) : invoiceHeader(doc, business, receipt);
   const dateLine = receipt
     ? `Paid: ${paidDateText(doc)}`
@@ -73,6 +80,7 @@ export function buildDocHtml(doc: SalesDoc, payment: BusinessPayment, { receipt 
       Reference: ${escape(doc.paymentReference || doc.number)}</div>`
     : doc.kind === 'invoice'
       ? `<h3>Payment details</h3>
+      ${food && owing !== total ? `<div><strong>Amount owing: ${formatMoney(owing)}</strong></div>` : ''}
       <div>Account name: ${escape(payment.accountName || '—')}<br>BSB: ${escape(payment.bsb || '—')}<br>
       Account number: ${escape(payment.account || '—')}<br>${payment.bank ? `Bank: ${escape(payment.bank)}<br>` : ''}
       Reference: ${escape(doc.paymentReference || doc.number)}</div>`
@@ -116,15 +124,20 @@ export function buildDocHtml(doc: SalesDoc, payment: BusinessPayment, { receipt 
       <div>
         <strong>Bill to</strong><br>
         ${escape(doc.client.name || '—')}<br>
+        ${food && doc.client.business ? `${escape(doc.client.business)}<br>` : ''}
         ${doc.client.address ? `${escape(doc.client.address)}<br>` : ''}
         ${doc.client.phone ? `${escape(doc.client.phone)}<br>` : ''}
         ${doc.client.email ? escape(doc.client.email) : ''}
       </div>
-      <div>
+      ${
+        food
+          ? ''
+          : `<div>
         <strong>Job</strong><br>
         ${escape(doc.jobType ?? '—')}<br>
         ${dateText(doc.jobDate)}${doc.kind === 'quote' && jobTimeText(doc) ? `<br>${jobTimeText(doc)}` : ''}
-      </div>
+      </div>`
+      }
     </div>
     ${doc.description ? `<div class="muted">${escape(doc.description)}</div>` : ''}
     <table>
@@ -135,6 +148,12 @@ export function buildDocHtml(doc: SalesDoc, payment: BusinessPayment, { receipt 
       <div><span>Subtotal</span><span>${formatMoney(subtotal)}</span></div>
       <div><span>${gstLabel(doc.gstRate)}</span><span>${formatMoney(gst)}</span></div>
       <div class="grand"><span>Total</span><span>${formatMoney(total)}</span></div>
+      ${
+        deposit > 0
+          ? `<div><span>Deposit${depositPaid ? ' paid' : ' (due now)'}</span><span>${depositPaid ? '-' : ''}${formatMoney(deposit)}</span></div>
+      <div class="grand"><span>Amount owing</span><span>${formatMoney(owing)}</span></div>`
+          : ''
+      }
     </div>
     ${paymentSection}
   </body></html>`;
@@ -209,6 +228,15 @@ export async function emailQuote(doc: SalesDoc, payment: BusinessPayment): Promi
   const link = quotePageLink(await quoteLinkToken(doc.id));
   const attachmentUri = Platform.OS === 'web' ? undefined : await makePdf(doc, payment);
   return openEmailDraft({ to: doc.client.email.trim(), ...quoteEmailText(doc, link), attachmentUri }, emailApp());
+}
+
+/**
+ * NexGain Hospitality: emails an invoice (or a payment reminder) with its PDF,
+ * using the hospitality wording. Sent the same way as every other invoice.
+ */
+export async function emailInvoiceWithText(doc: SalesDoc, payment: BusinessPayment, text: { subject: string; body: string }): Promise<EmailResult> {
+  const attachmentUri = Platform.OS === 'web' ? undefined : await makePdf(doc, payment);
+  return openEmailDraft({ to: doc.client.email.trim(), ...text, attachmentUri }, emailApp());
 }
 
 /** Creates the invoice PDF, then opens the owner's email app ready to send. */

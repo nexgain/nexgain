@@ -24,6 +24,8 @@ export type LineItem = {
   description: string;
   qty: number;
   rate: number;
+  /** NexGain Hospitality: the menu item this line came from (none for custom lines). */
+  menuItemId?: string | null;
 };
 
 export type Client = {
@@ -31,6 +33,8 @@ export type Client = {
   phone: string;
   email: string;
   address: string;
+  /** NexGain Hospitality: the customer's business name (optional). */
+  business?: string;
 };
 
 export type SalesDoc = {
@@ -57,6 +61,11 @@ export type SalesDoc = {
   paidAt?: string | null;
   /** Paid invoices only: whether a receipt has been sent to the client. */
   receiptStatus?: ReceiptStatus | null;
+  /**
+   * NexGain Hospitality only (left out for everyone else, so their invoices save
+   * exactly as before): a deposit, whether it's been paid, and how the invoice was paid.
+   */
+  hospitality?: HospitalityInvoiceInfo;
   /** Quotes: when the customer accepted or declined on their quote page. Set by the database only. */
   respondedAt?: string | null;
   /** Invoices converted from a quote: that quote's id. */
@@ -64,6 +73,16 @@ export type SalesDoc = {
 };
 
 export type ReceiptStatus = 'not_sent' | 'sent';
+
+export type PaidMethod = 'Bank transfer' | 'Card' | 'Cash' | 'Other';
+
+export type HospitalityInvoiceInfo = {
+  /** The deposit asked for (null = none). */
+  deposit: number | null;
+  depositPaid: boolean;
+  depositPaidAt: string | null;
+  paidMethod: PaidMethod | null;
+};
 
 export { GST_RATE };
 
@@ -165,6 +184,11 @@ type SalesDocRow = {
   receipt_status: ReceiptStatus | null;
   source_quote_id?: string | null;
   created_at: string;
+  // NexGain Hospitality only (see supabase/migrations/20261129000000_hospitality_invoices.sql).
+  deposit?: number | string | null;
+  deposit_paid?: boolean;
+  deposit_paid_at?: string | null;
+  paid_method?: PaidMethod | null;
 };
 
 /** Read-only columns: set by the database (customer's answer), never saved from the phone. */
@@ -193,7 +217,22 @@ function fromRow(row: SalesDocServerRow): SalesDoc {
     receiptStatus: row.receipt_status,
     respondedAt: row.responded_at ?? null,
     sourceQuoteId: row.source_quote_id ?? null,
+    ...(hasHospitalityColumns(row)
+      ? {
+          hospitality: {
+            deposit: row.deposit === null || row.deposit === undefined ? null : Number(row.deposit),
+            depositPaid: row.deposit_paid ?? false,
+            depositPaidAt: row.deposit_paid_at ?? null,
+            paidMethod: row.paid_method ?? null,
+          },
+        }
+      : {}),
   };
+}
+
+/** True when the row has any NexGain Hospitality invoice details. */
+function hasHospitalityColumns(row: Partial<SalesDocRow>) {
+  return (row.deposit !== null && row.deposit !== undefined) || row.deposit_paid === true || !!row.paid_method;
 }
 
 function toRow(doc: SalesDoc, businessId: string): SalesDocRow {
@@ -217,6 +256,15 @@ function toRow(doc: SalesDoc, businessId: string): SalesDocRow {
     receipt_status: doc.receiptStatus ?? null,
     source_quote_id: doc.sourceQuoteId ?? null,
     created_at: doc.createdAt,
+    // Only NexGain Hospitality invoices send these columns, so everyone else's save exactly as before.
+    ...(doc.hospitality
+      ? {
+          deposit: doc.hospitality.deposit,
+          deposit_paid: doc.hospitality.depositPaid,
+          deposit_paid_at: doc.hospitality.depositPaidAt,
+          paid_method: doc.hospitality.paidMethod,
+        }
+      : {}),
   };
 }
 

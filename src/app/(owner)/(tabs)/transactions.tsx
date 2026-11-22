@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import { SwitchRow } from '@/components/owner/form';
 import { NeedsReviewCard } from '@/components/owner/money-review';
+import { MoneyInSummary } from '@/systems/hospitality/components/owner/money-cards';
 import { ReceiptIcons, useAddReceipt } from '@/components/owner/receipt-ui';
 import { categoryIcon, signedMoney, TransactionRow } from '@/components/owner/transactions-ui';
 import { ActionRow, Button, Card, EmptyState, Icon, OwnerIcons, OwnerScreen, PageHeader, RangeSelect, TabRow } from '@/components/owner/ui';
@@ -171,6 +172,9 @@ export default function TransactionsScreen() {
       )}
 
       <NeedsReviewCard feed={feed} />
+
+      {/* NexGain Hospitality: card payouts vs daily sales, delivery share, card fees, overdue invoices. */}
+      {hospitality && <MoneyInSummary feed={feed} />}
 
       {syncing && connected && txns.length === 0 && (
         <Card>

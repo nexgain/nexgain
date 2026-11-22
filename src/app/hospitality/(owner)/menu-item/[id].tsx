@@ -6,9 +6,9 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { ConfirmDialog } from '@/components/owner/confirm-dialog';
 import { DateField, FieldButton, FormField, OptionSheet, SwitchRow, TextField } from '@/components/owner/form';
 import { Button, Card, goBack, OwnerIcons, OwnerScreen, PageHeader } from '@/components/owner/ui';
-import { Colors as C, Spacing } from '@/constants/theme';
+import { Colors as C, Radius, Spacing } from '@/constants/theme';
 import { formatMoney } from '@/data/payroll';
-import { MenuPhoto, profitText } from '@/systems/hospitality/components/owner/menu-ui';
+import { MenuPhoto, PhotoSheet, profitText, type PhotoChoice } from '@/systems/hospitality/components/owner/menu-ui';
 import {
   deleteItem,
   removeMenuPhoto,
@@ -81,6 +81,7 @@ function ItemForm({ initial, categories }: { initial: MenuItemDraft; categories:
   const [pickCategory, setPickCategory] = useState(false);
   const [busy, setBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoSheet, setPhotoSheet] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tried, setTried] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -117,6 +118,13 @@ function ItemForm({ initial, categories }: { initial: MenuItemDraft; categories:
     } finally {
       setPhotoBusy(false);
     }
+  }
+
+  /** A choice from the "Add photo" pop-up. */
+  function choosePhoto(choice: PhotoChoice) {
+    if (choice === 'remove') update({ photoPath: null });
+    // Let the pop-up finish closing first: iPhones won't open the camera or library over a closing pop-up.
+    else setTimeout(() => pickPhoto(choice === 'camera'), 400);
   }
 
   function leave() {
@@ -164,25 +172,17 @@ function ItemForm({ initial, categories }: { initial: MenuItemDraft; categories:
       <Card>
         <View style={styles.photoRow}>
           <MenuPhoto path={draft.photoPath} size={72} />
-          <View style={styles.photoButtons}>
-            {photoBusy ? (
-              <ActivityIndicator color={C.accent} />
-            ) : (
-              <>
-                <Pressable onPress={() => pickPhoto(true)} accessibilityRole="button" hitSlop={6}>
-                  <Text style={styles.link}>Take photo</Text>
-                </Pressable>
-                <Pressable onPress={() => pickPhoto(false)} accessibilityRole="button" hitSlop={6}>
-                  <Text style={styles.link}>Choose photo</Text>
-                </Pressable>
-                {draft.photoPath && (
-                  <Pressable onPress={() => update({ photoPath: null })} accessibilityRole="button" hitSlop={6}>
-                    <Text style={styles.remove}>Remove photo</Text>
-                  </Pressable>
-                )}
-              </>
-            )}
-          </View>
+          {photoBusy ? (
+            <ActivityIndicator color={C.accent} />
+          ) : (
+            // One button: the pop-up has Take photo, Choose from library, Remove photo and Cancel.
+            <Pressable
+              onPress={() => setPhotoSheet(true)}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.photoButton, pressed && styles.pressed]}>
+              <Text style={styles.photoButtonText}>{draft.photoPath ? 'Change photo' : 'Add photo'}</Text>
+            </Pressable>
+          )}
         </View>
 
         <FormField label="Name" error={tried && !draft.name.trim() ? 'Type the item’s name.' : undefined}>
@@ -256,6 +256,7 @@ function ItemForm({ initial, categories }: { initial: MenuItemDraft; categories:
       {initial.id && <Button label="Delete item" variant="secondary" onPress={() => setConfirmDelete(true)} disabled={busy} />}
       {initial.id && price !== null && Number.isFinite(price) && <Text style={styles.footnote}>Past sales keep the price they sold at ({formatMoney(initial.price)} before).</Text>}
 
+      <PhotoSheet visible={photoSheet} hasPhoto={!!draft.photoPath} onChoose={choosePhoto} onClose={() => setPhotoSheet(false)} />
       <OptionSheet
         visible={pickCategory}
         title="Category"
@@ -279,9 +280,18 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   twoCol: { flexDirection: 'row', gap: Spacing.three - 4 },
   photoRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
-  photoButtons: { gap: Spacing.two },
-  link: { color: C.accent, fontSize: 14, fontWeight: '700' },
-  remove: { color: C.danger, fontSize: 14, fontWeight: '600' },
+  pressed: { opacity: 0.7 },
+  photoButton: {
+    minHeight: 48,
+    paddingHorizontal: Spacing.four,
+    borderRadius: Radius.medium,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: C.accent,
+    backgroundColor: C.accentSoft,
+  },
+  photoButtonText: { color: C.accent, fontSize: 16, fontWeight: '700' },
   muted: { color: C.textSecondary, fontSize: 13, lineHeight: 18 },
   error: { color: C.danger, fontSize: 13, fontWeight: '600' },
   footnote: { color: C.textSecondary, fontSize: 12, textAlign: 'center' },

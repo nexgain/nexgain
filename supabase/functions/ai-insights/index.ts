@@ -58,11 +58,34 @@ async function retailChecks(db: SupabaseClient, businessId: string): Promise<Ins
   return data ? retailInsights(data) : [];
 }
 
+/**
+ * NexGain Hospitality: only the System 1 checks that make sense for a cafe or
+ * restaurant (no jobs, quotes or "update your quote prices"). Its money-in
+ * insights (card payouts vs sales, delivery share, card fees) are worked out
+ * in the app, and overdue invoices get their own notification each morning
+ * (see 20261129000000_hospitality_invoices.sql).
+ */
+const HOSPITALITY_CHECKS = new Set([
+  'overdue_invoices',
+  'super_overdue',
+  'qualification_expiring',
+  'schedule_clash',
+  'staff_overbooked',
+  'product_price_increase',
+  'same_item_costs_more',
+  'supplier_costs_more',
+  'recurring_costs',
+  'unusual_spending',
+]);
+
 /** Checks one business and brings its ai_insights rows up to date. Returns how many it found. */
 async function checkBusiness(db: SupabaseClient, businessId: string, ownerId: string | null) {
   const snapshot = await loadSnapshot(db, businessId);
   if (!snapshot) return 0;
-  const found = [...runHealthCheck(snapshot), ...(await bookingChecks(db, businessId)), ...(await retailChecks(db, businessId))];
+  const { data: system } = await db.from('businesses').select('system_type').eq('id', businessId).maybeSingle();
+  const hospitality = system?.system_type === 'hospitality';
+  const serviceChecks = runHealthCheck(snapshot).filter((i) => !hospitality || HOSPITALITY_CHECKS.has(i.check));
+  const found = [...serviceChecks, ...(await bookingChecks(db, businessId)), ...(await retailChecks(db, businessId))];
   const nowIso = new Date().toISOString();
 
   const { data: existingData, error: readError } = await db

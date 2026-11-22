@@ -2,7 +2,8 @@ import { useState } from 'react';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, type Href } from 'expo-router';
-import { router } from '@/lib/nav';
+import { router, useIsHospitality } from '@/lib/nav';
+import { HOSPITALITY_CATEGORIES } from '@/data/money-sorting';
 import { Alert, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ConfirmDialog } from '@/components/owner/confirm-dialog';
@@ -25,6 +26,8 @@ export default function EditExpenseScreen() {
   const [amount, setAmount] = useState(existing ? existing.amount.toFixed(2) : '');
   const [date, setDate] = useState(existing ? fromDateKey(existing.date) : new Date());
   const [category, setCategory] = useState<string | null>(existing?.category ?? null);
+  // NexGain Hospitality: Food & Supplies, Drinks, Wages...
+  const categories: readonly string[] = useIsHospitality() ? HOSPITALITY_CATEGORIES : EXPENSE_CATEGORIES;
   const [description, setDescription] = useState(existing?.description ?? '');
   const [receipt, setReceipt] = useState<PickedFile | null>(null);
   const [removeReceipt, setRemoveReceipt] = useState(false);
@@ -158,7 +161,7 @@ export default function EditExpenseScreen() {
           <DateField label="Date" value={date} onChange={setDate} />
         </FormField>
         <FormField label="Category" error={tried ? errors.category : undefined}>
-          <SelectBox label="Category" value={category} options={EXPENSE_CATEGORIES} onChange={setCategory} />
+          <SelectBox label="Category" value={category} options={categories} onChange={setCategory} />
         </FormField>
         <FormField label="Description (optional)">
           <TextField

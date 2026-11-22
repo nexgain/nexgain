@@ -62,6 +62,9 @@ export const OWNER_TYPES = {
   contractor_invoice: { category: 'Finance', icon: ICONS.document, tone: 'blue', actions: ['Review contractor invoice'] },
   payment_overdue: { category: 'Finance', icon: ICONS.dollar, tone: 'red', actions: ['View invoice', 'Send reminder'] },
   roster_published: { category: 'System', icon: ICONS.calendar, tone: 'blue', actions: ['Open roster'] },
+  // NexGain Hospitality: an invoice went past its due date (sent every morning by the database,
+  // see 20261129000000_hospitality_invoices.sql). The customer is only emailed when the owner taps.
+  invoice_overdue: { category: 'Finance', icon: ICONS.dollar, tone: 'red', actions: ['Open invoice', 'Send reminder email'] },
   stock_low: { category: 'System', icon: ICONS.box, tone: 'amber', actions: ['Reorder stock'] },
   // Urgent findings from the AI health check (see src/data/ai-insights.ts).
   ai_alert_finance: { category: 'Finance', icon: ICONS.sparkles, tone: 'blue', actions: ['Open AI Assistant'] },
