@@ -23,7 +23,6 @@ export type Industry = {
 type Category = {
   name: string;
   icon: IconName;
-  businessType: string;
   vehicles: string;
   /** Service businesses (System 1). */
   lines: string[];
@@ -35,7 +34,6 @@ const CATEGORIES: Category[] = [
   {
     name: 'Construction & Trades',
     icon: { ios: 'hammer.fill', android: 'construction', web: 'construction' },
-    businessType: 'Sole Trader',
     vehicles: '1',
     lines: [
       'Carpentry | carpenter timber wood joinery framing decking building | Residential Carpentry, Decks & Pergolas, Renovations, Framing, Carpentry Maintenance, Fit Outs, Door & Window Installation, Custom Joinery, Timber Flooring, Outdoor Structures',
@@ -82,7 +80,6 @@ const CATEGORIES: Category[] = [
   {
     name: 'Automotive',
     icon: { ios: 'car.fill', android: 'directions_car', web: 'directions_car' },
-    businessType: 'Sole Trader',
     vehicles: '1',
     lines: [
       'Car Detailing | car detail detailer wash polish cleaning auto | Interior Detailing, Exterior Wash & Wax, Paint Correction, Ceramic Coating, Mobile Detailing, Headlight Restoration, Engine Bay Cleaning, Upholstery Cleaning',
@@ -105,7 +102,6 @@ const CATEGORIES: Category[] = [
   {
     name: 'Home Services',
     icon: { ios: 'house.fill', android: 'home_repair_service', web: 'home_repair_service' },
-    businessType: 'Sole Trader',
     vehicles: '1',
     lines: [
       'Cleaning | cleaner house home residential domestic cleaning | Regular House Cleaning, Deep Cleaning, End of Lease Cleaning, Spring Cleaning, Window Cleaning, Oven Cleaning, Move In Cleaning',
@@ -136,7 +132,6 @@ const CATEGORIES: Category[] = [
   {
     name: 'Outdoor & Garden',
     icon: { ios: 'leaf.fill', android: 'yard', web: 'yard' },
-    businessType: 'Sole Trader',
     vehicles: '1',
     lines: [
       'Landscaping | landscaper garden design landscape | Landscape Design, Garden Installation, Retaining Walls, Paving, Turf Laying, Irrigation, Garden Edging, Planting',
@@ -155,7 +150,6 @@ const CATEGORIES: Category[] = [
   {
     name: 'Beauty',
     icon: { ios: 'scissors', android: 'content_cut', web: 'content_cut' },
-    businessType: 'Sole Trader',
     vehicles: '0',
     lines: [
       'Spray Tanning | tan tanning spray tan | Spray Tans, Mobile Tanning, Express Tans',
@@ -166,7 +160,6 @@ const CATEGORIES: Category[] = [
   {
     name: 'Health & Wellness',
     icon: { ios: 'heart.fill', android: 'favorite', web: 'favorite' },
-    businessType: 'Company',
     vehicles: '0',
     lines: [
       'Myotherapy | myotherapist muscle | Myotherapy Sessions, Dry Needling, Cupping, Injury Management',
@@ -184,7 +177,6 @@ const CATEGORIES: Category[] = [
   {
     name: 'Fitness',
     icon: { ios: 'figure.run', android: 'fitness_center', web: 'fitness_center' },
-    businessType: 'Sole Trader',
     vehicles: '0',
     lines: [
       'Gym | gym fitness centre | Gym Memberships, Group Classes, Personal Training, Casual Passes',
@@ -198,7 +190,6 @@ const CATEGORIES: Category[] = [
   {
     name: 'Pet Services',
     icon: { ios: 'pawprint.fill', android: 'pets', web: 'pets' },
-    businessType: 'Sole Trader',
     vehicles: '1',
     lines: [
       'Dog Walking | dog walker pet walking | Dog Walking, Group Walks, Puppy Visits, Pet Sitting',
@@ -215,7 +206,6 @@ const CATEGORIES: Category[] = [
   {
     name: 'Events & Hospitality',
     icon: { ios: 'party.popper.fill', android: 'celebration', web: 'celebration' },
-    businessType: 'Sole Trader',
     vehicles: '1',
     lines: [
       'Event Planning | event planner events coordinator | Event Planning, Event Coordination, Venue Sourcing, Event Theming, Supplier Management',
@@ -235,7 +225,6 @@ const CATEGORIES: Category[] = [
   {
     name: 'IT & Technology',
     icon: { ios: 'desktopcomputer', android: 'computer', web: 'computer' },
-    businessType: 'Company',
     vehicles: '0',
     lines: [
       'IT Support | computer repairs tech help it | Computer Repairs, Network Setup, IT Support Contracts, Data Recovery, Virus Removal, Remote Support',
@@ -251,7 +240,6 @@ const CATEGORIES: Category[] = [
   {
     name: 'Creative & Media',
     icon: { ios: 'camera.fill', android: 'photo_camera', web: 'photo_camera' },
-    businessType: 'Sole Trader',
     vehicles: '0',
     lines: [
       'Videography | videographer video filming | Wedding Videos, Corporate Videos, Event Videos, Social Media Content, Drone Footage',
@@ -266,7 +254,6 @@ const CATEGORIES: Category[] = [
   {
     name: 'Professional Services',
     icon: { ios: 'briefcase.fill', android: 'business_center', web: 'business_center' },
-    businessType: 'Company',
     vehicles: '0',
     lines: [
       'Accounting | accountant accounting tax returns | Tax Returns, BAS Lodgement, Bookkeeping, Payroll Services, Financial Reports, Business Advisory',
@@ -290,7 +277,6 @@ const CATEGORIES: Category[] = [
   {
     name: 'Education & Tutoring',
     icon: { ios: 'book.fill', android: 'school', web: 'school' },
-    businessType: 'Sole Trader',
     vehicles: '0',
     lines: [
       'Childcare | child care daycare childcare | Long Day Care, Before & After School Care, Vacation Care',
@@ -302,7 +288,6 @@ const CATEGORIES: Category[] = [
   {
     name: 'Transport & Logistics',
     icon: { ios: 'truck.box.fill', android: 'local_shipping', web: 'local_shipping' },
-    businessType: 'Sole Trader',
     vehicles: '2',
     lines: [
       'Courier | courier delivery deliveries | Same Day Delivery, Parcel Delivery, Document Delivery, Scheduled Delivery Runs',
@@ -315,7 +300,6 @@ const CATEGORIES: Category[] = [
   {
     name: 'Care Services',
     icon: { ios: 'hand.raised.fill', android: 'volunteer_activism', web: 'volunteer_activism' },
-    businessType: 'Company',
     vehicles: '1',
     lines: [
       'Aged Care | aged care home care elderly | In-Home Care, Personal Care, Respite Care, Companionship, Transport Assistance',
@@ -342,7 +326,16 @@ export const GENERAL_SERVICES = [
 /** How many of an industry's services are ticked by default. */
 export const DEFAULT_SELECTED_COUNT = 4;
 
-export const BUSINESS_TYPES = ['Service Business', 'Sole Trader', 'Partnership', 'Company', 'Trust'] as const;
+/**
+ * The business's legal structure, asked in owner sign-up ("Business structure").
+ * Saved as businesses.business_type. There's no default: the owner picks one.
+ */
+export const BUSINESS_STRUCTURES = ['Sole Trader', 'Partnership', 'Company', 'Trust'] as const;
+export type BusinessStructure = (typeof BUSINESS_STRUCTURES)[number];
+
+/** True for one of the four structures (older sign-ups could save "Service Business", which isn't one). */
+export const isBusinessStructure = (value: string | null | undefined): value is BusinessStructure =>
+  (BUSINESS_STRUCTURES as readonly string[]).includes(value ?? '');
 
 const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
@@ -377,7 +370,6 @@ export function findIndustry(name: string) {
 export function industryDefaults(industry: Industry | null) {
   const category = industry ? byCategory.get(industry.category) : undefined;
   return {
-    businessType: category?.businessType ?? 'Service Business',
     teamSize: '1–5',
     vehicles: category?.vehicles ?? '0',
   };

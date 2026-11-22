@@ -95,7 +95,8 @@ export const EMPTY_SIGNUP: SignupData = {
   bookingTypes: [],
   hospitalityType: null,
   retailType: null,
-  businessType: 'Service Business',
+  // The business structure (Sole Trader, Company...): empty until the owner picks one.
+  businessType: '',
   teamSize: '1–5',
   vehicles: '0',
   yearsOperating: null,

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { SelectField } from '@/components/employee/form-fields';
 import { Button, Field, Input, Note } from '@/components/signup/fields';
 import type { StepProps } from '@/components/signup/types';
-import { BUSINESS_TYPES } from '@/data/industries';
+import { BUSINESS_STRUCTURES, isBusinessStructure } from '@/data/industries';
 
 const TEAM_SIZES = ['1–5', '6–10', '11–20', '21–50', '50+'] as const;
 const VEHICLES = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10+'] as const;
@@ -12,6 +12,8 @@ const YEARS = ['Less than 1 year', '1–3 years', '3–5 years', '5–10 years',
 export function StepType({ data, update, onNext }: StepProps) {
   const [tried, setTried] = useState(false);
   const yearsError = !data.yearsOperating && 'Choose how long you have been operating.';
+  // Required: Sole Trader, Partnership, Company or Trust (no default).
+  const structureError = !isBusinessStructure(data.businessType) && 'Choose your business structure.';
 
   return (
     <>
@@ -19,13 +21,14 @@ export function StepType({ data, update, onNext }: StepProps) {
         <Input value={data.industry?.name ?? ''} editable={false} accessibilityLabel="Business industry" />
       </Field>
 
-      <Field label="Business type">
+      <Field label="Business structure" error={tried && structureError}>
         <SelectField
-          title="Business type"
-          value={data.businessType as (typeof BUSINESS_TYPES)[number]}
-          options={BUSINESS_TYPES}
-          placeholder="Select business type"
+          title="Business structure"
+          value={isBusinessStructure(data.businessType) ? data.businessType : null}
+          options={BUSINESS_STRUCTURES}
+          placeholder="Select your business structure"
           onChange={(businessType) => update({ businessType })}
+          hasError={tried && !!structureError}
         />
       </Field>
 
@@ -70,7 +73,7 @@ export function StepType({ data, update, onNext }: StepProps) {
         arrow
         onPress={() => {
           setTried(true);
-          if (!yearsError) onNext();
+          if (!yearsError && !structureError) onNext();
         }}
       />
     </>
