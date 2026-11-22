@@ -57,6 +57,8 @@ import {
 } from '@/data/qualifications';
 import { fromDateKey } from '@/data/shifts';
 import { TAX_ESTIMATE_NOTE } from '@/data/tax';
+import { isUkBusiness } from '@/data/uk/wording';
+import { UkTaxFields } from '@/components/owner/uk-tax-fields';
 import { supabase } from '@/lib/supabase';
 import { EmployeeSuperCard } from '@/components/owner/employee-super-card';
 
@@ -270,6 +272,8 @@ function EmploymentCard({ employee }: { employee: Employee }) {
 type PrivateDetails = Awaited<ReturnType<typeof revealPrivateDetails>>;
 
 function PayTab({ employee }: { employee: Employee }) {
+  // United Kingdom only: tax code and Scottish taxpayer instead of the tax-free threshold.
+  const uk = isUkBusiness(useBusiness());
   const payslips = usePayslipRecords().filter((p) => p.employeeId === employee.id);
   const [history, setHistory] = useState<PayRateChange[] | 'error' | null>(null);
   const [details, setDetails] = useState<PrivateDetails | 'loading' | 'error' | null>(null);
@@ -321,6 +325,8 @@ function PayTab({ employee }: { employee: Employee }) {
       <Card title="Tax" icon={OwnerIcons.percent}>
         {isContractor(employee) ? (
           <Text style={styles.muted}>No tax is taken out for contractors. They invoice you and handle their own tax.</Text>
+        ) : uk ? (
+          <UkTaxFields employee={employee} />
         ) : (
           <>
             <Text style={styles.rowLabel}>Claimed the tax-free threshold?</Text>

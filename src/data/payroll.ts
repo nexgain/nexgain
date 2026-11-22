@@ -19,7 +19,11 @@ import { createStore } from '@/data/store';
 import { loadSuperPayments } from '@/data/super-payments';
 import { newId, warnSaveFailed } from '@/lib/ids';
 import { taxOnPay, taxSetupFor } from '@/data/tax';
+import { ukFrequencyOf, ukPayLine, ukSalaryPay } from '@/data/uk/pay-line';
 import { supabase } from '@/lib/supabase';
+
+/** United Kingdom businesses use UK payroll (src/data/uk): PAYE tax codes and National Insurance. */
+const isUk = (business: { country?: string | null } | null | undefined) => business?.country === 'GB';
 
 
 /**
@@ -71,6 +75,15 @@ export type PayLine = {
   /** Paid by the employer on top of gross: qualifying earnings x the super rate. null for contractors. */
   super: number | null;
   status: PayStatus;
+  /** UK businesses only (null everywhere else): National Insurance taken from the employee's pay. */
+  employeeNi?: number | null;
+  /** UK businesses only: National Insurance the employer pays on top. */
+  employerNi?: number | null;
+  /** UK businesses only: the tax code and tax period used, e.g. "1257L" and "M3". */
+  ukTaxCode?: string | null;
+  ukTaxPeriod?: string | null;
+  /** UK businesses only: why this person can't be paid yet (e.g. a Scottish taxpayer or an unsupported tax code). */
+  ukProblem?: string | null;
 };
 
 export type PayTotals = {
@@ -81,6 +94,9 @@ export type PayTotals = {
   tax: number;
   net: number;
   super: number;
+  /** UK businesses only (0 everywhere else). */
+  employeeNi: number;
+  employerNi: number;
 };
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -128,7 +144,8 @@ export function getPayPeriods(now = new Date(), count = 4): Period[] {
  */
 export function getSchedulePayPeriods(now = new Date(), count = 4): Period[] {
   const schedule = paySchedule();
-  const unit = schedule.frequency === 'weekly' ? 'week' : 'fortnight';
+  const unit =
+    schedule.frequency === 'weekly' ? 'week' : schedule.frequency === 'fortnightly' ? 'fortnight' : schedule.frequency === 'monthly' ? 'month' : 'pay period';
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const past = payRunsStore.get();
   let full = 0;
@@ -218,7 +235,14 @@ export function splitHours(
  * qualifying earnings (not overtime by default); contractors get none.
  * Rates always come from the employee's profile, so a changed rate applies straight away.
  */
-export function calculatePayLine(employee: Employee, split: HoursSplit, status: PayStatus, weeks = 1): PayLine {
+export function calculatePayLine(
+  employee: Employee,
+  split: HoursSplit,
+  status: PayStatus,
+  weeks = 1,
+  /** The pay period (and pay day), used by UK payroll only. */
+  period?: { start: Date; end: Date; payDate?: Date },
+): PayLine {
   const rate = employee.payRate;
   const salaried = employee.payType === 'salary';
   const hours = split.total;
@@ -231,10 +255,12 @@ export function calculatePayLine(employee: Employee, split: HoursSplit, status: 
     };
   }
   const overtimeRate = salaried ? null : overtimeRateOf(employee);
+  const business = businessStore.get();
+  // United Kingdom: its own payroll (PAYE tax codes, National Insurance). Every other country is unchanged below.
+  if (isUk(business)) return ukLine(employee, split, status, weeks, period);
   const ordinaryPay = roundCents(salaried ? (rate / 52) * weeks : ordinaryHours * rate);
   const overtimePay = roundCents(overtimeHours * (overtimeRate ?? 0));
   const gross = roundCents(ordinaryPay + overtimePay);
-  const business = businessStore.get();
   // Worked out from this pay (see data/tax.ts). null when the business's country
   // has no tax brackets and no rate has been entered yet.
   const tax = taxOnPay(
@@ -265,6 +291,35 @@ export function calculatePayLine(employee: Employee, split: HoursSplit, status: 
   };
 }
 
+/**
+ * United Kingdom businesses only: gross pay as usual (a salary is /12 a month,
+ * /13 four-weekly), then PAYE tax from the employee's tax code (cumulative,
+ * from this tax year's payslips), employee and employer National Insurance,
+ * and net = gross - tax - employee NI. No super (UK pensions come later).
+ */
+function ukLine(employee: Employee, split: HoursSplit, status: PayStatus, weeks: number, period?: { start: Date; end: Date; payDate?: Date }): PayLine {
+  const rate = employee.payRate!;
+  const salaried = employee.payType === 'salary';
+  const hours = split.total;
+  const ordinaryHours = salaried ? split.total : split.ordinary;
+  const overtimeHours = salaried ? 0 : split.overtime;
+  const overtimeRate = salaried ? null : overtimeRateOf(employee);
+  const today = new Date();
+  const end = period?.end ?? new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  const start = period?.start ?? new Date(end.getFullYear(), end.getMonth(), end.getDate() - Math.round(weeks * 7));
+  const schedule = paySchedule().frequency;
+  const kind = ukFrequencyOf(start, end, schedule);
+  const ordinaryPay = roundCents(salaried ? ukSalaryPay(rate, kind.frequency, weeks) : ordinaryHours * rate);
+  const overtimePay = roundCents(overtimeHours * (overtimeRate ?? 0));
+  const gross = roundCents(ordinaryPay + overtimePay);
+  const base = { employee, hours, ordinaryHours, overtimeHours, rate, overtimeRate, ordinaryPay, overtimePay, gross, qualifyingEarnings: null, super: null, status };
+  // Contractors invoice and handle their own tax and NI.
+  if (isContractor(employee)) return { ...base, tax: 0, net: gross, employeeNi: 0, employerNi: 0, ukTaxCode: null, ukTaxPeriod: null, ukProblem: null };
+  const r = ukPayLine({ employee, gross, periodStart: start, periodEnd: end, payDate: period?.payDate, schedule, payslips: payslipsStore.get() });
+  if (!r.ok) return { ...base, tax: null, net: null, employeeNi: null, employerNi: null, ukTaxCode: employee.ukTaxCode, ukTaxPeriod: null, ukProblem: r.message };
+  return { ...base, tax: r.tax, net: r.net, employeeNi: r.employeeNi, employerNi: r.employerNi, ukTaxCode: r.taxCode, ukTaxPeriod: r.period, ukProblem: null };
+}
+
 /** An approved week, exactly as it was saved on the payslip. */
 function lineFromPayslip(employee: Employee, p: PayslipRecord): PayLine {
   return {
@@ -282,6 +337,11 @@ function lineFromPayslip(employee: Employee, p: PayslipRecord): PayLine {
     qualifyingEarnings: null,
     super: p.super,
     status: p.status === 'paid' ? 'Paid' : 'Approved',
+    // UK payslips only (0 / empty everywhere else).
+    employeeNi: p.employeeNi,
+    employerNi: p.employerNi,
+    ukTaxCode: p.taxCode,
+    ukTaxPeriod: p.taxPeriod,
   };
 }
 
@@ -311,6 +371,7 @@ function payableLines(
         splitHours(sessions, employee.id, range, rules, now),
         statuses[employee.id] ?? 'Pending',
         weeks,
+        { start: range.start, end: range.end },
       );
     })
     .filter((l) => l.employee.status !== 'inactive' || l.hours > 0 || l.status !== 'Pending')
@@ -340,8 +401,10 @@ export function payTotals(lines: PayLine[]): PayTotals {
       tax: t.tax + (l.tax ?? 0),
       net: t.net + (l.net ?? 0),
       super: t.super + (l.super ?? 0),
+      employeeNi: t.employeeNi + (l.employeeNi ?? 0),
+      employerNi: t.employerNi + (l.employerNi ?? 0),
     }),
-    { hours: 0, ordinaryHours: 0, overtimeHours: 0, gross: 0, tax: 0, net: 0, super: 0 },
+    { hours: 0, ordinaryHours: 0, overtimeHours: 0, gross: 0, tax: 0, net: 0, super: 0, employeeNi: 0, employerNi: 0 },
   );
   return {
     hours: totals.hours,
@@ -351,6 +414,8 @@ export function payTotals(lines: PayLine[]): PayTotals {
     tax: roundCents(totals.tax),
     net: roundCents(totals.net),
     super: roundCents(totals.super),
+    employeeNi: roundCents(totals.employeeNi),
+    employerNi: roundCents(totals.employerNi),
   };
 }
 
@@ -400,6 +465,12 @@ export type PayslipRecord = {
   payrollNumber: number | null;
   /** "YYYY-MM-DD" */
   payDate: string | null;
+  /** UK payslips only (0 / null everywhere else). */
+  employeeNi: number;
+  employerNi: number;
+  taxCode: string | null;
+  /** e.g. "M3" or "W14" */
+  taxPeriod: string | null;
 };
 
 export const payslipsStore = createStore<PayslipRecord[]>([]);
@@ -432,6 +503,10 @@ type PayslipRow = {
   ordinary_pay?: number | string | null;
   overtime_pay?: number | string | null;
   overtime_after_hours?: number | string | null;
+  employee_ni?: number | string | null;
+  employer_ni?: number | string | null;
+  tax_code?: string | null;
+  tax_period?: string | null;
 };
 
 const num = (v: number | string | null | undefined, fallback: number) => (v === null || v === undefined ? fallback : Number(v));
@@ -464,6 +539,10 @@ export async function loadPayslips() {
       payRunId: row.pay_run_id ?? null,
       payrollNumber: row.payroll_number ?? null,
       payDate: row.pay_date ?? null,
+      employeeNi: num(row.employee_ni, 0),
+      employerNi: num(row.employer_ni, 0),
+      taxCode: row.tax_code ?? null,
+      taxPeriod: row.tax_period ?? null,
     })),
   );
 }
@@ -501,8 +580,8 @@ export async function approvePayments(payPeriod: Pick<Period, 'start' | 'end'>, 
     .filter((e) => employeeIds.includes(e.id) && !alreadyPaid.has(e.id) && !isContractor(e))
     // Each employee's current rates and the current overtime rule; the payslip
     // keeps them, so later changes don't affect it.
-    .map((e) => calculatePayLine(e, splitHours(sessions, e.id, period, rules), 'Pending', weeks))
-    // No pay rate, or tax can't be worked out yet (no brackets or rate for the country).
+    .map((e) => calculatePayLine(e, splitHours(sessions, e.id, period, rules), 'Pending', weeks, { ...period, payDate: fromDayKey(payDate) }))
+    // No pay rate, or tax can't be worked out yet (no brackets or rate for the country; UK: e.g. a Scottish taxpayer).
     .filter((l) => l.rate !== null && l.gross !== null && l.tax !== null);
   // What each person's super was worked out on, for their super record.
   const qualifying = new Map(lines.map((l) => [l.employee.id, l.qualifyingEarnings ?? 0]));
@@ -531,7 +610,13 @@ export async function approvePayments(payPeriod: Pick<Period, 'start' | 'end'>, 
     payRunId: null,
     payrollNumber: null,
     payDate,
+    employeeNi: l.employeeNi ?? 0,
+    employerNi: l.employerNi ?? 0,
+    taxCode: l.ukTaxCode ?? null,
+    taxPeriod: l.ukTaxPeriod ?? null,
   }));
+  // UK payslips also save NI, the tax code and tax period (other countries' payslips are sent exactly as before).
+  const uk = isUk(businessStore.get());
   if (created.length === 0 || !businessId) throw new Error('There is no one to pay.');
 
   const { data, error } = await supabase.rpc('approve_pay_run', {
@@ -558,6 +643,7 @@ export async function approvePayments(payPeriod: Pick<Period, 'start' | 'end'>, 
       // The database makes an Unpaid super record from these (see super_payments).
       qualifying_earnings: qualifying.get(p.employeeId) ?? 0,
       super_rate: superRate,
+      ...(uk ? { employee_ni: p.employeeNi, employer_ni: p.employerNi, tax_code: p.taxCode, tax_period: p.taxPeriod } : {}),
     })),
   });
   if (error) {
@@ -571,6 +657,12 @@ export async function approvePayments(payPeriod: Pick<Period, 'start' | 'end'>, 
   ]);
   loadSuperPayments().catch(() => {});
   return run.id;
+}
+
+/** "YYYY-MM-DD" -> a local date. */
+function fromDayKey(key: string) {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d);
 }
 
 export function formatMoney(amount: number, { cents = true } = {}) {

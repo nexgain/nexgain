@@ -84,6 +84,10 @@ export type Employee = {
   hasTfn: boolean;
   /** Whether they claim the tax-free threshold with this employer (yes by default). Set by the owner. */
   taxFreeThreshold: boolean;
+  /** UK businesses only: the employee's PAYE tax code (null = the usual 1257L). */
+  ukTaxCode: string | null;
+  /** UK businesses only: a Scottish taxpayer (S code). Their pay is blocked until Scottish tax is supported. */
+  scottishTaxpayer: boolean;
 };
 
 type EmployeeRow = {
@@ -105,6 +109,8 @@ type EmployeeRow = {
   super_member_number?: string | null;
   gender?: 'female' | 'male' | 'x' | 'not_said' | null;
   tax_free_threshold?: boolean | null;
+  uk_tax_code?: string | null;
+  scottish_taxpayer?: boolean | null;
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   availability: WeeklyAvailability | null;
@@ -156,6 +162,8 @@ export function fromRow(row: EmployeeRow, businessName = '', photoUrl: string | 
     bankCountry: row.employee_private?.bank_country ?? null,
     hasTfn: row.employee_private?.has_tfn ?? false,
     taxFreeThreshold: row.tax_free_threshold ?? true,
+    ukTaxCode: row.uk_tax_code ?? null,
+    scottishTaxpayer: row.scottish_taxpayer ?? false,
   };
 }
 
@@ -215,7 +223,9 @@ type EditableFields =
   | 'superFund'
   | 'superFundUsi'
   | 'superMemberNumber'
-  | 'taxFreeThreshold';
+  | 'taxFreeThreshold'
+  | 'ukTaxCode'
+  | 'scottishTaxpayer';
 
 /** Owner or employee edits: shows straight away, then saves to the database. */
 export async function updateEmployee(id: string, changes: Partial<Pick<Employee, EditableFields>>) {
@@ -235,6 +245,9 @@ export async function updateEmployee(id: string, changes: Partial<Pick<Employee,
   if (changes.superFundUsi !== undefined) cols.super_fund_usi = changes.superFundUsi.trim() || null;
   if (changes.superMemberNumber !== undefined) cols.super_member_number = changes.superMemberNumber.trim() || null;
   if (changes.taxFreeThreshold !== undefined) cols.tax_free_threshold = changes.taxFreeThreshold;
+  // UK businesses only (the fields are only shown to them).
+  if (changes.ukTaxCode !== undefined) cols.uk_tax_code = changes.ukTaxCode?.trim().toUpperCase() || null;
+  if (changes.scottishTaxpayer !== undefined) cols.scottish_taxpayer = changes.scottishTaxpayer;
   if (changes.startDate !== undefined) cols.start_date = changes.startDate;
   const { error } = await supabase.from('employees').update(cols).eq('id', id);
   if (error) console.warn('Could not save employee changes:', error.message);

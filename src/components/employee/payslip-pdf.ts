@@ -5,6 +5,7 @@ import { formatCurrency as money, formatHrs, type PayslipView } from '@/data/emp
 import { TAX_ESTIMATE_NOTE } from '@/data/tax';
 import { escapeHtml as esc, sharePdf } from '@/lib/share-pdf';
 import { businessUsesSuper } from '@/data/super-rules';
+import { isUkBusiness, UK_TAX_NOTE } from '@/data/uk/wording';
 
 export type PayslipPerson = { name: string; position: string; employeeId: string };
 
@@ -16,10 +17,19 @@ export function buildPayslipHtml(v: PayslipView, business: BusinessProfile | nul
     ['Overtime', formatHrs(v.overtimeHours), v.salaried ? '—' : rateText(v, v.overtimeRate), money(v.overtimePay)],
     ['Allowances', '—', '—', money(v.allowances)],
   ];
-  const deductions = [
-    ['PAYG Tax', money(v.tax)],
-    ['Other Deductions', money(v.otherDeductions)],
-  ];
+  // United Kingdom: PAYE income tax and employee National Insurance on separate lines.
+  const uk = isUkBusiness(business);
+  const ukTax = `Income tax (PAYE${v.record.taxCode ? `, ${esc(v.record.taxCode)}` : ''}${v.record.taxPeriod ? ` ${esc(v.record.taxPeriod)}` : ''})`;
+  const deductions = uk
+    ? [
+        [ukTax, money(v.tax)],
+        ['Employee National Insurance', money(v.record.employeeNi)],
+        ['Other Deductions', money(v.otherDeductions)],
+      ]
+    : [
+        ['PAYG Tax', money(v.tax)],
+        ['Other Deductions', money(v.otherDeductions)],
+      ];
   const logo = business?.logo
     ? `<img class="logo" src="${esc(business.logo)}" alt="">`
     : `<div class="logo logo-blank">${esc((business?.businessName ?? 'N').trim().charAt(0).toUpperCase())}</div>`;
@@ -107,7 +117,14 @@ export function buildPayslipHtml(v: PayslipView, business: BusinessProfile | nul
       </tbody></table>`
           : ''
       }
-      <div class="note">${TAX_ESTIMATE_NOTE}${businessUsesSuper(business) ? ' Superannuation is paid by your employer on top of your pay. It is not taken out of your net pay.' : ''}</div>
+      ${
+        uk
+          ? `<table style="margin-top:8px"><tbody>
+        <tr><td>Employer National Insurance (paid by your employer, not taken from your pay)</td><td class="num">${money(v.record.employerNi)}</td></tr>
+      </tbody></table>`
+          : ''
+      }
+      <div class="note">${uk ? esc(UK_TAX_NOTE) : TAX_ESTIMATE_NOTE}${businessUsesSuper(business) ? ' Superannuation is paid by your employer on top of your pay. It is not taken out of your net pay.' : ''}</div>
     </div>
 
     <div class="net"><div class="label">Net Pay</div><div class="value">${money(v.net)}</div></div>

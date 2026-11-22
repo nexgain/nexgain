@@ -7,6 +7,7 @@ import { formatHours, formatMoney, payTotals, type PayLine, type Period } from '
 import { TAX_ESTIMATE_NOTE } from '@/data/tax';
 import { escapeHtml as esc, sharePdf } from '@/lib/share-pdf';
 import { businessUsesSuper } from '@/data/super-rules';
+import { isUkBusiness, UK_TAX_NOTE } from '@/data/uk/wording';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const fileDate = (d: Date) => `${String(d.getDate()).padStart(2, '0')}-${MONTHS[d.getMonth()]}-${d.getFullYear()}`;
@@ -23,6 +24,8 @@ const rateText = (l: PayLine, rate: number | null) =>
 export function buildPayrollReportHtml(period: Period, frequency: string, business: BusinessProfile | null, lines: PayLine[]) {
   // Super only for Australian businesses (see businessUsesSuper).
   const usesSuper = businessUsesSuper(business);
+  // United Kingdom only: PAYE tax, employee NI (both deducted) and employer NI.
+  const uk = isUkBusiness(business);
   const totals = payTotals(lines);
   const span = `${formatShortDate(period.start)} – ${formatShortDate(lastDay(period))}`;
   const rows = lines
@@ -40,8 +43,8 @@ export function buildPayrollReportHtml(period: Period, frequency: string, busine
         <td class="num">${formatHours(l.overtimeHours)} hrs<br><span class="sub">@ ${salaried ? 'n/a (salary)' : rateText(l, l.overtimeRate)}</span></td>
         <td class="num">${formatMoney(0)}</td>
         <td class="num">${l.gross === null ? 'Rate not set' : formatMoney(l.gross)}</td>
-        <td class="num">${l.tax === null ? '—' : `Tax ${formatMoney(l.tax)}`}<br><span class="sub">${
-          l.super === null ? '' : `Super ${formatMoney(l.super)} (employer)`
+        <td class="num">${l.tax === null ? '—' : `Tax ${formatMoney(l.tax)}`}${uk && l.employeeNi ? `<br>NI ${formatMoney(l.employeeNi)}` : ''}<br><span class="sub">${
+          uk ? (l.employerNi ? `Employer NI ${formatMoney(l.employerNi)}` : '') : l.super === null ? '' : `Super ${formatMoney(l.super)} (employer)`
         }</span></td>
         <td class="num net">${l.net === null ? '—' : formatMoney(l.net)}</td>
       </tr>`;
@@ -94,10 +97,10 @@ export function buildPayrollReportHtml(period: Period, frequency: string, busine
       <div><div class="label">Total Employees</div><div class="value">${lines.length}</div></div>
       <div><div class="label">Total Hours</div><div class="value">${formatHours(totals.hours)}</div><div class="sub2">incl. ${formatHours(totals.overtimeHours)} OT hrs</div></div>
       <div><div class="label">Total Gross Pay</div><div class="value">${formatMoney(totals.gross)}</div></div>
-      <div><div class="label">Total Deductions</div><div class="value">${formatMoney(totals.tax)}</div>${usesSuper ? `<div class="sub2">+ ${formatMoney(totals.super)} super paid by employer</div>` : ''}</div>
+      <div><div class="label">Total Deductions</div><div class="value">${formatMoney(uk ? totals.tax + totals.employeeNi : totals.tax)}</div>${uk ? `<div class="sub2">+ ${formatMoney(totals.employerNi)} employer NI</div>` : ''}${usesSuper ? `<div class="sub2">+ ${formatMoney(totals.super)} super paid by employer</div>` : ''}</div>
       <div><div class="label">Total Net Pay</div><div class="value">${formatMoney(totals.net)}</div></div>
     </div>
-    <div class="foot">Deductions are PAYG tax taken out of pay. ${TAX_ESTIMATE_NOTE}${usesSuper ? " Super is paid by the employer on top of gross pay and isn't deducted." : ''}</div>
+    <div class="foot">${uk ? `Deductions are PAYE income tax and employee National Insurance taken out of pay. ${UK_TAX_NOTE}` : `Deductions are PAYG tax taken out of pay. ${TAX_ESTIMATE_NOTE}`}${usesSuper ? " Super is paid by the employer on top of gross pay and isn't deducted." : ''}</div>
   </body></html>`;
 }
 

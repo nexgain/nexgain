@@ -1,4 +1,5 @@
-// How often the business pays (weekly or fortnightly) and which day pay
+// How often the business pays (weekly or fortnightly; UK businesses can also
+// pay four-weekly or monthly) and which day pay
 // periods start (e.g. Friday to Thursday). Saved on the business
 // (businesses.pay_schedule); payroll works its pay periods out from it.
 //
@@ -9,7 +10,12 @@ import { businessStore, updateBusiness, type BusinessProfile } from '@/data/busi
 import { payslipsStore } from '@/data/payroll';
 import { payRunsStore } from '@/data/pay-runs';
 
-export type PayFrequencyId = 'weekly' | 'fortnightly';
+export type PayFrequencyId = 'weekly' | 'fortnightly' | 'four-weekly' | 'monthly';
+
+/** Weekly and fortnightly for everyone; four-weekly and monthly for UK businesses only (UK payroll). */
+export function frequenciesFor(country: string | null | undefined): PayFrequencyId[] {
+  return country === 'GB' ? ['weekly', 'fortnightly', 'four-weekly', 'monthly'] : ['weekly', 'fortnightly'];
+}
 
 export type PaySchedule = {
   frequency: PayFrequencyId;
@@ -33,13 +39,21 @@ export const paySchedule = (profile: BusinessProfile | null = businessStore.get(
 /** "Friday to Thursday" */
 export const daysText = (startDay: number) => `${DAY_NAMES[startDay]} to ${DAY_NAMES[(startDay + 6) % 7]}`;
 
-/** "Weekly" / "Fortnightly", as printed on payslips and reports. */
-export const frequencyLabel = (f: PayFrequencyId) => (f === 'weekly' ? 'Weekly' : 'Fortnightly');
+/** "Weekly" / "Fortnightly" (UK: also "Four-weekly" / "Monthly"), as printed on payslips and reports. */
+export const frequencyLabel = (f: PayFrequencyId) =>
+  f === 'weekly' ? 'Weekly' : f === 'fortnightly' ? 'Fortnightly' : f === 'four-weekly' ? 'Four-weekly' : 'Monthly';
 
 /** "Weekly", "Fortnightly", or e.g. "6-day" for a catch-up period, from a period's first and last day. */
 export function frequencyForDates(start: string, lastDay: string) {
   const days = daysBetween(fromKey(start), fromKey(lastDay)) + 1;
-  return days === 7 ? 'Weekly' : days === 14 ? 'Fortnightly' : `${days}-day`;
+  if (days === 7) return 'Weekly';
+  if (days === 14) return 'Fortnightly';
+  // UK only (no other country has periods this long).
+  if (days === 28) return 'Four-weekly';
+  const first = fromKey(start);
+  const end = addDays(fromKey(lastDay), 1);
+  if (first.getDate() === 1 && end.getDate() === 1 && days >= 28) return 'Monthly';
+  return `${days}-day`;
 }
 
 // ---------------------------------------------------------------------------
@@ -70,13 +84,17 @@ export type SchedulePeriod = {
 
 type PastRun = { periodStart: string; periodEnd: string };
 
-const lengthOf = (s: PaySchedule) => (s.frequency === 'weekly' ? 7 : 14);
+const lengthOf = (s: PaySchedule) => (s.frequency === 'weekly' ? 7 : s.frequency === 'four-weekly' ? 28 : 14);
+
+/** Monthly pay (UK only): calendar months, 1st to the last day. */
+const monthOf = (day: Date) => ({ start: new Date(day.getFullYear(), day.getMonth(), 1), end: new Date(day.getFullYear(), day.getMonth() + 1, 1) });
 
 /** The pay period a day falls in. */
 function periodOn(day: Date, s: PaySchedule, past: PastRun[]): SchedulePeriod | null {
   const anchor = fromKey(s.anchor);
   const from = s.from ? fromKey(s.from) : null;
   if (!from || day >= anchor) {
+    if (s.frequency === 'monthly') return { ...monthOf(day), catchUp: false };
     const length = lengthOf(s);
     const start = addDays(anchor, Math.floor(daysBetween(anchor, day) / length) * length);
     return { start, end: addDays(start, length), catchUp: false };
@@ -131,6 +149,15 @@ export type ScheduleChoice = {
  */
 export function scheduleFor(choice: ScheduleChoice, now = new Date(), lastApproved = lastApprovedDay()): PaySchedule {
   const today = dayOnly(now);
+  // Monthly (UK only): from the 1st of a month. With pay already approved, a short catch-up period runs to the next 1st.
+  if (choice.frequency === 'monthly') {
+    if (lastApproved) {
+      const from = addDays(fromKey(lastApproved), 1);
+      const anchor = from.getDate() === 1 ? from : new Date(from.getFullYear(), from.getMonth() + 1, 1);
+      return { frequency: 'monthly', startDay: choice.startDay, anchor: toKey(anchor), from: toKey(from) };
+    }
+    return { frequency: 'monthly', startDay: choice.startDay, anchor: toKey(new Date(today.getFullYear(), today.getMonth(), 1)), from: null };
+  }
   if (lastApproved) {
     const from = addDays(fromKey(lastApproved), 1);
     const anchor = addDays(from, (choice.startDay - from.getDay() + 7) % 7);

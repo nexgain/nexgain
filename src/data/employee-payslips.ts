@@ -88,7 +88,8 @@ export function payslipView(p: PayslipRecord): PayslipView {
     totalEarnings,
     tax,
     otherDeductions,
-    totalDeductions: round(tax + otherDeductions),
+    // UK payslips also take employee National Insurance (always 0 for other countries).
+    totalDeductions: round(tax + otherDeductions + (p.employeeNi ?? 0)),
     super: p.super,
     net: p.net,
     avgHourlyRate: p.hours > 0 ? round(totalEarnings / p.hours) : null,

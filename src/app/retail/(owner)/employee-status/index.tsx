@@ -12,6 +12,7 @@ import { periodDates, usePeriodPay } from '@/data/payroll-period';
 import { formatMoney, type PayLine } from '@/data/payroll';
 import { shiftHours, shiftsInRange, useShifts } from '@/data/shifts';
 import { businessUsesSuper } from '@/data/super-rules';
+import { isUkBusiness } from '@/data/uk/wording';
 
 const hoursText = (h: number) => `${h.toFixed(1)} h`;
 
@@ -24,6 +25,8 @@ export default function EmployeeStatusScreen() {
   const [search, setSearch] = useState('');
   const business = useBusiness();
   const usesSuper = businessUsesSuper(business);
+  // United Kingdom only: NI is shown too.
+  const uk = isUkBusiness(business);
   const roster = useShifts();
   const { periods, period, lines, totals, sessions } = usePeriodPay(periodId);
 
@@ -68,6 +71,12 @@ export default function EmployeeStatusScreen() {
             <Summary label="Est. Super" value={formatMoney(totals.super)} />
           ) : (
             <Summary label="Est. Tax" value={formatMoney(totals.tax)} />
+          )}
+          {uk && (
+            <>
+              <View style={styles.summaryDivider} />
+              <Summary label="Est. NI" value={formatMoney(totals.employeeNi + totals.employerNi)} />
+            </>
           )}
         </View>
       </Card>
@@ -118,7 +127,9 @@ export default function EmployeeStatusScreen() {
           </View>
         </Card>
       )}
-      <Text style={styles.note}>Tax, super and net pay are estimates until payroll is approved.</Text>
+      <Text style={styles.note}>
+        {uk ? 'Tax, NI and net pay are estimates until payroll is approved. NI here is employee + employer.' : 'Tax, super and net pay are estimates until payroll is approved.'}
+      </Text>
     </OwnerScreen>
   );
 }

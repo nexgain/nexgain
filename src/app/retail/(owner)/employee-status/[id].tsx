@@ -10,6 +10,7 @@ import { employeeFullName, formatPayRate, isContractor, isSalaried, useEmployees
 import { periodDates, usePeriodPay } from '@/data/payroll-period';
 import { formatMoney, shiftsInPeriod } from '@/data/payroll';
 import { businessUsesSuper } from '@/data/super-rules';
+import { isUkBusiness } from '@/data/uk/wording';
 
 const hoursText = (h: number) => `${h.toFixed(2)} h`;
 const timeText = (d: Date) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -22,6 +23,8 @@ export default function EmployeeStatusDetailScreen() {
   const { id, period: periodId } = useLocalSearchParams<{ id: string; period?: string }>();
   const business = useBusiness();
   const usesSuper = businessUsesSuper(business);
+  // United Kingdom only: tax, employee NI and employer NI on separate lines.
+  const uk = isUkBusiness(business);
   const employee = useEmployees().find((e) => e.id === id);
   const { now, period, lines, sessions } = usePeriodPay(periodId);
   const line = lines.find((l) => l.employee.id === id);
@@ -109,8 +112,19 @@ export default function EmployeeStatusDetailScreen() {
         />
       </Card>
 
-      <Card title="Tax" icon={OwnerIcons.bank}>
-        <Rows rows={[['Est. tax withheld so far', est(line?.tax ?? null)]]} />
+      <Card title={uk ? 'Tax & National Insurance' : 'Tax'} icon={OwnerIcons.bank}>
+        <Rows
+          rows={
+            uk
+              ? [
+                  [`Est. income tax (PAYE${line?.ukTaxCode ? `, ${line.ukTaxCode}` : ''})`, est(line?.tax ?? null)],
+                  ['Est. employee NI', est(line?.employeeNi ?? null)],
+                  ['Est. employer NI (you pay this on top)', est(line?.employerNi ?? null)],
+                ]
+              : [['Est. tax withheld so far', est(line?.tax ?? null)]]
+          }
+        />
+        {uk && line?.ukProblem && <Text style={styles.muted}>Can’t be paid yet: {line.ukProblem}</Text>}
       </Card>
 
       {usesSuper && (
@@ -136,7 +150,7 @@ export default function EmployeeStatusDetailScreen() {
         )}
       </Card>
 
-      <Text style={styles.note}>Tax, super and net pay are estimates until payroll is approved.</Text>
+      <Text style={styles.note}>{uk ? 'Tax, NI and net pay are estimates until payroll is approved.' : 'Tax, super and net pay are estimates until payroll is approved.'}</Text>
     </OwnerScreen>
   );
 }

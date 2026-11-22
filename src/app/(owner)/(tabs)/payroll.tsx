@@ -51,6 +51,7 @@ import {
   daysText,
   firstPeriod,
   frequencyForDates,
+  frequenciesFor,
   frequencyLabel,
   lastApprovedDay,
   paySchedule,
@@ -68,6 +69,7 @@ import { TAX_ESTIMATE_NOTE, taxSetupFor, type TaxSetup } from '@/data/tax';
 import { SUPER_STATUS_LABEL, superFor, useSuperPayments, type SuperStatus } from '@/data/super-payments';
 import { countryName, getPayrollFileFormat, payrollLabel, payrollReference } from '@/lib/payment-files';
 import { businessUsesSuper } from '@/data/super-rules';
+import { employeeStatusSubtitle, isUkBusiness, UK_TAX_NOTE } from '@/data/uk/wording';
 
 
 /** e.g. "12%" */
@@ -109,7 +111,9 @@ export default function PayrollScreen() {
   // Super only for Australian businesses (see businessUsesSuper): elsewhere payroll is pay and tax only.
   const usesSuper = businessUsesSuper(business);
   const taxSetup = taxSetupFor(business);
-  const taxNote = taxNoteFor(taxSetup, business?.country);
+  // United Kingdom: built-in PAYE and National Insurance (no flat tax rate to enter).
+  const uk = isUkBusiness(business);
+  const taxNote = uk ? UK_TAX_NOTE : taxNoteFor(taxSetup, business?.country);
   const [reportBusy, setReportBusy] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
 
@@ -161,6 +165,8 @@ export default function PayrollScreen() {
   const missingSalary = lines.filter((l) => l.rate === null && isSalaried(l.employee));
   const missingRate = lines.filter((l) => l.rate === null && !isSalaried(l.employee));
   const missingBank = lines.filter((l) => !l.employee.bankAccount);
+  // UK only: people who can't be paid yet (e.g. a Scottish taxpayer or an unsupported tax code).
+  const ukBlocked = lines.filter((l) => l.ukProblem && l.status === 'Pending');
   // Approved (in a pay run) or already paid.
   const approvedCount = lines.filter((l) => l.status !== 'Pending').length;
   const allPaid = lines.length > 0 && approvedCount === lines.length;
@@ -209,6 +215,15 @@ export default function PayrollScreen() {
           change={percentChange(totals.net, previousTotals.net)}
           changeLabel="vs last period"
         />
+        {uk && (
+          <StatCard
+            icon={OwnerIcons.percent}
+            label="Employer NI"
+            value={formatMoney(totals.employerNi)}
+            change={percentChange(totals.employerNi, previousTotals.employerNi)}
+            changeLabel="vs last period"
+          />
+        )}
         {usesSuper && (
           <StatCard
             icon={OwnerIcons.percent}
@@ -224,14 +239,14 @@ export default function PayrollScreen() {
       <Pressable
         onPress={() => router.push({ pathname: '/employee-status', params: { period: period.id } })}
         accessibilityRole="button"
-        accessibilityLabel="View Employee Status. Hours, pay, tax and super by employee"
+        accessibilityLabel={`View Employee Status. ${employeeStatusSubtitle(business)}`}
         style={({ pressed }) => pressed && styles.pressed}>
         <Card>
           <View style={styles.statusLink}>
             <IconBadge name={OwnerIcons.people} />
             <View style={styles.flex}>
               <Text style={styles.statusTitle}>View Employee Status</Text>
-              <Text style={styles.statusSubtitle}>Hours, pay, tax and super by employee</Text>
+              <Text style={styles.statusSubtitle}>{employeeStatusSubtitle(business)}</Text>
             </View>
             <Icon name={OwnerIcons.chevron} color={C.textSecondary} size={14} />
           </View>
@@ -273,7 +288,14 @@ export default function PayrollScreen() {
               }
             />
           )}
-          {taxSetup.kind === 'missing' && <Warning text={taxNote} />}
+          {!uk && taxSetup.kind === 'missing' && <Warning text={taxNote} />}
+          {ukBlocked.map((l) => (
+            <Warning
+              key={`uk-${l.employee.id}`}
+              text={`${employeeFullName(l.employee)} can't be paid yet: ${l.ukProblem}`}
+              onPress={() => router.push({ pathname: '/employee/[id]', params: { id: l.employee.id } })}
+            />
+          ))}
           {missingBank.length > 0 && (
             <Warning text={`${missingBank.length} employee(s) haven't added bank account details.`} />
           )}
@@ -301,7 +323,7 @@ export default function PayrollScreen() {
             Approving makes a pay run with its own payroll number. Download its payment file, upload it to
             your bank, then mark it as paid. NexGain never moves money itself.
           </Text>
-          {taxSetup.kind !== 'missing' && <Text style={ownerStyles.mutedText}>{taxNote}</Text>}
+          {(uk || taxSetup.kind !== 'missing') && <Text style={ownerStyles.mutedText}>{taxNote}</Text>}
         </Card>
       </View>
 
@@ -323,7 +345,8 @@ function ManualTaxRateField() {
   const setup = taxSetupFor(business);
   const saved = business?.manualTaxRate;
   const [text, setText] = useState<string | null>(null);
-  if (setup.kind === 'brackets') return null;
+  // UK businesses have built-in UK tax, so there's no flat rate to enter.
+  if (setup.kind === 'brackets' || isUkBusiness(business)) return null;
 
   const value = text ?? (saved === null || saved === undefined ? '' : String(Math.round(saved * 10000) / 100));
   const percent = Number(value.trim());
@@ -404,6 +427,9 @@ function PayScheduleSetting() {
   const [offset, setOffset] = useState<0 | 1>(0);
   const lastApproved = lastApprovedDay();
 
+  // Four-weekly and monthly are UK only (UK payroll); everyone else keeps weekly and fortnightly.
+  const options = frequenciesFor(business?.country).map((f) => ({ value: f, label: frequencyLabel(f) }));
+  const monthly = frequency === 'monthly';
   const choice: ScheduleChoice = { frequency, startDay, fortnightOffset: offset };
   const next = scheduleFor(choice, new Date(), lastApproved);
   const changed =
@@ -421,25 +447,28 @@ function PayScheduleSetting() {
     <FormField label="How often do you pay?">
       <Choices
         label="How often do you pay"
-        options={[
-          { value: 'weekly', label: 'Weekly' },
-          { value: 'fortnightly', label: 'Fortnightly' },
-        ]}
+        options={options}
         value={frequency}
         onChange={setFrequency}
       />
+      {monthly ? (
+        <Text style={ownerStyles.mutedText}>Each pay covers a calendar month, from the 1st to the last day of the month.</Text>
+      ) : (
+      <>
       {/* Asked as the LAST day of the week (e.g. Thursday): the new week starts the next day. */}
-      <Text style={styles.scheduleQuestion}>{frequency === 'weekly' ? 'Pay week ends on' : 'Pay fortnight ends on'}</Text>
+      <Text style={styles.scheduleQuestion}>{frequency === 'weekly' ? 'Pay week ends on' : frequency === 'four-weekly' ? 'Pay period ends on' : 'Pay fortnight ends on'}</Text>
       <Choices
-        label={frequency === 'weekly' ? 'Pay week ends on' : 'Pay fortnight ends on'}
+        label={frequency === 'weekly' ? 'Pay week ends on' : frequency === 'four-weekly' ? 'Pay period ends on' : 'Pay fortnight ends on'}
         options={START_DAYS.map((d) => ({ value: d, label: short[d] }))}
         value={(startDay + 6) % 7}
         onChange={(endDay) => setStartDay((endDay + 1) % 7)}
       />
       <Text style={ownerStyles.mutedText}>
-        {frequency === 'weekly' ? 'Each pay covers a full week,' : 'Each pay covers two full weeks,'} {daysText(startDay)}. Hours start
-        fresh every {frequency === 'weekly' ? '' : 'second '}{DAY_NAMES[startDay]}.
+        {frequency === 'weekly' ? 'Each pay covers a full week,' : frequency === 'four-weekly' ? 'Each pay covers four full weeks,' : 'Each pay covers two full weeks,'} {daysText(startDay)}. Hours start
+        fresh every {frequency === 'weekly' ? '' : frequency === 'four-weekly' ? 'fourth ' : 'second '}{DAY_NAMES[startDay]}.
       </Text>
+      </>
+      )}
 
       {frequency === 'fortnightly' && !lastApproved && (
         <>
@@ -460,8 +489,8 @@ function PayScheduleSetting() {
         <View style={styles.schedulePreview}>
           <Text style={styles.schedulePreviewText}>
             {first.catchUp
-              ? `To line up with your last pay, the first pay is a short one: ${spanText(first)} (${periodDays(first)} day${periodDays(first) === 1 ? '' : 's'}). After that, pay is ${frequencyLabel(frequency).toLowerCase()}, ${daysText(startDay)}.`
-              : `${lastApproved ? 'Your next pay period' : 'This pay period'}: ${spanText(first)}. Then ${frequencyLabel(frequency).toLowerCase()}, ${daysText(startDay)}.`}
+              ? `To line up with your last pay, the first pay is a short one: ${spanText(first)} (${periodDays(first)} day${periodDays(first) === 1 ? '' : 's'}). After that, pay is ${frequencyLabel(frequency).toLowerCase()}${monthly ? '' : `, ${daysText(startDay)}`}.`
+              : `${lastApproved ? 'Your next pay period' : 'This pay period'}: ${spanText(first)}. Then ${frequencyLabel(frequency).toLowerCase()}${monthly ? '' : `, ${daysText(startDay)}`}.`}
           </Text>
           <Button label="Save pay schedule" onPress={() => setPaySchedule(choice)} />
         </View>
